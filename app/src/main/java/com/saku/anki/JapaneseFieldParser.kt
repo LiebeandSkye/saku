@@ -2,38 +2,116 @@ package com.saku.anki
 
 import java.util.regex.Pattern
 
+data class ParsedJapaneseCard(
+    val kanji: String,
+    val kana: String,
+    val romaji: String,
+    val meaning: String,
+    val example: String,
+    val exampleSentence: String = "",
+    val exampleTranslation: String = ""
+)
+
 object JapaneseFieldParser {
 
+    private val STYLE_TAG_PATTERN = Pattern.compile("(?i)<style[^>]*>.*?</style>", Pattern.DOTALL)
+    private val SCRIPT_TAG_PATTERN = Pattern.compile("(?i)<script[^>]*>.*?</script>", Pattern.DOTALL)
     private val HTML_TAG_PATTERN = Pattern.compile("<[^>]*>")
     private val SOUND_TAG_PATTERN = Pattern.compile("\\[sound:[^]]+]")
-    private val FURIGANA_BRACKET_PATTERN = Pattern.compile(" ?([^ \\[\\]]+)\\[([^\\]]+)\\]")
+    private val RUBY_TAG_PATTERN = Pattern.compile("(?i)<ruby>(?:<rb>)?(.*?)(?:</rb>)?<rt>(.*?)</rt></ruby>")
+    private val FURIGANA_BRACKET_PATTERN = Pattern.compile("(?:^|\\s)?([^ \\[\\]]+)\\[([^\\]]+)\\]")
+
+    // Japanese Unicode ranges
+    private val KANJI_PATTERN = Pattern.compile("[\\u4E00-\\u9FAF\\u3400-\\u4DBF]")
+    private val KANA_PATTERN = Pattern.compile("[\\u3040-\\u309F\\u30A0-\\u30FF]")
 
     /**
-     * Strips HTML and Anki sound tags from text.
+     * Strips HTML, style/script blocks, and Anki sound tags from text.
      */
     fun cleanHtml(input: String): String {
-        var clean = SOUND_TAG_PATTERN.matcher(input).replaceAll("")
+        if (input.isEmpty()) return ""
+        var clean = STYLE_TAG_PATTERN.matcher(input).replaceAll("")
+        clean = SCRIPT_TAG_PATTERN.matcher(clean).replaceAll("")
+        clean = SOUND_TAG_PATTERN.matcher(clean).replaceAll("")
+        // Replace breaks and block tags with newlines/spaces
+        clean = clean.replace(Regex("(?i)<br\\s*/?>"), " ")
+            .replace(Regex("(?i)</?p>"), " ")
+            .replace(Regex("(?i)</?div>"), " ")
         clean = HTML_TAG_PATTERN.matcher(clean).replaceAll("")
-        return clean.replace("&nbsp;", " ")
+        return decodeHtmlEntities(clean).trim().replace(Regex("\\s+"), " ")
+    }
+
+    private fun decodeHtmlEntities(input: String): String {
+        return input.replace("&nbsp;", " ")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
             .replace("&amp;", "&")
-            .trim()
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&apos;", "'")
+            .replace("&minus;", "-")
+            .replace("&#8217;", "'")
+            .replace("&#8216;", "'")
+            .replace("&#8220;", "\"")
+            .replace("&#8221;", "\"")
     }
 
     /**
-     * Extracts pure Kanji and clean reading from Anki Furigana bracket formats like "日本[にほん]".
+     * Parses ruby tags `<ruby>漢<rt>かん</rt></ruby>` into kanji and kana strings.
+     */
+    fun extractFromRuby(rawHtml: String): Pair<String, String>? {
+        if (!rawHtml.contains("<ruby", ignoreCase = true)) return null
+
+        val kanjiSb = StringBuilder()
+        val kanaSb = StringBuilder()
+        val matcher = RUBY_TAG_PATTERN.matcher(rawHtml)
+        var hasRuby = false
+        var lastEnd = 0
+
+        while (matcher.find()) {
+            hasRuby = true
+            val precedingText = cleanHtml(rawHtml.substring(lastEnd, matcher.start()))
+            kanjiSb.append(precedingText)
+            kanaSb.append(precedingText)
+
+            val baseText = cleanHtml(matcher.group(1) ?: "")
+            val readingText = cleanHtml(matcher.group(2) ?: "")
+
+            kanjiSb.append(baseText)
+            kanaSb.append(readingText)
+            lastEnd = matcher.end()
+        }
+
+        if (!hasRuby) return null
+
+        val remainingText = cleanHtml(rawHtml.substring(lastEnd))
+        kanjiSb.append(remainingText)
+        kanaSb.append(remainingText)
+
+        return Pair(kanjiSb.toString().trim(), kanaSb.toString().trim())
+    }
+
+    /**
+     * Extracts pure Kanji and clean reading from Anki Furigana bracket formats like "日本[にほん]" or " 私[わたし]".
      */
     fun extractKanjiAndKana(rawExpression: String): Pair<String, String> {
+        // 1. Try ruby tags first if present
+        extractFromRuby(rawExpression)?.let { (k, r) ->
+            if (k.isNotEmpty() && r.isNotEmpty()) return Pair(k, r)
+        }
+
         val cleaned = cleanHtml(rawExpression)
         val matcher = FURIGANA_BRACKET_PATTERN.matcher(cleaned)
         val kanjiSb = StringBuilder()
         val kanaSb = StringBuilder()
         var lastEnd = 0
+        var foundBrackets = false
 
         while (matcher.find()) {
-            kanjiSb.append(cleaned.substring(lastEnd, matcher.start()))
-            kanaSb.append(cleaned.substring(lastEnd, matcher.start()))
+            foundBrackets = true
+            val precedingText = cleaned.substring(lastEnd, matcher.start())
+            kanjiSb.append(precedingText)
+            kanaSb.append(precedingText)
 
             val kanjiPart = matcher.group(1) ?: ""
             val readingPart = matcher.group(2) ?: ""
@@ -42,23 +120,195 @@ object JapaneseFieldParser {
             kanaSb.append(readingPart)
             lastEnd = matcher.end()
         }
-        kanjiSb.append(cleaned.substring(lastEnd))
-        kanaSb.append(cleaned.substring(lastEnd))
 
-        val finalKanji = kanjiSb.toString().trim()
-        val finalKana = kanaSb.toString().trim()
+        if (foundBrackets) {
+            val remainingText = cleaned.substring(lastEnd)
+            kanjiSb.append(remainingText)
+            kanaSb.append(remainingText)
 
-        return Pair(
-            if (finalKanji.isNotEmpty()) finalKanji else cleaned,
-            if (finalKana.isNotEmpty()) finalKana else cleaned
-        )
+            val finalKanji = kanjiSb.toString().trim()
+            val finalKana = kanaSb.toString().trim()
+            return Pair(
+                if (finalKanji.isNotEmpty()) finalKanji else cleaned,
+                if (finalKana.isNotEmpty()) finalKana else cleaned
+            )
+        }
+
+        return Pair(cleaned, cleaned)
     }
 
     /**
-     * Generates a basic romaji approximation for kana if not provided in the deck.
+     * Maps note fields from any deck (Kaishi 1.5k/2k, Core 2k/6k, Tango, Basic, Yomichan)
+     * to a structured Japanese card model.
      */
-    fun kanaToRomaji(kana: String): String {
-        val map = mapOf(
+    fun mapFieldsToJapaneseCard(
+        fieldNames: List<String>,
+        fieldValues: List<String>,
+        fallbackQuestion: String = "",
+        fallbackAnswer: String = ""
+    ): ParsedJapaneseCard {
+        val fieldsByName = mutableMapOf<String, String>()
+        for (i in fieldNames.indices) {
+            val name = fieldNames[i].trim().lowercase()
+            val value = fieldValues.getOrNull(i) ?: ""
+            fieldsByName[name] = value
+        }
+
+        // 1. Extract Kanji / Expression
+        var rawKanji = findFieldByKeywords(
+            fieldsByName,
+            listOf(
+                "vocabulary-kanji", "vocabulary_kanji", "vocab-kanji", "vocab_kanji",
+                "vocabulary", "vocab", "kanji", "expression", "target word", "word",
+                "term", "front", "japanese"
+            )
+        )
+
+        // 2. Extract Kana / Reading
+        var rawKana = findFieldByKeywords(
+            fieldsByName,
+            listOf(
+                "vocabulary-kana", "vocabulary_kana", "vocab-kana", "vocab_kana",
+                "reading", "kana", "furigana", "furiganaplain", "yomikata",
+                "pronunciation", "hiragana"
+            )
+        )
+
+        // 3. Extract Meaning / English
+        val rawMeaning = findFieldByKeywords(
+            fieldsByName,
+            listOf(
+                "vocabulary-english", "vocabulary_english", "vocab-english", "vocab_english",
+                "meaning", "english", "glossary", "definition", "translation",
+                "vocab meaning", "primary meaning", "back"
+            )
+        )
+
+        // 4. Extract Example Sentence
+        val rawExample = findFieldByKeywords(
+            fieldsByName,
+            listOf(
+                "sentence-expression", "sentence_expression", "sentence-kanji", "sentence_kanji",
+                "example sentence", "sentence", "example", "context", "japanese sentence",
+                "sentkanji", "sentenceexpression"
+            )
+        )
+
+        // 5. Extract Example Translation
+        val rawExampleTranslation = findFieldByKeywords(
+            fieldsByName,
+            listOf(
+                "sentence-english", "sentence_english", "sentence-meaning", "sentence_meaning",
+                "sentence translation", "sentence-translation", "example translation",
+                "example english", "senteng", "sentmeaning"
+            )
+        )
+
+        // Fallback: If no field names matched, infer from positional values
+        val cleanValues = fieldValues.map { cleanHtml(it) }.filter { it.isNotEmpty() && !it.startsWith("[sound:") }
+        val inferredKanji = if (rawKanji.isEmpty()) {
+            cleanValues.firstOrNull { hasJapaneseChars(it) } ?: cleanValues.getOrNull(0) ?: ""
+        } else rawKanji
+
+        // Process furigana / ruby on Kanji
+        val (extractedKanji, extractedKanaFromExpr) = extractKanjiAndKana(inferredKanji)
+
+        val inferredKana = if (rawKana.isNotEmpty()) {
+            val (pureKana, _) = extractKanjiAndKana(rawKana)
+            pureKana
+        } else if (extractedKanaFromExpr.isNotEmpty() && extractedKanaFromExpr != extractedKanji) {
+            extractedKanaFromExpr
+        } else {
+            cleanValues.firstOrNull { isPureKana(it) && it != inferredKanji } ?: extractedKanaFromExpr
+        }
+
+        val inferredMeaning = if (rawMeaning.isEmpty()) {
+            cleanValues.firstOrNull { !hasJapaneseChars(it) && it != inferredKanji && it != inferredKana }
+                ?: cleanValues.getOrNull(2) ?: ""
+        } else rawMeaning
+
+        val inferredExample = if (rawExample.isEmpty()) {
+            cleanValues.firstOrNull { hasJapaneseChars(it) && it != inferredKanji && it != inferredKana && it.length > 5 } ?: ""
+        } else rawExample
+
+        val finalKanji = cleanHtml(extractedKanji).ifEmpty { cleanHtml(fallbackQuestion).ifEmpty { "日" } }
+        val finalKana = cleanHtml(inferredKana).ifEmpty { extractedKanaFromExpr.ifEmpty { "ひ" } }
+
+        val finalMeaning = cleanHtml(inferredMeaning).ifEmpty { cleanHtml(fallbackAnswer).ifEmpty { "sun, day" } }
+        val finalExample = cleanHtml(inferredExample)
+        val finalExampleTrans = cleanHtml(rawExampleTranslation)
+        val (cleanExampleSentence, _) = extractKanjiAndKana(finalExample)
+        val fullExample = if (finalExample.isNotEmpty() && finalExampleTrans.isNotEmpty()) {
+            "$finalExample • $finalExampleTrans"
+        } else {
+            finalExample.ifEmpty { finalExampleTrans }
+        }
+
+        val finalRomaji = kanaToRomaji(finalKana)
+
+        return ParsedJapaneseCard(
+            kanji = finalKanji,
+            kana = finalKana,
+            romaji = finalRomaji,
+            meaning = finalMeaning,
+            example = fullExample,
+            exampleSentence = cleanExampleSentence,
+            exampleTranslation = finalExampleTrans
+        )
+    }
+
+    private fun findFieldByKeywords(fieldsByName: Map<String, String>, keywords: List<String>): String {
+        for (keyword in keywords) {
+            // Check exact key match
+            fieldsByName[keyword]?.let {
+                if (it.isNotEmpty()) return it
+            }
+        }
+        for (keyword in keywords) {
+            // Check contains key match
+            for ((key, value) in fieldsByName) {
+                if (key.contains(keyword) && value.isNotEmpty()) {
+                    return value
+                }
+            }
+        }
+        return ""
+    }
+
+    fun hasJapaneseChars(text: String): Boolean {
+        return KANJI_PATTERN.matcher(text).find() || KANA_PATTERN.matcher(text).find()
+    }
+
+    fun isPureKana(text: String): Boolean {
+        val stripped = text.replace(Regex("[\\s・、。！？!?]"), "")
+        if (stripped.isEmpty()) return false
+        return KANA_PATTERN.matcher(stripped).find() && !KANJI_PATTERN.matcher(stripped).find() && !text.contains(Regex("[a-zA-Z]"))
+    }
+
+    /**
+     * Converts Hiragana and Katakana to Romaji (Hepburn approximation) including contractions and double consonants.
+     */
+    fun kanaToRomaji(kanaInput: String): String {
+        if (kanaInput.isEmpty()) return ""
+        val hiragana = katakanaToHiragana(kanaInput)
+
+        val digraphs = mapOf(
+            "きゃ" to "kya", "きゅ" to "kyu", "きょ" to "kyo",
+            "しゃ" to "sha", "しゅ" to "shu", "しょ" to "sho",
+            "ちゃ" to "cha", "ちゅ" to "chu", "ちょ" to "cho",
+            "にゃ" to "nya", "にゅ" to "nyu", "にょ" to "nyo",
+            "ひゃ" to "hya", "ひゅ" to "hyu", "ひょ" to "hyo",
+            "みゃ" to "mya", "みゅ" to "myu", "みょ" to "myo",
+            "りゃ" to "rya", "りゅ" to "ryu", "りょ" to "ryo",
+            "ぎゃ" to "gya", "ぎゅ" to "gyu", "ぎょ" to "gyo",
+            "じゃ" to "ja", "じゅ" to "ju", "じょ" to "jo",
+            "びゃ" to "bya", "びゅ" to "byu", "びょ" to "byo",
+            "ぴゃ" to "pya", "ぴゅ" to "pyu", "ぴょ" to "pyo",
+            "ふぁ" to "fa", "ふぃ" to "fi", "ふぇ" to "fe", "ふぉ" to "fo",
+            "てぃ" to "ti", "でぃ" to "di"
+        )
+
+        val monophthongs = mapOf(
             "あ" to "a", "い" to "i", "う" to "u", "え" to "e", "お" to "o",
             "か" to "ka", "き" to "ki", "く" to "ku", "け" to "ke", "こ" to "ko",
             "さ" to "sa", "し" to "shi", "す" to "su", "せ" to "se", "そ" to "so",
@@ -73,19 +323,69 @@ object JapaneseFieldParser {
             "ざ" to "za", "じ" to "ji", "ず" to "zu", "ぜ" to "ze", "ぞ" to "zo",
             "だ" to "da", "ぢ" to "ji", "づ" to "zu", "で" to "de", "ど" to "do",
             "ば" to "ba", "び" to "bi", "ぶ" to "bu", "べ" to "be", "ぼ" to "bo",
-            "ぱ" to "pa", "ぴ" to "pi", "ぷ" to "pu", "ぺ" to "pe", "ぽ" to "po"
+            "ぱ" to "pa", "ぴ" to "pi", "ぷ" to "pu", "ぺ" to "pe", "ぽ" to "po",
+            "ぁ" to "a", "ぃ" to "i", "ぅ" to "u", "ぇ" to "e", "ぉ" to "o"
         )
+
+        val vowels = setOf('a', 'i', 'u', 'e', 'o')
         val sb = StringBuilder()
         var i = 0
-        while (i < kana.length) {
-            val char = kana[i].toString()
-            if (map.containsKey(char)) {
-                sb.append(map[char])
+        while (i < hiragana.length) {
+            // Long vowel mark 'ー'
+            if (hiragana[i] == 'ー') {
+                val lastVowel = sb.lastOrNull { it in vowels }
+                if (lastVowel != null) {
+                    sb.append(lastVowel)
+                }
+                i++
+                continue
+            }
+
+            // Sokuon (small tsu - double consonant)
+            if (hiragana[i] == 'っ' || hiragana[i] == 'ッ') {
+                if (i + 1 < hiragana.length) {
+                    val nextPair = if (i + 2 < hiragana.length) hiragana.substring(i + 1, i + 3) else ""
+                    val nextRomaji = digraphs[nextPair] ?: monophthongs[hiragana[i + 1].toString()] ?: ""
+                    if (nextRomaji.isNotEmpty()) {
+                        val firstConsonant = if (nextRomaji.startsWith("ch")) 't' else nextRomaji[0]
+                        sb.append(firstConsonant)
+                        i++
+                        continue
+                    }
+                }
+            }
+
+            // Check 2-character digraphs
+            if (i + 1 < hiragana.length) {
+                val pair = hiragana.substring(i, i + 2)
+                if (digraphs.containsKey(pair)) {
+                    sb.append(digraphs[pair])
+                    i += 2
+                    continue
+                }
+            }
+
+            // Single character
+            val single = hiragana[i].toString()
+            if (monophthongs.containsKey(single)) {
+                sb.append(monophthongs[single])
             } else {
-                sb.append(char)
+                sb.append(single)
             }
             i++
         }
         return sb.toString().trim()
+    }
+
+    private fun katakanaToHiragana(input: String): String {
+        val sb = StringBuilder()
+        for (c in input) {
+            if (c in '\u30A1'..'\u30F6') {
+                sb.append((c.code - 0x60).toChar())
+            } else {
+                sb.append(c)
+            }
+        }
+        return sb.toString()
     }
 }

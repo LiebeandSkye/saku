@@ -47,6 +47,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: SakuPreferences
     private lateinit var ankiClient: AnkiDroidClient
 
+    private var onAnkiPermissionResult: ((Boolean) -> Unit)? = null
+
     private val requestAnkiPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -55,6 +57,7 @@ class MainActivity : ComponentActivity() {
         } else {
             Toast.makeText(this, "Permission required to read Anki flashcards", Toast.LENGTH_LONG).show()
         }
+        onAnkiPermissionResult?.invoke(isGranted)
     }
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
@@ -91,9 +94,23 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    var refreshCount by remember { mutableStateOf(0) }
+
+                    DisposableEffect(Unit) {
+                        onAnkiPermissionResult = { isGranted ->
+                            if (isGranted) {
+                                refreshCount++
+                            }
+                        }
+                        onDispose {
+                            onAnkiPermissionResult = null
+                        }
+                    }
+
                     SakuMainScreen(
                         prefs = prefs,
                         ankiClient = ankiClient,
+                        refreshTrigger = refreshCount,
                         onRequestAnkiPermission = {
                             requestAnkiPermissionLauncher.launch(AnkiDroidContract.PERMISSION)
                         },
@@ -141,6 +158,7 @@ class MainActivity : ComponentActivity() {
 fun SakuMainScreen(
     prefs: SakuPreferences,
     ankiClient: AnkiDroidClient,
+    refreshTrigger: Int = 0,
     onRequestAnkiPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onInstallAnkiDroid: () -> Unit,
@@ -154,6 +172,7 @@ fun SakuMainScreen(
     var selectedDeckId by remember { mutableStateOf(prefs.selectedDeckId) }
     var activeCard by remember { mutableStateOf(prefs.getActiveCard()) }
     var isLockScreenEnabled by remember { mutableStateOf(prefs.isLockScreenCardEnabled) }
+    var isPreviewRevealed by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
 
     fun refreshData() {
@@ -172,11 +191,12 @@ fun SakuMainScreen(
                     onUpdateWidgets(activeCard)
                 }
             }
+            isPreviewRevealed = false
             isLoading = false
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTrigger) {
         refreshData()
     }
 
@@ -192,6 +212,15 @@ fun SakuMainScreen(
                     )
                 },
                 actions = {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .padding(end = 8.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
+                        )
+                    }
                     IconButton(onClick = { refreshData() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
@@ -257,7 +286,8 @@ fun SakuMainScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF51CF66))
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text("Connected to AnkiDroid (FSRS / SM-2 synced)", fontSize = 14.sp)
+                                val pkgName = ankiClient.getInstalledAnkiPackage() ?: "AnkiDroid"
+                                Text("Connected to $pkgName (FSRS / SM-2 synced)", fontSize = 14.sp)
                             }
                         }
                     }
@@ -306,81 +336,127 @@ fun SakuMainScreen(
 
                             Spacer(modifier = Modifier.width(16.dp))
 
-                            // Details
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!isPreviewRevealed) {
+                                // FRONT STATE PREVIEW: Example/Context Prompt
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = activeCard.kana,
-                                        fontSize = 16.sp,
+                                        text = "EXAMPLE / CONTEXT",
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF888888),
+                                        letterSpacing = 1.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    val frontExample = activeCard.exampleSentence.ifEmpty {
+                                        activeCard.example.substringBefore("•").trim().ifEmpty { activeCard.kanji }
+                                    }
+                                    Text(
+                                        text = frontExample,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
                                         color = Color.White
                                     )
-                                    if (activeCard.romaji.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = activeCard.romaji,
-                                            fontSize = 14.sp,
-                                            color = Color(0xFFAAAAAA)
-                                        )
-                                    }
                                 }
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Text(
-                                    text = activeCard.meaning,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = Color.White
-                                )
-                                if (activeCard.example.isNotEmpty()) {
+                            } else {
+                                // BACK STATE PREVIEW: Reading, Meaning, and Full Example with Translation
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = activeCard.kana,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                        if (activeCard.romaji.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = activeCard.romaji,
+                                                fontSize = 14.sp,
+                                                color = Color(0xFFAAAAAA)
+                                            )
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(3.dp))
                                     Text(
-                                        text = activeCard.example,
-                                        fontSize = 13.sp,
-                                        color = Color(0xFF888888)
+                                        text = activeCard.meaning,
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White
                                     )
+                                    if (activeCard.example.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            text = activeCard.example,
+                                            fontSize = 13.sp,
+                                            color = Color(0xFF888888)
+                                        )
+                                    }
                                 }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Review Ease Buttons Demo
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            ReviewEase.entries.forEach { ease ->
-                                val color = when (ease) {
-                                    ReviewEase.AGAIN -> Color(0xFFFF6B6B)
-                                    ReviewEase.HARD -> Color(0xFFFFA94D)
-                                    ReviewEase.GOOD -> Color(0xFF51CF66)
-                                    ReviewEase.EASY -> Color(0xFF74C0FC)
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .background(Color(0xFF222222), RoundedCornerShape(8.dp))
-                                        .clickable {
-                                            coroutineScope.launch {
-                                                if (activeCard.cardId > 0) {
-                                                    ankiClient.answerCard(activeCard.cardId, ease.value)
+                        if (!isPreviewRevealed) {
+                            // "Show Answer" Button (Front State)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp)
+                                    .background(Color(0xFF262626), RoundedCornerShape(10.dp))
+                                    .clickable { isPreviewRevealed = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Show Answer",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        } else {
+                            // Review Ease Buttons: Again, Hard, Good, Easy (Back State)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(46.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                ReviewEase.entries.forEach { ease ->
+                                    val color = when (ease) {
+                                        ReviewEase.AGAIN -> Color(0xFFFF6B6B)
+                                        ReviewEase.HARD -> Color(0xFFFFA94D)
+                                        ReviewEase.GOOD -> Color(0xFF51CF66)
+                                        ReviewEase.EASY -> Color(0xFF74C0FC)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .background(Color(0xFF242424), RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                coroutineScope.launch {
+                                                    if (activeCard.noteId > 0) {
+                                                        ankiClient.answerCard(activeCard, ease.value)
+                                                    }
+                                                    val dueCards = ankiClient.getDueCards(selectedDeckId)
+                                                    activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
+                                                        ?: dueCards.firstOrNull()
+                                                        ?: ankiClient.getSamplePreviewCard()
+                                                    prefs.saveActiveCard(activeCard)
+                                                    isPreviewRevealed = false
+                                                    onUpdateWidgets(activeCard)
                                                 }
-                                                val dueCards = ankiClient.getDueCards(selectedDeckId)
-                                                activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
-                                                    ?: ankiClient.getSamplePreviewCard()
-                                                prefs.saveActiveCard(activeCard)
-                                                onUpdateWidgets(activeCard)
-                                            }
-                                        }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = ease.label,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = color
-                                    )
+                                            },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = ease.label,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = color
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -443,12 +519,54 @@ fun SakuMainScreen(
             if (decks.isEmpty()) {
                 item {
                     Text(
-                        text = if (hasPermission) "No decks found in AnkiDroid." else "Connect to AnkiDroid above to select your decks.",
+                        text = if (hasPermission) "No decks found. Please make sure you have cards in AnkiDroid and that AnkiDroid Third-party API is accessible." else "Connect to AnkiDroid above to select your decks.",
                         fontSize = 13.sp,
                         color = Color(0xFF666666)
                     )
                 }
             } else {
+                // "All Decks" option
+                item {
+                    val isAllSelected = selectedDeckId == -1L
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedDeckId = -1L
+                                prefs.selectedDeckId = -1L
+                                prefs.selectedDeckName = "All Decks"
+                                refreshData()
+                            },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isAllSelected) Color(0xFF222222) else Color(0xFF141414)
+                        ),
+                        border = if (isAllSelected) androidx.compose.foundation.BorderStroke(1.dp, Color.White) else null
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "All Decks (Combined Due)",
+                                fontWeight = if (isAllSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 14.sp
+                            )
+                            if (isAllSelected) {
+                                Text(
+                                    text = "Active",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF51CF66)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 items(decks) { deck ->
                     val isSelected = deck.id == selectedDeckId
                     Card(
@@ -473,11 +591,21 @@ fun SakuMainScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(
-                                text = deck.name,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 14.sp
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = deck.name,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    fontSize = 14.sp
+                                )
+                                if (deck.dueCardCount > 0) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "${deck.dueCardCount} cards due",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF888888)
+                                    )
+                                }
+                            }
                             if (isSelected) {
                                 Text(
                                     text = "Active",

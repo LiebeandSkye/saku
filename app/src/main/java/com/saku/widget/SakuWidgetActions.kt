@@ -46,8 +46,8 @@ class SakuGradeCardAction : ActionCallback {
             val ankiClient = AnkiDroidClient(context)
             val currentCard = prefs.getActiveCard()
 
-            if (currentCard.cardId > 0) {
-                ankiClient.answerCard(currentCard.cardId, ease)
+            if (currentCard.noteId > 0) {
+                ankiClient.answerCard(currentCard, ease)
             }
 
             val dueCards = ankiClient.getDueCards(prefs.selectedDeckId, limit = 20)
@@ -61,6 +61,16 @@ class SakuGradeCardAction : ActionCallback {
                 LockScreenCardService.updateNotification(context, nextCard)
             }
 
+            SakuGlanceWidget().updateAll(context)
+        }
+    }
+}
+
+class SakuToggleAnswerAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        withContext(Dispatchers.IO) {
+            val prefs = SakuPreferences(context)
+            prefs.isAnswerRevealed = !prefs.isAnswerRevealed
             SakuGlanceWidget().updateAll(context)
         }
     }

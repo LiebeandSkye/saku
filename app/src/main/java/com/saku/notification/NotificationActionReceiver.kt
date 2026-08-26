@@ -34,8 +34,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 when (intent.action) {
                     ACTION_GRADE -> {
                         val ease = intent.getIntExtra(EXTRA_EASE, ReviewEase.GOOD.value)
-                        if (currentCard.cardId > 0) {
-                            ankiClient.answerCard(currentCard.cardId, ease)
+                        if (currentCard.noteId > 0) {
+                            ankiClient.answerCard(currentCard, ease)
                         }
                         loadNextCardAndUpdate(context, prefs, ankiClient)
                     }

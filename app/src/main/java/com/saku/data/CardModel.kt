@@ -4,12 +4,14 @@ data class CardModel(
     val cardId: Long,
     val noteId: Long,
     val deckId: Long,
+    val cardOrd: Int = 0,           // Ordinal of card template (0, 1, ...)
     val kanji: String,              // e.g. "日" or "日本語"
     val kana: String,               // e.g. "ひ" or "にほんご"
     val romaji: String = "",        // e.g. "hi" or "nihongo"
     val meaning: String,            // e.g. "sun, day"
-    val example: String = "",       // e.g. "日本 • Japan" or "今日はいい天気ですね"
-    val exampleTranslation: String = "",
+    val example: String = "",       // e.g. "日本 • Japan" or "私は学生です。 • I am a student."
+    val exampleSentence: String = "", // e.g. "私は学生です。"
+    val exampleTranslation: String = "", // e.g. "I am a student."
     val intervalDays: Int = 0,
     val isDue: Boolean = true
 )

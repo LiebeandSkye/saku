@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="12dp"
-    android:background="@android:color/black">
+    android:background="@android:color/transparent">
 
     <!-- Top Card Content -->
     <LinearLayout
@@ -76,15 +76,17 @@
                 android:layout_marginTop="2dp"
                 android:text="日本 • Japan"
                 android:textColor="#888888"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:maxLines="2"
+                android:ellipsize="end" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Bottom Action Bar (Anki Review Ease) -->
+    <!-- Bottom Action Bar (Anki Review Ease Buttons - Large & Easy to Tap) -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="36dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="42dp"
+        android:layout_marginTop="12dp"
         android:orientation="horizontal"
         android:gravity="center">
 
@@ -93,9 +95,10 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:text="Again"
-            android:textSize="11sp"
+            android:textSize="12sp"
+            android:textStyle="bold"
             android:textColor="#FF6B6B"
             android:background="@drawable/bg_button_ease" />
 
@@ -104,9 +107,10 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:text="Hard"
-            android:textSize="11sp"
+            android:textSize="12sp"
+            android:textStyle="bold"
             android:textColor="#FFA94D"
             android:background="@drawable/bg_button_ease" />
 
@@ -115,9 +119,10 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="5dp"
             android:text="Good"
-            android:textSize="11sp"
+            android:textSize="12sp"
+            android:textStyle="bold"
             android:textColor="#51CF66"
             android:background="@drawable/bg_button_ease" />
 
@@ -127,7 +132,8 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:text="Easy"
-            android:textSize="11sp"
+            android:textSize="12sp"
+            android:textStyle="bold"
             android:textColor="#74C0FC"
             android:background="@drawable/bg_button_ease" />
     </LinearLayout>

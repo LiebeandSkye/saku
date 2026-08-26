@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:padding="12dp"
-    android:background="@android:color/black"
+    android:background="@android:color/transparent"
     android:gravity="center_vertical">
 
     <!-- Left: Large Minimal Kanji -->

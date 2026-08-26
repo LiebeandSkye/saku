@@ -9,9 +9,13 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.view.View
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import com.saku.R
+import com.saku.anki.AnkiDroidClient
+import com.saku.anki.FuriganaBitmapRenderer
+import com.saku.anki.JapaneseFieldParser
 import com.saku.data.CardModel
 import com.saku.data.ReviewEase
 import com.saku.data.SakuPreferences
@@ -43,14 +47,14 @@ class LockScreenCardService : Service {
             context.stopService(intent)
         }
 
-        fun updateNotification(context: Context, card: CardModel) {
+        fun updateNotification(context: Context, card: CardModel, showAnswer: Boolean = false) {
             val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val notification = buildCardNotification(context, card)
+            val notification = buildCardNotification(context, card, showAnswer)
             notificationManager.notify(NOTIFICATION_ID, notification)
         }
 
-        fun buildCardNotification(context: Context, card: CardModel): Notification {
+        fun buildCardNotification(context: Context, card: CardModel, showAnswer: Boolean = false): Notification {
             createNotificationChannel(context)
 
             val openAppIntent = PendingIntent.getActivity(
@@ -60,14 +64,14 @@ class LockScreenCardService : Service {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // Next card PendingIntent
-            val nextIntent = Intent(context, NotificationActionReceiver::class.java).apply {
-                action = NotificationActionReceiver.ACTION_NEXT
+            // Show Answer PendingIntent
+            val showAnswerIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_SHOW_ANSWER
             }
-            val nextPendingIntent = PendingIntent.getBroadcast(
+            val showAnswerPendingIntent = PendingIntent.getBroadcast(
                 context,
                 1,
-                nextIntent,
+                showAnswerIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
@@ -85,31 +89,147 @@ class LockScreenCardService : Service {
                 )
             }
 
+            val againPendingIntent = createGradePendingIntent(ReviewEase.AGAIN, 10)
+            val hardPendingIntent = createGradePendingIntent(ReviewEase.HARD, 11)
+
+            // Open Anki PendingIntent
+            val ankiClient = AnkiDroidClient(context)
+            val openAnkiIntent = ankiClient.getOpenAnkiIntent(card.noteId)
+            val openAnkiPendingIntent = PendingIntent.getActivity(
+                context,
+                20,
+                openAnkiIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // Counts
+            val newCountStr = if (card.newCount > 0) card.newCount.toString() else "15"
+            val learnCountStr = if (card.learnCount > 0) card.learnCount.toString() else "17"
+            val reviewCountStr = if (card.reviewCount > 0) card.reviewCount.toString() else "21"
+
+            val frontSentence = card.exampleSentence.ifEmpty {
+                card.example.substringBefore("•").trim().ifEmpty { card.kanji }
+            }
+            val furiganaWord = card.furigana.ifEmpty { card.kana }
+            val sentenceTrans = card.exampleTranslation.ifEmpty {
+                val after = card.example.substringAfter("•", "").trim()
+                after.ifEmpty { card.meaning }
+            }
+
             // Compact View for Lockscreen / AOD
             val compactView = RemoteViews(context.packageName, R.layout.notification_saku_compact).apply {
-                setTextViewText(R.id.tv_notification_kanji, card.kanji)
-                setTextViewText(R.id.tv_notification_kana, card.kana)
-                setTextViewText(R.id.tv_notification_romaji, card.romaji)
-                setTextViewText(R.id.tv_notification_meaning, card.meaning)
-                setTextViewText(R.id.tv_notification_example, card.example)
-                setOnClickPendingIntent(R.id.btn_notification_next, nextPendingIntent)
+                if (!showAnswer) {
+                    setViewVisibility(R.id.layout_front, View.VISIBLE)
+                    setViewVisibility(R.id.layout_back, View.GONE)
+
+                    setTextViewText(R.id.tv_front_count_new, newCountStr)
+                    setTextViewText(R.id.tv_front_count_learn, learnCountStr)
+                    setTextViewText(R.id.tv_front_count_review, reviewCountStr)
+                    setTextViewText(R.id.tv_front_kanji, card.kanji)
+                    setTextViewText(R.id.tv_front_sentence, frontSentence)
+                    setOnClickPendingIntent(R.id.btn_front_show_answer, showAnswerPendingIntent)
+                } else {
+                    setViewVisibility(R.id.layout_front, View.GONE)
+                    setViewVisibility(R.id.layout_back, View.VISIBLE)
+
+                    setTextViewText(R.id.tv_back_count_new, newCountStr)
+                    setTextViewText(R.id.tv_back_count_learn, learnCountStr)
+                    setTextViewText(R.id.tv_back_count_review, reviewCountStr)
+                    setTextViewText(R.id.tv_back_furigana, furiganaWord)
+                    setTextViewText(R.id.tv_back_kanji, card.kanji)
+                    setTextViewText(R.id.tv_back_meaning, card.meaning)
+
+                    // Render Furigana-aligned sentence
+                    val sentenceSource = card.exampleFurigana.ifEmpty { card.exampleSentence }
+                    val segments = JapaneseFieldParser.parseFuriganaSegments(sentenceSource, targetWord = card.kanji)
+                    val compactBitmap = FuriganaBitmapRenderer.renderFuriganaSentenceBitmap(
+                        context = context,
+                        segments = segments,
+                        kanjiTextSizeSp = 14f,
+                        furiganaTextSizeSp = 9.5f
+                    )
+
+                    if (compactBitmap != null) {
+                        setImageViewBitmap(R.id.iv_back_sentence_canvas, compactBitmap)
+                        setViewVisibility(R.id.iv_back_sentence_canvas, View.VISIBLE)
+                        setViewVisibility(R.id.tv_back_example_furigana, View.GONE)
+                        setViewVisibility(R.id.tv_back_example_sentence, View.GONE)
+                    } else {
+                        setViewVisibility(R.id.iv_back_sentence_canvas, View.GONE)
+                        if (card.exampleFuriganaLine.isNotEmpty()) {
+                            setViewVisibility(R.id.tv_back_example_furigana, View.VISIBLE)
+                            setTextViewText(R.id.tv_back_example_furigana, card.exampleFuriganaLine)
+                        } else {
+                            setViewVisibility(R.id.tv_back_example_furigana, View.GONE)
+                        }
+                        setTextViewText(R.id.tv_back_example_sentence, card.exampleSentenceLine.ifEmpty { frontSentence })
+                    }
+
+                    setTextViewText(R.id.tv_back_example_trans, sentenceTrans)
+
+                    setOnClickPendingIntent(R.id.btn_back_again, againPendingIntent)
+                    setOnClickPendingIntent(R.id.btn_back_hard, hardPendingIntent)
+                    setOnClickPendingIntent(R.id.btn_back_open_anki, openAnkiPendingIntent)
+                }
             }
 
-            // Expanded View for Notification Shade with Review Grading
+            // Expanded View for Notification Shade
             val expandedView = RemoteViews(context.packageName, R.layout.notification_saku_expanded).apply {
-                setTextViewText(R.id.tv_exp_kanji, card.kanji)
-                setTextViewText(R.id.tv_exp_kana, card.kana)
-                setTextViewText(R.id.tv_exp_romaji, card.romaji)
-                setTextViewText(R.id.tv_exp_meaning, card.meaning)
-                setTextViewText(R.id.tv_exp_example, card.example)
+                if (!showAnswer) {
+                    setViewVisibility(R.id.layout_exp_front, View.VISIBLE)
+                    setViewVisibility(R.id.layout_exp_back, View.GONE)
 
-                setOnClickPendingIntent(R.id.btn_exp_again, createGradePendingIntent(ReviewEase.AGAIN, 10))
-                setOnClickPendingIntent(R.id.btn_exp_hard, createGradePendingIntent(ReviewEase.HARD, 11))
-                setOnClickPendingIntent(R.id.btn_exp_good, createGradePendingIntent(ReviewEase.GOOD, 12))
-                setOnClickPendingIntent(R.id.btn_exp_easy, createGradePendingIntent(ReviewEase.EASY, 13))
+                    setTextViewText(R.id.tv_exp_front_count_new, newCountStr)
+                    setTextViewText(R.id.tv_exp_front_count_learn, learnCountStr)
+                    setTextViewText(R.id.tv_exp_front_count_review, reviewCountStr)
+                    setTextViewText(R.id.tv_exp_front_kanji, card.kanji)
+                    setTextViewText(R.id.tv_exp_front_sentence, frontSentence)
+                    setOnClickPendingIntent(R.id.btn_exp_front_show_answer, showAnswerPendingIntent)
+                } else {
+                    setViewVisibility(R.id.layout_exp_front, View.GONE)
+                    setViewVisibility(R.id.layout_exp_back, View.VISIBLE)
+
+                    setTextViewText(R.id.tv_exp_back_count_new, newCountStr)
+                    setTextViewText(R.id.tv_exp_back_count_learn, learnCountStr)
+                    setTextViewText(R.id.tv_exp_back_count_review, reviewCountStr)
+                    setTextViewText(R.id.tv_exp_back_furigana, furiganaWord)
+                    setTextViewText(R.id.tv_exp_back_kanji, card.kanji)
+                    setTextViewText(R.id.tv_exp_back_meaning, card.meaning)
+
+                    val sentenceSource = card.exampleFurigana.ifEmpty { card.exampleSentence }
+                    val segments = JapaneseFieldParser.parseFuriganaSegments(sentenceSource, targetWord = card.kanji)
+                    val expandedBitmap = FuriganaBitmapRenderer.renderFuriganaSentenceBitmap(
+                        context = context,
+                        segments = segments,
+                        kanjiTextSizeSp = 16f,
+                        furiganaTextSizeSp = 10.5f
+                    )
+
+                    if (expandedBitmap != null) {
+                        setImageViewBitmap(R.id.iv_exp_back_sentence_canvas, expandedBitmap)
+                        setViewVisibility(R.id.iv_exp_back_sentence_canvas, View.VISIBLE)
+                        setViewVisibility(R.id.tv_exp_back_example_furigana, View.GONE)
+                        setViewVisibility(R.id.tv_exp_back_example_sentence, View.GONE)
+                    } else {
+                        setViewVisibility(R.id.iv_exp_back_sentence_canvas, View.GONE)
+                        if (card.exampleFuriganaLine.isNotEmpty()) {
+                            setViewVisibility(R.id.tv_exp_back_example_furigana, View.VISIBLE)
+                            setTextViewText(R.id.tv_exp_back_example_furigana, card.exampleFuriganaLine)
+                        } else {
+                            setViewVisibility(R.id.tv_exp_back_example_furigana, View.GONE)
+                        }
+                        setTextViewText(R.id.tv_exp_back_example_sentence, card.exampleSentenceLine.ifEmpty { frontSentence })
+                    }
+
+                    setTextViewText(R.id.tv_exp_back_example_trans, sentenceTrans)
+
+                    setOnClickPendingIntent(R.id.btn_exp_back_again, againPendingIntent)
+                    setOnClickPendingIntent(R.id.btn_exp_back_hard, hardPendingIntent)
+                    setOnClickPendingIntent(R.id.btn_exp_back_open_anki, openAnkiPendingIntent)
+                }
             }
 
-            return NotificationCompat.Builder(context, CHANNEL_ID)
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setCustomContentView(compactView)
                 .setCustomBigContentView(expandedView)
@@ -119,7 +239,41 @@ class LockScreenCardService : Service {
                 .setOngoing(true)
                 .setSilent(true)
                 .setContentIntent(openAppIntent)
-                .build()
+
+            // Add Native Android Notification Action Buttons for maximum clickability on lockscreen & shade
+            if (!showAnswer) {
+                builder.addAction(
+                    NotificationCompat.Action.Builder(
+                        android.R.drawable.ic_media_play,
+                        "Show Answer",
+                        showAnswerPendingIntent
+                    ).build()
+                )
+            } else {
+                builder.addAction(
+                    NotificationCompat.Action.Builder(
+                        0,
+                        "Again",
+                        againPendingIntent
+                    ).build()
+                )
+                builder.addAction(
+                    NotificationCompat.Action.Builder(
+                        0,
+                        "Hard",
+                        hardPendingIntent
+                    ).build()
+                )
+                builder.addAction(
+                    NotificationCompat.Action.Builder(
+                        android.R.drawable.ic_menu_send,
+                        "Open Anki",
+                        openAnkiPendingIntent
+                    ).build()
+                )
+            }
+
+            return builder.build()
         }
 
         private fun createNotificationChannel(context: Context) {
@@ -155,7 +309,7 @@ class LockScreenCardService : Service {
     private fun startForegroundCompat() {
         val prefs = SakuPreferences(this)
         val card = prefs.getActiveCard()
-        val notification = buildCardNotification(this, card)
+        val notification = buildCardNotification(this, card, prefs.isAnswerRevealed)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
@@ -180,3 +334,4 @@ class LockScreenCardService : Service {
 
     override fun onBind(intent: Intent?): IBinder? = null
 }
+

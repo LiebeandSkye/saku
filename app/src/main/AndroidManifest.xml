@@ -68,6 +68,7 @@
             android:name=".notification.NotificationActionReceiver"
             android:exported="false">
             <intent-filter>
+                <action android:name="com.saku.action.SHOW_ANSWER" />
                 <action android:name="com.saku.action.NEXT_CARD" />
                 <action android:name="com.saku.action.GRADE_CARD" />
             </intent-filter>

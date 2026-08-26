@@ -2,6 +2,7 @@ package com.saku.anki
 
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
@@ -78,6 +79,9 @@ class AnkiDroidClient(private val context: Context) {
                     val id = if (idIdx != -1) c.getLong(idIdx) else 0L
                     val name = if (nameIdx != -1) c.getString(nameIdx) else "Unnamed Deck"
                     var dueCount = 0
+                    var newCount = 0
+                    var learnCount = 0
+                    var reviewCount = 0
 
                     if (countIdx != -1) {
                         val countRaw = c.getString(countIdx)
@@ -85,10 +89,10 @@ class AnkiDroidClient(private val context: Context) {
                             try {
                                 if (countRaw.startsWith("[")) {
                                     val jsonArray = JSONArray(countRaw)
-                                    val learn = jsonArray.optInt(0, 0)
-                                    val review = jsonArray.optInt(1, 0)
-                                    val newCards = jsonArray.optInt(2, 0)
-                                    dueCount = learn + review + newCards
+                                    learnCount = jsonArray.optInt(0, 0)
+                                    reviewCount = jsonArray.optInt(1, 0)
+                                    newCount = jsonArray.optInt(2, 0)
+                                    dueCount = learnCount + reviewCount + newCount
                                 } else {
                                     dueCount = countRaw.toIntOrNull() ?: 0
                                 }
@@ -98,7 +102,16 @@ class AnkiDroidClient(private val context: Context) {
                         }
                     }
 
-                    decks.add(AnkiDeck(id = id, name = name, dueCardCount = dueCount))
+                    decks.add(
+                        AnkiDeck(
+                            id = id,
+                            name = name,
+                            dueCardCount = dueCount,
+                            newCount = newCount,
+                            learnCount = learnCount,
+                            reviewCount = reviewCount
+                        )
+                    )
                 }
             }
             Log.d(TAG, "Successfully fetched ${decks.size} decks from AnkiDroid ($authority)")
@@ -120,21 +133,22 @@ class AnkiDroidClient(private val context: Context) {
         val cardsUri = AnkiDroidContract.Cards.getContentUri(authority)
         val cards = mutableListOf<CardModel>()
 
-        // 1. Determine Anki search query strings
+        // 1. Determine Anki search query strings with explicit exclusion of suspended and buried cards
         val searchQueries = mutableListOf<String>()
         if (deckId > 0) {
-            searchQueries.add("did:$deckId (is:due or is:new or is:learn)")
-            searchQueries.add("did:$deckId is:due")
+            searchQueries.add("did:$deckId -is:suspended -is:buried (is:due or is:learn)")
+            searchQueries.add("did:$deckId -is:suspended -is:buried is:new")
+            searchQueries.add("did:$deckId -is:suspended -is:buried")
             searchQueries.add("did:$deckId")
         } else {
-            searchQueries.add("is:due or is:new or is:learn")
-            searchQueries.add("is:due")
-            searchQueries.add("is:new")
+            searchQueries.add("-is:suspended -is:buried (is:due or is:learn)")
+            searchQueries.add("-is:suspended -is:buried is:new")
+            searchQueries.add("-is:suspended -is:buried")
             searchQueries.add("")
         }
 
         for (query in searchQueries) {
-            val queryCards = queryCardsWithSelection(cardsUri, query, limit)
+            val queryCards = queryCardsWithSelection(cardsUri, query, limit, deckId)
             if (queryCards.isNotEmpty()) {
                 cards.addAll(queryCards)
                 break
@@ -150,20 +164,25 @@ class AnkiDroidClient(private val context: Context) {
         }
 
         if (cards.isEmpty()) {
-            Log.d(TAG, "No cards found for deck $deckId in AnkiDroid, returning preview placeholder")
+            Log.d(TAG, "No valid cards found for deck $deckId in AnkiDroid, returning preview placeholder")
             cards.add(getSamplePreviewCard())
         }
 
         cards
     }
 
-    private fun queryCardsWithSelection(cardsUri: Uri, selectionQuery: String, limit: Int): List<CardModel> {
+    private fun queryCardsWithSelection(
+        cardsUri: Uri,
+        selectionQuery: String,
+        limit: Int,
+        selectedDeckId: Long = -1L
+    ): List<CardModel> {
         val result = mutableListOf<CardModel>()
         var cursor: Cursor? = null
         try {
             cursor = context.contentResolver.query(
                 cardsUri,
-                null, // Use null for universal compatibility across AnkiDroid versions
+                null,
                 selectionQuery.ifEmpty { null },
                 null,
                 null
@@ -185,7 +204,7 @@ class AnkiDroidClient(private val context: Context) {
                     val cardId = if (cardIdIdx != -1) c.getLong(cardIdIdx) else 0L
                     val noteId = if (noteIdIdx != -1) c.getLong(noteIdIdx) else 0L
                     val cardOrd = if (cardOrdIdx != -1) c.getInt(cardOrdIdx) else 0
-                    val dId = if (deckIdIdx != -1) c.getLong(deckIdIdx) else 0L
+                    val dId = if (deckIdIdx != -1) c.getLong(deckIdIdx) else selectedDeckId
                     val interval = if (ivlIdx != -1) c.getInt(ivlIdx) else 0
 
                     val qSimple = if (questionSimpleIdx != -1) c.getString(questionSimpleIdx) else null
@@ -242,6 +261,12 @@ class AnkiDroidClient(private val context: Context) {
                             fieldNames = fieldNames,
                             fieldValues = fieldValues
                         )
+
+                        // Skip non-study instruction cards
+                        if (JapaneseFieldParser.isInstructionOrInvalidCard(parsed.kanji, parsed.kana, parsed.meaning)) {
+                            continue
+                        }
+
                         result.add(
                             CardModel(
                                 cardId = noteId,
@@ -250,11 +275,15 @@ class AnkiDroidClient(private val context: Context) {
                                 cardOrd = 0,
                                 kanji = parsed.kanji,
                                 kana = parsed.kana,
+                                furigana = parsed.furigana,
                                 romaji = parsed.romaji,
                                 meaning = parsed.meaning,
                                 example = parsed.example,
                                 exampleSentence = parsed.exampleSentence,
+                                exampleFurigana = parsed.exampleFurigana,
                                 exampleTranslation = parsed.exampleTranslation,
+                                exampleFuriganaLine = parsed.exampleFuriganaLine,
+                                exampleSentenceLine = parsed.exampleSentenceLine,
                                 intervalDays = 0,
                                 isDue = true
                             )
@@ -281,13 +310,15 @@ class AnkiDroidClient(private val context: Context) {
         fallbackAnswer: String
     ): CardModel? {
         if (noteId <= 0) {
-            // Fallback from card question/answer if noteId is not available
             val parsed = JapaneseFieldParser.mapFieldsToJapaneseCard(
                 emptyList(),
                 emptyList(),
                 fallbackQuestion,
                 fallbackAnswer
             )
+            if (JapaneseFieldParser.isInstructionOrInvalidCard(parsed.kanji, parsed.kana, parsed.meaning)) {
+                return null
+            }
             return CardModel(
                 cardId = cardId,
                 noteId = noteId,
@@ -295,11 +326,15 @@ class AnkiDroidClient(private val context: Context) {
                 cardOrd = cardOrd,
                 kanji = parsed.kanji,
                 kana = parsed.kana,
+                furigana = parsed.furigana,
                 romaji = parsed.romaji,
                 meaning = parsed.meaning,
                 example = parsed.example,
                 exampleSentence = parsed.exampleSentence,
+                exampleFurigana = parsed.exampleFurigana,
                 exampleTranslation = parsed.exampleTranslation,
+                exampleFuriganaLine = parsed.exampleFuriganaLine,
+                exampleSentenceLine = parsed.exampleSentenceLine,
                 intervalDays = interval,
                 isDue = true
             )
@@ -333,6 +368,11 @@ class AnkiDroidClient(private val context: Context) {
                     fallbackAnswer = fallbackAnswer
                 )
 
+                // Skip non-study instruction cards (e.g. Kaishi 1.5k Welcome Card)
+                if (JapaneseFieldParser.isInstructionOrInvalidCard(parsed.kanji, parsed.kana, parsed.meaning)) {
+                    return null
+                }
+
                 CardModel(
                     cardId = cardId,
                     noteId = noteId,
@@ -340,22 +380,28 @@ class AnkiDroidClient(private val context: Context) {
                     cardOrd = cardOrd,
                     kanji = parsed.kanji,
                     kana = parsed.kana,
+                    furigana = parsed.furigana,
                     romaji = parsed.romaji,
                     meaning = parsed.meaning,
                     example = parsed.example,
                     exampleSentence = parsed.exampleSentence,
+                    exampleFurigana = parsed.exampleFurigana,
                     exampleTranslation = parsed.exampleTranslation,
+                    exampleFuriganaLine = parsed.exampleFuriganaLine,
+                    exampleSentenceLine = parsed.exampleSentenceLine,
                     intervalDays = interval,
                     isDue = true
                 )
             } else {
-                // If direct note query returned empty, construct from card question/answer
                 val parsed = JapaneseFieldParser.mapFieldsToJapaneseCard(
                     emptyList(),
                     emptyList(),
                     fallbackQuestion,
                     fallbackAnswer
                 )
+                if (JapaneseFieldParser.isInstructionOrInvalidCard(parsed.kanji, parsed.kana, parsed.meaning)) {
+                    return null
+                }
                 CardModel(
                     cardId = cardId,
                     noteId = noteId,
@@ -363,11 +409,15 @@ class AnkiDroidClient(private val context: Context) {
                     cardOrd = cardOrd,
                     kanji = parsed.kanji,
                     kana = parsed.kana,
+                    furigana = parsed.furigana,
                     romaji = parsed.romaji,
                     meaning = parsed.meaning,
                     example = parsed.example,
                     exampleSentence = parsed.exampleSentence,
+                    exampleFurigana = parsed.exampleFurigana,
                     exampleTranslation = parsed.exampleTranslation,
+                    exampleFuriganaLine = parsed.exampleFuriganaLine,
+                    exampleSentenceLine = parsed.exampleSentenceLine,
                     intervalDays = interval,
                     isDue = true
                 )
@@ -441,17 +491,40 @@ class AnkiDroidClient(private val context: Context) {
         return answerCard(card.noteId, card.cardOrd, ease)
     }
 
+    fun getOpenAnkiIntent(noteId: Long = -1L): Intent {
+        val pm = context.packageManager
+        for (pkg in AnkiDroidContract.KNOWN_PACKAGES) {
+            val launchIntent = pm.getLaunchIntentForPackage(pkg)
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                return launchIntent
+            }
+        }
+        return Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.ichi2.anki")).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+
     fun getSamplePreviewCard(): CardModel {
         return CardModel(
             cardId = -1L,
             noteId = -1L,
             deckId = -1L,
             cardOrd = 0,
-            kanji = "日",
-            kana = "ひ",
-            romaji = "hi",
-            meaning = "sun, day",
-            example = "日本 • Japan",
+            kanji = "九",
+            kana = "きゅう",
+            furigana = "きゅう",
+            romaji = "kyuu",
+            meaning = "nine",
+            example = "野球は九人で1チームです。 • In baseball there are nine people on one team.",
+            exampleSentence = "野球は九人で1チームです。",
+            exampleFurigana = "野球[やきゅう]は 九人[きゅうにん]で 1チームです。",
+            exampleTranslation = "In baseball there are nine people on one team.",
+            exampleFuriganaLine = "や きゅう   きゅうにん",
+            exampleSentenceLine = "野球は九人で1チームです。",
+            newCount = 15,
+            learnCount = 17,
+            reviewCount = 21,
             intervalDays = 4,
             isDue = true
         )

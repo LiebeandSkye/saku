@@ -163,4 +163,70 @@ class JapaneseFieldParserTest {
         assertEquals("kafe", JapaneseFieldParser.kanaToRomaji("カフェ"))
         assertEquals("disuko", JapaneseFieldParser.kanaToRomaji("ディスコ"))
     }
+
+    @Test
+    fun testInstructionOrInvalidCardFiltering() {
+        // Welcome / instruction notes should be filtered out
+        assertTrue(JapaneseFieldParser.isInstructionOrInvalidCard("Welcome to Kaishi 1.5k", "", "Instructions"))
+        assertTrue(JapaneseFieldParser.isInstructionOrInvalidCard("Card 1: Intro", "", "How to use"))
+        assertTrue(JapaneseFieldParser.isInstructionOrInvalidCard("Notes & Info", "", "Read me first"))
+        assertTrue(JapaneseFieldParser.isInstructionOrInvalidCard("Hello World", "hello", "A greeting"))
+
+        // Genuine Japanese vocabulary cards should NOT be filtered out
+        org.junit.Assert.assertFalse(JapaneseFieldParser.isInstructionOrInvalidCard("九", "きゅう", "nine"))
+        org.junit.Assert.assertFalse(JapaneseFieldParser.isInstructionOrInvalidCard("日", "ひ", "day, sun"))
+        org.junit.Assert.assertFalse(JapaneseFieldParser.isInstructionOrInvalidCard("食べる", "たべる", "to eat"))
+    }
+
+    @Test
+    fun testFuriganaSegmentationAndTwoLineAlignment() {
+        val rawSentence = "野球[やきゅう]は 九人[きゅうにん]で 1チームです。"
+        val segments = JapaneseFieldParser.parseFuriganaSegments(rawSentence, targetWord = "九")
+
+        assertEquals(4, segments.size)
+        assertEquals("野球", segments[0].text)
+        assertEquals("やきゅう", segments[0].reading)
+        assertEquals("は", segments[1].text)
+        assertEquals("九人", segments[2].text)
+        assertEquals("きゅうにん", segments[2].reading)
+        assertTrue(segments[2].isTarget)
+        assertEquals("で 1チームです。", segments[3].text)
+
+        val (fLine, sLine) = JapaneseFieldParser.alignFuriganaTwoLines(segments)
+        assertTrue(fLine.isNotEmpty())
+        assertTrue(sLine.contains("野球は九人で1チームです。") || sLine.contains("九人"))
+    }
+
+    @Test
+    fun testUserKaishiSampleCard() {
+        val fieldNames = listOf(
+            "Vocabulary-Kanji",
+            "Vocabulary-Kana",
+            "Vocabulary-Furigana",
+            "Vocabulary-English",
+            "Sentence-Expression",
+            "Sentence-Furigana",
+            "Sentence-English"
+        )
+        val fieldValues = listOf(
+            "九",
+            "きゅう",
+            "九[きゅう]",
+            "nine",
+            "野球は九人で1チームです。",
+            "野球[やきゅう]は 九人[きゅうにん]で 1チームです。",
+            "In baseball there are nine people on one team."
+        )
+
+        val result = JapaneseFieldParser.mapFieldsToJapaneseCard(fieldNames, fieldValues)
+        assertEquals("九", result.kanji)
+        assertEquals("きゅう", result.kana)
+        assertEquals("きゅう", result.furigana)
+        assertEquals("kyuu", result.romaji)
+        assertEquals("nine", result.meaning)
+        assertEquals("野球は九人で1チームです。", result.exampleSentence)
+        assertEquals("In baseball there are nine people on one team.", result.exampleTranslation)
+        assertTrue(result.exampleFuriganaLine.isNotEmpty())
+    }
 }
+

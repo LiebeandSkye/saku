@@ -1,15 +1,32 @@
 package com.saku.anki
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.util.TypedValue
 import java.util.regex.Pattern
+
+data class FuriganaSegment(
+    val text: String,
+    val reading: String = "",
+    val isTarget: Boolean = false
+)
 
 data class ParsedJapaneseCard(
     val kanji: String,
     val kana: String,
+    val furigana: String = "",
     val romaji: String,
     val meaning: String,
     val example: String,
     val exampleSentence: String = "",
-    val exampleTranslation: String = ""
+    val exampleFurigana: String = "",
+    val exampleTranslation: String = "",
+    val exampleFuriganaLine: String = "",
+    val exampleSentenceLine: String = ""
 )
 
 object JapaneseFieldParser {
@@ -19,7 +36,7 @@ object JapaneseFieldParser {
     private val HTML_TAG_PATTERN = Pattern.compile("<[^>]*>")
     private val SOUND_TAG_PATTERN = Pattern.compile("\\[sound:[^]]+]")
     private val RUBY_TAG_PATTERN = Pattern.compile("(?i)<ruby[^>]*>(?:<rb[^>]*>)?(.*?)(?:</rb>)?(?:<rp[^>]*>.*?</rp>)?<rt[^>]*>(.*?)</rt>(?:<rp[^>]*>.*?</rp>)?</ruby>")
-    private val FURIGANA_BRACKET_PATTERN = Pattern.compile("(?:^|\\s)?([^ \\[\\]]+)\\[([^\\]]+)\\]")
+    private val FURIGANA_BRACKET_PATTERN = Pattern.compile("([^ \\[\\]]+)\\[([^\\]]+)\\]")
 
     // Japanese Unicode ranges
     private val KANJI_PATTERN = Pattern.compile("[\\u4E00-\\u9FAF\\u3400-\\u4DBF]")
@@ -33,7 +50,7 @@ object JapaneseFieldParser {
         var clean = STYLE_TAG_PATTERN.matcher(input).replaceAll("")
         clean = SCRIPT_TAG_PATTERN.matcher(clean).replaceAll("")
         clean = SOUND_TAG_PATTERN.matcher(clean).replaceAll("")
-        // Replace breaks and block tags with newlines/spaces
+        // Replace breaks and block tags with spaces
         clean = clean.replace(Regex("(?i)<br\\s*/?>"), " ")
             .replace(Regex("(?i)</?p>"), " ")
             .replace(Regex("(?i)</?div>"), " ")
@@ -138,8 +155,182 @@ object JapaneseFieldParser {
     }
 
     /**
+     * Parses a Japanese sentence (with bracket furigana or ruby tags) into individual FuriganaSegments.
+     */
+    fun parseFuriganaSegments(rawSentence: String, targetWord: String = ""): List<FuriganaSegment> {
+        val segments = mutableListOf<FuriganaSegment>()
+        if (rawSentence.isBlank()) return segments
+
+        // 1. Check for Ruby tags
+        if (rawSentence.contains("<ruby", ignoreCase = true)) {
+            val matcher = RUBY_TAG_PATTERN.matcher(rawSentence)
+            var lastEnd = 0
+            while (matcher.find()) {
+                val pre = cleanHtml(rawSentence.substring(lastEnd, matcher.start()))
+                if (pre.isNotEmpty()) {
+                    addPlainSegmentsWithTarget(segments, pre, targetWord)
+                }
+                val base = cleanHtml(matcher.group(1) ?: "")
+                val reading = cleanHtml(matcher.group(2) ?: "")
+                val isTarget = isTargetMatch(base, targetWord)
+                if (base.isNotEmpty()) {
+                    segments.add(FuriganaSegment(text = base, reading = reading, isTarget = isTarget))
+                }
+                lastEnd = matcher.end()
+            }
+            val post = cleanHtml(rawSentence.substring(lastEnd))
+            if (post.isNotEmpty()) {
+                addPlainSegmentsWithTarget(segments, post, targetWord)
+            }
+            return segments
+        }
+
+        // 2. Parse Bracket format: 野球[やきゅう]は 九人[きゅうにん]で 1チームです。
+        // Check if there is target highlighting in HTML e.g. <span class="highlight">...</span> or <b>...</b>
+        val processed = rawSentence
+            .replace(Regex("(?i)<(?:span|b|strong)[^>]*class=[\"']?[^\"'>]*highlight[^\"'>]*[\"']?[^>]*>(.*?)</(?:span|b|strong)>"), " @@TARGET_START@@$1@@TARGET_END@@ ")
+            .replace(Regex("(?i)<(?:b|strong)>(.*?)</(?:b|strong)>"), " @@TARGET_START@@$1@@TARGET_END@@ ")
+
+        val cleaned = cleanHtml(processed)
+        val matcher = FURIGANA_BRACKET_PATTERN.matcher(cleaned)
+        var lastEnd = 0
+        var foundAny = false
+
+        while (matcher.find()) {
+            foundAny = true
+            val preceding = cleaned.substring(lastEnd, matcher.start())
+            if (preceding.isNotEmpty()) {
+                addPlainSegmentsWithTarget(segments, preceding, targetWord)
+            }
+
+            var kanjiPart = matcher.group(1) ?: ""
+            val readingPart = matcher.group(2) ?: ""
+
+            var isExplicitTarget = false
+            if (kanjiPart.contains("@@TARGET_START@@")) {
+                isExplicitTarget = true
+                kanjiPart = kanjiPart.replace("@@TARGET_START@@", "").replace("@@TARGET_END@@", "")
+            }
+
+            val isTarget = isExplicitTarget || isTargetMatch(kanjiPart, targetWord)
+            segments.add(FuriganaSegment(text = kanjiPart.trim(), reading = readingPart.trim(), isTarget = isTarget))
+            lastEnd = matcher.end()
+        }
+
+        if (foundAny) {
+            val remaining = cleaned.substring(lastEnd)
+            if (remaining.isNotEmpty()) {
+                addPlainSegmentsWithTarget(segments, remaining, targetWord)
+            }
+            return segments
+        }
+
+        // 3. Plain sentence fallback
+        addPlainSegmentsWithTarget(segments, cleaned, targetWord)
+        return segments
+    }
+
+    private fun addPlainSegmentsWithTarget(
+        segments: MutableList<FuriganaSegment>,
+        text: String,
+        targetWord: String
+    ) {
+        val clean = text.replace("@@TARGET_START@@", "").replace("@@TARGET_END@@", "").trim()
+        if (clean.isEmpty()) return
+
+        val cleanTarget = targetWord.trim()
+        if (cleanTarget.isNotEmpty() && clean.contains(cleanTarget)) {
+            val parts = clean.split(cleanTarget)
+            for (i in parts.indices) {
+                if (parts[i].isNotEmpty()) {
+                    segments.add(FuriganaSegment(text = parts[i], reading = "", isTarget = false))
+                }
+                if (i < parts.size - 1) {
+                    segments.add(FuriganaSegment(text = cleanTarget, reading = "", isTarget = true))
+                }
+            }
+        } else {
+            segments.add(FuriganaSegment(text = clean, reading = "", isTarget = false))
+        }
+    }
+
+    private fun isTargetMatch(text: String, targetWord: String): Boolean {
+        if (targetWord.isBlank() || text.isBlank()) return false
+        val cleanT = targetWord.trim()
+        val cleanText = text.trim()
+        return cleanText == cleanT || cleanText.contains(cleanT) || cleanT.contains(cleanText)
+    }
+
+    /**
+     * Formats Furigana segments into a 2-line string for Notification RemoteViews where:
+     * Line 1: Spaced Furigana reading aligned over each kanji
+     * Line 2: Japanese sentence with proportional spacing
+     */
+    fun alignFuriganaTwoLines(segments: List<FuriganaSegment>): Pair<String, String> {
+        if (segments.isEmpty()) return Pair("", "")
+
+        val furiganaSb = StringBuilder()
+        val sentenceSb = StringBuilder()
+
+        for (seg in segments) {
+            val text = seg.text
+            val reading = seg.reading
+
+            if (reading.isNotEmpty()) {
+                val textLen = text.length
+
+                // Format spaced furigana over kanji
+                val spacedReading = reading.toCharArray().joinToString(" ")
+                furiganaSb.append(spacedReading).append(" ")
+                sentenceSb.append(text).append(" ".repeat(maxOf(1, spacedReading.length - textLen)))
+            } else {
+                sentenceSb.append(text)
+                // Append spaces of equal length on furigana line
+                furiganaSb.append(" ".repeat(text.length))
+            }
+        }
+
+        return Pair(furiganaSb.toString().trimEnd(), sentenceSb.toString().trimEnd())
+    }
+
+    /**
+     * Checks if a card is an instruction/welcome note (e.g. Kaishi 1.5k Welcome Card)
+     * rather than an actual vocabulary flashcard.
+     */
+    fun isInstructionOrInvalidCard(kanji: String, kana: String = "", meaning: String = ""): Boolean {
+        // If neither kanji nor kana has Japanese characters, it's not a Japanese card
+        if (!hasJapaneseChars(kanji) && !hasJapaneseChars(kana)) {
+            return true
+        }
+
+        val combined = "$kanji $kana $meaning".lowercase()
+        val instructionKeywords = listOf(
+            "welcome to kaishi",
+            "welcome to",
+            "read me",
+            "readme",
+            "instructions",
+            "instruction",
+            "how to use",
+            "deck settings",
+            "guide",
+            "kaishi 1.5k",
+            "kaishi 2.3k",
+            "kaishi 2k"
+        )
+
+        for (kw in instructionKeywords) {
+            if (combined.contains(kw) && (!hasJapaneseChars(kanji) || kanji.length > 20)) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /**
      * Maps note fields from any deck (Kaishi 1.5k/2k, Core 2k/6k, Tango, Basic, Yomichan)
-     * to a structured Japanese card model.
+     * to a structured Japanese card model with rich Furigana support.
      */
     fun mapFieldsToJapaneseCard(
         fieldNames: List<String>,
@@ -154,42 +345,54 @@ object JapaneseFieldParser {
             fieldsByName[name] = value
         }
 
-        // 1. Extract Kanji / Expression
+        // 1. Extract Target Word / Kanji
         val kanjiKeywords = listOf(
-            "vocabularykanji", "vocabkanji", "kanji", "expression", "targetword", "word",
-            "term", "front", "japanese", "vocabulary", "vocab", "vocabword", "japaneseword"
+            "vocabularykanji", "vocabkanji", "vocabword", "targetword", "word",
+            "expression", "kanji", "front", "japanese", "vocabulary", "vocab", "japaneseword"
         )
-        var rawKanji = findFieldByKeywords(fieldsByName, kanjiKeywords)
+        val rawKanji = findFieldByKeywords(fieldsByName, kanjiKeywords, excludeKeywords = listOf("sentence", "sent", "example"))
 
         // 2. Extract Kana / Reading
         val kanaKeywords = listOf(
-            "vocabularykana", "vocabkana", "reading", "kana", "furigana", "furiganaplain",
-            "yomikata", "pronunciation", "hiragana", "katakana", "vocabreading", "readingkana"
+            "vocabularykana", "vocabkana", "targetwordkana", "vocabreading", "reading",
+            "kana", "yomikata", "pronunciation", "hiragana", "katakana", "readingkana"
         )
-        var rawKana = findFieldByKeywords(fieldsByName, kanaKeywords)
+        val rawKana = findFieldByKeywords(fieldsByName, kanaKeywords, excludeKeywords = listOf("sentence", "sent", "example"))
 
-        // 3. Extract Meaning / English
+        // 3. Extract Vocabulary Furigana (e.g. Vocabulary-Furigana or Furigana)
+        val furiganaKeywords = listOf(
+            "vocabularyfurigana", "vocabfurigana", "targetwordfurigana", "furigana", "furiganaplain"
+        )
+        val rawFurigana = findFieldByKeywords(fieldsByName, furiganaKeywords, excludeKeywords = listOf("sentence", "sent", "example"))
+
+        // 4. Extract Meaning / English
         val meaningKeywords = listOf(
-            "vocabularyenglish", "vocabenglish", "meaning", "english", "glossary", "definition",
-            "translation", "vocabmeaning", "primarymeaning", "back", "englishmeaning", "shortdefinition"
+            "vocabularyenglish", "vocabenglish", "targetwordmeaning", "vocabmeaning", "meaning",
+            "english", "glossary", "definition", "translation", "primarymeaning", "back", "englishmeaning", "shortdefinition"
         )
-        val rawMeaning = findFieldByKeywords(fieldsByName, meaningKeywords)
+        val rawMeaning = findFieldByKeywords(fieldsByName, meaningKeywords, excludeKeywords = listOf("sentence", "sent", "example"))
 
-        // 4. Extract Example Sentence
+        // 5. Extract Example Sentence (Kanji / Expression)
         val exampleKeywords = listOf(
             "sentenceexpression", "sentencekanji", "examplesentence", "sentence", "example",
             "context", "japanesesentence", "sentkanji", "examplejapanese", "sentexpression", "sample"
         )
-        val rawExample = findFieldByKeywords(fieldsByName, exampleKeywords)
+        val rawExample = findFieldByKeywords(fieldsByName, exampleKeywords, excludeKeywords = listOf("audio", "image", "picture", "english", "meaning", "translation"))
 
-        // 5. Extract Example Translation
+        // 6. Extract Sentence Furigana (e.g. Sentence-Furigana or Sentence-Kana)
+        val sentenceFuriganaKeywords = listOf(
+            "sentencefurigana", "sentfurigana", "examplefurigana", "sentencekana", "sentkana"
+        )
+        val rawSentenceFurigana = findFieldByKeywords(fieldsByName, sentenceFuriganaKeywords, excludeKeywords = listOf("audio", "image", "picture"))
+
+        // 7. Extract Example Translation
         val exampleTransKeywords = listOf(
             "sentenceenglish", "sentencemeaning", "sentencetranslation", "exampletranslation",
             "exampleenglish", "senteng", "sentmeaning", "examplemeaning", "senttrans"
         )
         val rawExampleTranslation = findFieldByKeywords(fieldsByName, exampleTransKeywords)
 
-        // Fallback: If no field names matched, infer from positional values
+        // Fallback: If positional guessing is needed
         val cleanValues = fieldValues.map { cleanHtml(it) }.filter { it.isNotEmpty() && !it.startsWith("[sound:") }
         val inferredKanji = if (rawKanji.isEmpty()) {
             cleanValues.firstOrNull { hasJapaneseChars(it) && it.length < 20 } ?: cleanValues.getOrNull(0) ?: ""
@@ -235,7 +438,6 @@ object JapaneseFieldParser {
             if (!hasJapaneseChars(answerBack)) {
                 fallbackParsedMeaning = answerBack
             } else {
-                // Contains Japanese - could be example sentence or definition
                 val lines = answerBack.split("\n", "  ").map { it.trim() }.filter { it.isNotEmpty() }
                 for (line in lines) {
                     if (!hasJapaneseChars(line) && fallbackParsedMeaning.isEmpty()) {
@@ -263,14 +465,30 @@ object JapaneseFieldParser {
 
         val finalRomaji = kanaToRomaji(finalKana)
 
+        // Process Sentence Furigana
+        val sentenceFuriganaSource = rawSentenceFurigana.ifEmpty { rawExample }
+        val segments = parseFuriganaSegments(sentenceFuriganaSource, targetWord = finalKanji)
+        val (fLine, sLine) = alignFuriganaTwoLines(segments)
+
+        val pureFurigana = if (rawFurigana.isNotEmpty()) {
+            val (_, extractedReading) = extractKanjiAndKana(rawFurigana)
+            extractedReading
+        } else {
+            finalKana
+        }
+
         return ParsedJapaneseCard(
             kanji = finalKanji,
             kana = finalKana,
+            furigana = pureFurigana,
             romaji = finalRomaji,
             meaning = finalMeaning,
             example = fullExample,
             exampleSentence = cleanExampleSentence,
-            exampleTranslation = finalExampleTrans
+            exampleFurigana = sentenceFuriganaSource,
+            exampleTranslation = finalExampleTrans,
+            exampleFuriganaLine = fLine,
+            exampleSentenceLine = sLine.ifEmpty { cleanExampleSentence }
         )
     }
 
@@ -278,13 +496,21 @@ object JapaneseFieldParser {
         return key.lowercase().replace(Regex("[^a-z0-9]"), "")
     }
 
-    private fun findFieldByKeywords(fieldsByName: Map<String, String>, keywords: List<String>): String {
+    private fun findFieldByKeywords(
+        fieldsByName: Map<String, String>,
+        keywords: List<String>,
+        excludeKeywords: List<String> = emptyList()
+    ): String {
         val normalizedMap = mutableMapOf<String, String>()
         for ((k, v) in fieldsByName) {
-            normalizedMap[normalizeKey(k)] = v
+            val normKey = normalizeKey(k)
+            val isExcluded = excludeKeywords.any { normKey.contains(normalizeKey(it)) }
+            if (!isExcluded) {
+                normalizedMap[normKey] = v
+            }
         }
 
-        // Exact match on normalized keys
+        // 1. Exact match on normalized keys
         for (keyword in keywords) {
             val normKw = normalizeKey(keyword)
             normalizedMap[normKw]?.let {
@@ -292,7 +518,7 @@ object JapaneseFieldParser {
             }
         }
 
-        // Contains match on normalized keys
+        // 2. Starts-with or Contains match on normalized keys
         for (keyword in keywords) {
             val normKw = normalizeKey(keyword)
             for ((normKey, value) in normalizedMap) {
@@ -315,7 +541,7 @@ object JapaneseFieldParser {
     }
 
     /**
-     * Converts Hiragana and Katakana to Romaji (Hepburn approximation) including contractions and double consonants.
+     * Converts Hiragana and Katakana to Romaji (Hepburn approximation).
      */
     fun kanaToRomaji(kanaInput: String): String {
         if (kanaInput.isEmpty()) return ""
@@ -353,7 +579,7 @@ object JapaneseFieldParser {
             "わ" to "wa", "を" to "o", "ん" to "n",
             "が" to "ga", "ぎ" to "gi", "ぐ" to "gu", "げ" to "ge", "ご" to "go",
             "ざ" to "za", "じ" to "ji", "ず" to "zu", "ぜ" to "ze", "ぞ" to "zo",
-            "だ" to "da", "ぢ" to "ji", "づ" to "zu", "で" to "de", "ど" to "do",
+            "だ" to "da", "ぢ" to "ji", "づ" to "zu", "de" to "de", "ど" to "do",
             "ば" to "ba", "び" to "bi", "ぶ" to "bu", "べ" to "be", "ぼ" to "bo",
             "ぱ" to "pa", "ぴ" to "pi", "ぷ" to "pu", "ぺ" to "pe", "ぽ" to "po",
             "ゔ" to "vu", "ぁ" to "a", "ぃ" to "i", "ぅ" to "u", "ぇ" to "e", "ぉ" to "o"
@@ -363,7 +589,6 @@ object JapaneseFieldParser {
         val sb = StringBuilder()
         var i = 0
         while (i < hiragana.length) {
-            // Long vowel mark 'ー'
             if (hiragana[i] == 'ー') {
                 val lastVowel = sb.lastOrNull { it in vowels }
                 if (lastVowel != null) {
@@ -373,7 +598,6 @@ object JapaneseFieldParser {
                 continue
             }
 
-            // Sokuon (small tsu - double consonant)
             if (hiragana[i] == 'っ' || hiragana[i] == 'ッ') {
                 if (i + 1 < hiragana.length) {
                     val nextPair = if (i + 2 < hiragana.length) hiragana.substring(i + 1, i + 3) else ""
@@ -387,7 +611,6 @@ object JapaneseFieldParser {
                 }
             }
 
-            // Check 2-character digraphs
             if (i + 1 < hiragana.length) {
                 val pair = hiragana.substring(i, i + 2)
                 if (digraphs.containsKey(pair)) {
@@ -397,7 +620,6 @@ object JapaneseFieldParser {
                 }
             }
 
-            // Single character
             val single = hiragana[i].toString()
             if (monophthongs.containsKey(single)) {
                 sb.append(monophthongs[single])
@@ -421,3 +643,88 @@ object JapaneseFieldParser {
         return sb.toString()
     }
 }
+
+object FuriganaBitmapRenderer {
+
+    fun renderFuriganaSentenceBitmap(
+        context: Context,
+        segments: List<FuriganaSegment>,
+        kanjiTextSizeSp: Float = 16f,
+        furiganaTextSizeSp: Float = 10f,
+        defaultTextColor: Int = Color.WHITE,
+        targetTextColor: Int = Color.parseColor("#6CA0DC"),
+        furiganaDefaultColor: Int = Color.parseColor("#CCCCCC"),
+        furiganaTargetColor: Int = Color.parseColor("#6CA0DC")
+    ): Bitmap? {
+        if (segments.isEmpty()) return null
+
+        val displayMetrics = context.resources.displayMetrics
+        val kanjiPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, kanjiTextSizeSp, displayMetrics)
+        val furiganaPx = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, furiganaTextSizeSp, displayMetrics)
+
+        val kanjiPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = kanjiPx
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        val furiganaPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = furiganaPx
+            typeface = Typeface.DEFAULT
+        }
+
+        class MeasuredSegment(
+            val seg: FuriganaSegment,
+            val kanjiWidth: Float,
+            val furiganaWidth: Float,
+            val totalWidth: Float
+        )
+
+        val measured = segments.map { seg ->
+            val kw = kanjiPaint.measureText(seg.text)
+            val fw = if (seg.reading.isNotEmpty()) furiganaPaint.measureText(seg.reading) else 0f
+            val tw = maxOf(kw, fw)
+            MeasuredSegment(seg, kw, fw, tw)
+        }
+
+        val totalContentWidth = measured.sumOf { it.totalWidth.toDouble() }.toFloat()
+        if (totalContentWidth <= 0f) return null
+
+        val furiganaMetrics = furiganaPaint.fontMetrics
+        val kanjiMetrics = kanjiPaint.fontMetrics
+
+        val furiganaHeight = furiganaMetrics.descent - furiganaMetrics.ascent
+        val kanjiHeight = kanjiMetrics.descent - kanjiMetrics.ascent
+        val spacingBetween = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 2f, displayMetrics)
+
+        val totalHeight = (furiganaHeight + spacingBetween + kanjiHeight).toInt() + 6
+        val totalWidth = totalContentWidth.toInt() + 12
+
+        val bitmap = Bitmap.createBitmap(maxOf(totalWidth, 1), maxOf(totalHeight, 1), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        var currentX = 6f
+        val furiganaBaseline = 2f - furiganaMetrics.ascent
+        val kanjiBaseline = furiganaBaseline + furiganaMetrics.descent + spacingBetween - kanjiMetrics.ascent
+
+        for (m in measured) {
+            val isTarget = m.seg.isTarget
+            val text = m.seg.text
+            val reading = m.seg.reading
+
+            if (reading.isNotEmpty()) {
+                furiganaPaint.color = if (isTarget) furiganaTargetColor else furiganaDefaultColor
+                val furiganaX = currentX + (m.totalWidth - m.furiganaWidth) / 2f
+                canvas.drawText(reading, furiganaX, furiganaBaseline, furiganaPaint)
+            }
+
+            kanjiPaint.color = if (isTarget) targetTextColor else defaultTextColor
+            val kanjiX = currentX + (m.totalWidth - m.kanjiWidth) / 2f
+            canvas.drawText(text, kanjiX, kanjiBaseline, kanjiPaint)
+
+            currentX += m.totalWidth
+        }
+
+        return bitmap
+    }
+}
+

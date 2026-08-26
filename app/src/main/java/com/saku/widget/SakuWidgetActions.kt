@@ -24,9 +24,10 @@ class SakuNextCardAction : ActionCallback {
                 ?: ankiClient.getSamplePreviewCard()
 
             prefs.saveActiveCard(nextCard)
+            prefs.isAnswerRevealed = false
 
             if (prefs.isLockScreenCardEnabled) {
-                LockScreenCardService.updateNotification(context, nextCard)
+                LockScreenCardService.updateNotification(context, nextCard, showAnswer = false)
             }
 
             SakuGlanceWidget().updateAll(context)
@@ -41,7 +42,7 @@ class SakuGradeCardAction : ActionCallback {
 
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         withContext(Dispatchers.IO) {
-            val ease = parameters[EASE_PARAM] ?: 3
+            val ease = parameters[EASE_PARAM] ?: 1
             val prefs = SakuPreferences(context)
             val ankiClient = AnkiDroidClient(context)
             val currentCard = prefs.getActiveCard()
@@ -59,7 +60,7 @@ class SakuGradeCardAction : ActionCallback {
             prefs.isAnswerRevealed = false
 
             if (prefs.isLockScreenCardEnabled) {
-                LockScreenCardService.updateNotification(context, nextCard)
+                LockScreenCardService.updateNotification(context, nextCard, showAnswer = false)
             }
 
             SakuGlanceWidget().updateAll(context)
@@ -72,7 +73,24 @@ class SakuToggleAnswerAction : ActionCallback {
         withContext(Dispatchers.IO) {
             val prefs = SakuPreferences(context)
             prefs.isAnswerRevealed = !prefs.isAnswerRevealed
+
+            if (prefs.isLockScreenCardEnabled) {
+                LockScreenCardService.updateNotification(context, prefs.getActiveCard(), showAnswer = prefs.isAnswerRevealed)
+            }
+
             SakuGlanceWidget().updateAll(context)
         }
     }
 }
+
+class SakuOpenAnkiAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        withContext(Dispatchers.IO) {
+            val ankiClient = AnkiDroidClient(context)
+            val prefs = SakuPreferences(context)
+            val intent = ankiClient.getOpenAnkiIntent(prefs.getActiveCard().noteId)
+            context.startActivity(intent)
+        }
+    }
+}
+

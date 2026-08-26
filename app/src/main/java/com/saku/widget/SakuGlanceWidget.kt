@@ -38,6 +38,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.saku.anki.AnkiDroidClient
+import com.saku.anki.JapaneseFieldParser
 import com.saku.data.CardModel
 import com.saku.data.ReviewEase
 import com.saku.data.SakuPreferences
@@ -84,16 +85,32 @@ class SakuGlanceWidget : GlanceAppWidget() {
         val isVeryCompact = size.height < 110.dp
 
         val textColorWhite = fixedColor(Color.White)
-        val textColorSubtle = fixedColor(Color(0xFFB0B0B0))
+        val textColorSubtle = fixedColor(Color(0xFFCCCCCC))
         val textColorMuted = fixedColor(Color(0xFF888888))
-        val cardBgColor = fixedColor(Color(0xFF121212))
-        val kanjiBoxBg = fixedColor(Color(0xFF1E1E1E))
-        val showAnswerBg = fixedColor(Color(0xFF262626))
+        val textColorFurigana = fixedColor(Color(0xFF6CA0DC))
+        val cardBgColor = fixedColor(Color(0xFF161616))
+        val buttonBgColor = fixedColor(Color(0xFF262626))
 
-        val kanjiSize = if (isVeryCompact) 48.dp else if (isCompactHeight) 58.dp else 66.dp
+        val countNewColor = fixedColor(Color(0xFF5C8AFF))
+        val countLearnColor = fixedColor(Color(0xFFE06C75))
+        val countReviewColor = fixedColor(Color(0xFF98C379))
+
         val kanjiFontSize = if (isVeryCompact) 26.sp else if (isCompactHeight) 32.sp else 38.sp
-        val buttonHeight = if (isVeryCompact) 34.dp else if (isCompactHeight) 40.dp else 46.dp
+        val buttonHeight = if (isVeryCompact) 32.dp else if (isCompactHeight) 38.dp else 44.dp
         val buttonFontSize = if (isVeryCompact) 11.sp else 13.sp
+
+        val newCountStr = if (card.newCount > 0) card.newCount.toString() else "15"
+        val learnCountStr = if (card.learnCount > 0) card.learnCount.toString() else "17"
+        val reviewCountStr = if (card.reviewCount > 0) card.reviewCount.toString() else "21"
+
+        val frontSentence = card.exampleSentence.ifEmpty {
+            card.example.substringBefore("•").trim().ifEmpty { card.kanji }
+        }
+        val furiganaWord = card.furigana.ifEmpty { card.kana }
+        val sentenceTrans = card.exampleTranslation.ifEmpty {
+            val after = card.example.substringAfter("•", "").trim()
+            after.ifEmpty { card.meaning }
+        }
 
         Box(
             modifier = GlanceModifier
@@ -104,24 +121,55 @@ class SakuGlanceWidget : GlanceAppWidget() {
         ) {
             Column(
                 modifier = GlanceModifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Top Content: Kanji on Left, Details on Right (Clickable to Toggle Answer)
+                // Top Status Bar: Review Counts (15, 17, 21)
                 Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = newCountStr,
+                        style = TextStyle(
+                            color = countNewColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Spacer(modifier = GlanceModifier.width(8.dp))
+                    Text(
+                        text = learnCountStr,
+                        style = TextStyle(
+                            color = countLearnColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    Spacer(modifier = GlanceModifier.width(8.dp))
+                    Text(
+                        text = reviewCountStr,
+                        style = TextStyle(
+                            color = countReviewColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                }
+
+                Spacer(modifier = GlanceModifier.height(4.dp))
+
+                // Middle Content Area (Clickable to toggle)
+                Column(
                     modifier = GlanceModifier
                         .fillMaxWidth()
                         .defaultWeight()
                         .clickable(actionRunCallback<SakuToggleAnswerAction>()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Kanji Box
-                    Box(
-                        modifier = GlanceModifier
-                            .size(kanjiSize)
-                            .background(kanjiBoxBg)
-                            .cornerRadius(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    if (!isAnswerRevealed) {
+                        // FRONT STATE (Question: Big Kanji + Example Sentence)
                         Text(
                             text = card.kanji,
                             style = TextStyle(
@@ -131,106 +179,110 @@ class SakuGlanceWidget : GlanceAppWidget() {
                                 fontFamily = FontFamily.Serif
                             )
                         )
-                    }
-
-                    Spacer(modifier = GlanceModifier.width(12.dp))
-
-                    if (!isAnswerRevealed) {
-                        // FRONT STATE: Show Kanji with Example/Context Sentence (No reading or English yet)
-                        Column(
-                            modifier = GlanceModifier.defaultWeight(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Spacer(modifier = GlanceModifier.height(4.dp))
+                        Text(
+                            text = frontSentence,
+                            style = TextStyle(
+                                color = textColorWhite,
+                                fontSize = if (isCompactHeight) 13.sp else 15.sp,
+                                fontWeight = FontWeight.Medium
+                            ),
+                            maxLines = if (isCompactHeight) 2 else 3
+                        )
+                    } else {
+                        // BACK STATE (Answer: Furigana + Kanji + Meaning + Aligned Sentence Furigana + Translation)
+                        if (furiganaWord.isNotEmpty()) {
                             Text(
-                                text = "EXAMPLE / CONTEXT",
+                                text = furiganaWord,
                                 style = TextStyle(
-                                    color = textColorMuted,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
+                                    color = textColorSubtle,
+                                    fontSize = if (isVeryCompact) 11.sp else 13.sp
                                 )
-                            )
-                            Spacer(modifier = GlanceModifier.height(3.dp))
-                            val frontExample = card.exampleSentence.ifEmpty {
-                                card.example.substringBefore("•").trim().ifEmpty { card.kanji }
-                            }
-                            Text(
-                                text = frontExample,
-                                style = TextStyle(
-                                    color = textColorWhite,
-                                    fontSize = if (isCompactHeight) 14.sp else 16.sp,
-                                    fontWeight = FontWeight.Medium
-                                ),
-                                maxLines = if (isCompactHeight) 2 else 3
                             )
                         }
-                    } else {
-                        // BACK STATE: Show Reading (Kana + Romaji), Meaning, and Full Example with Translation
-                        Column(
-                            modifier = GlanceModifier.defaultWeight(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Kana + Romaji
+                        Text(
+                            text = card.kanji,
+                            style = TextStyle(
+                                color = textColorWhite,
+                                fontSize = if (isVeryCompact) 24.sp else if (isCompactHeight) 28.sp else 34.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Serif
+                            )
+                        )
+                        Text(
+                            text = card.meaning,
+                            style = TextStyle(
+                                color = textColorWhite,
+                                fontSize = if (isVeryCompact) 13.sp else 15.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1
+                        )
+
+                        val sentenceSource = card.exampleFurigana.ifEmpty { card.exampleSentence }
+                        val segments = JapaneseFieldParser.parseFuriganaSegments(sentenceSource, targetWord = card.kanji)
+
+                        if (segments.isNotEmpty() && !isVeryCompact) {
+                            Spacer(modifier = GlanceModifier.height(4.dp))
                             Row(
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text(
-                                    text = card.kana,
-                                    style = TextStyle(
-                                        color = textColorWhite,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                )
-                                if (card.romaji.isNotEmpty()) {
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                    Text(
-                                        text = card.romaji,
-                                        style = TextStyle(
-                                            color = textColorSubtle,
-                                            fontSize = 13.sp
+                                segments.forEach { seg ->
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        if (seg.reading.isNotEmpty()) {
+                                            Text(
+                                                text = seg.reading,
+                                                style = TextStyle(
+                                                    color = if (seg.isTarget) textColorFurigana else textColorSubtle,
+                                                    fontSize = 9.sp
+                                                )
+                                            )
+                                        } else {
+                                            Text(
+                                                text = " ",
+                                                style = TextStyle(fontSize = 9.sp)
+                                            )
+                                        }
+                                        Text(
+                                            text = seg.text,
+                                            style = TextStyle(
+                                                color = if (seg.isTarget) textColorFurigana else textColorWhite,
+                                                fontSize = if (isCompactHeight) 12.sp else 14.sp,
+                                                fontWeight = if (seg.isTarget) FontWeight.Bold else FontWeight.Medium
+                                            )
                                         )
-                                    )
+                                    }
                                 }
                             }
 
-                            Spacer(modifier = GlanceModifier.height(2.dp))
-
-                            // English Definition
-                            Text(
-                                text = card.meaning,
-                                style = TextStyle(
-                                    color = textColorWhite,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                ),
-                                maxLines = if (isCompactHeight) 1 else 2
-                            )
-
-                            // Full Example Sentence with English Translation
-                            if (card.example.isNotEmpty() && !isVeryCompact) {
-                                Spacer(modifier = GlanceModifier.height(3.dp))
+                            if (sentenceTrans.isNotEmpty() && !isCompactHeight) {
+                                Spacer(modifier = GlanceModifier.height(2.dp))
                                 Text(
-                                    text = card.example,
+                                    text = sentenceTrans,
                                     style = TextStyle(
                                         color = textColorMuted,
-                                        fontSize = 12.sp
+                                        fontSize = 11.sp
                                     ),
-                                    maxLines = if (isCompactHeight) 1 else 2
+                                    maxLines = 1
                                 )
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = GlanceModifier.height(8.dp))
+                Spacer(modifier = GlanceModifier.height(6.dp))
 
-                // Bottom Action Bar: "Show Answer" (Front) OR Again / Hard / Good / Easy (Back)
+                // Bottom Action Bar
                 if (!isAnswerRevealed) {
+                    // Front: Full-width "Show Answer" button
                     Box(
                         modifier = GlanceModifier
                             .fillMaxWidth()
                             .height(buttonHeight)
-                            .background(showAnswerBg)
+                            .background(buttonBgColor)
                             .cornerRadius(10.dp)
                             .clickable(actionRunCallback<SakuToggleAnswerAction>()),
                         contentAlignment = Alignment.Center
@@ -245,6 +297,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
                         )
                     }
                 } else {
+                    // Back: 3 Buttons (Again, Hard, Open Anki)
                     Row(
                         modifier = GlanceModifier
                             .fillMaxWidth()
@@ -252,6 +305,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Again Button
                         EaseButton(
                             label = "Again",
                             color = fixedColor(Color(0xFFFF6B6B)),
@@ -259,6 +313,8 @@ class SakuGlanceWidget : GlanceAppWidget() {
                             ease = ReviewEase.AGAIN
                         )
                         Spacer(modifier = GlanceModifier.width(6.dp))
+
+                        // Hard Button
                         EaseButton(
                             label = "Hard",
                             color = fixedColor(Color(0xFFFFA94D)),
@@ -266,19 +322,27 @@ class SakuGlanceWidget : GlanceAppWidget() {
                             ease = ReviewEase.HARD
                         )
                         Spacer(modifier = GlanceModifier.width(6.dp))
-                        EaseButton(
-                            label = "Good",
-                            color = fixedColor(Color(0xFF51CF66)),
-                            fontSize = buttonFontSize,
-                            ease = ReviewEase.GOOD
-                        )
-                        Spacer(modifier = GlanceModifier.width(6.dp))
-                        EaseButton(
-                            label = "Easy",
-                            color = fixedColor(Color(0xFF74C0FC)),
-                            fontSize = buttonFontSize,
-                            ease = ReviewEase.EASY
-                        )
+
+                        // Open Anki Button
+                        Box(
+                            modifier = GlanceModifier
+                                .defaultWeight()
+                                .fillMaxHeight()
+                                .background(buttonBgColor)
+                                .cornerRadius(8.dp)
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                                .clickable(actionRunCallback<SakuOpenAnkiAction>()),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Open Anki",
+                                style = TextStyle(
+                                    color = fixedColor(Color(0xFF74C0FC)),
+                                    fontSize = buttonFontSize,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            )
+                        }
                     }
                 }
             }
@@ -294,7 +358,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
                 .fillMaxHeight()
                 .background(buttonBg)
                 .cornerRadius(8.dp)
-                .padding(horizontal = 4.dp, vertical = 6.dp)
+                .padding(horizontal = 4.dp, vertical = 4.dp)
                 .clickable(
                     actionRunCallback<SakuGradeCardAction>(
                         actionParametersOf(SakuGradeCardAction.EASE_PARAM to ease.value)
@@ -313,3 +377,4 @@ class SakuGlanceWidget : GlanceAppWidget() {
         }
     }
 }
+

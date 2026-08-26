@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,6 +41,7 @@ import androidx.lifecycle.lifecycleScope
 import com.saku.anki.AnkiDroidClient
 import com.saku.anki.AnkiDroidContract
 import com.saku.anki.AnkiPermissionHelper
+import com.saku.anki.JapaneseFieldParser
 import com.saku.data.AnkiDeck
 import com.saku.data.CardModel
 import com.saku.data.ReviewEase
@@ -347,103 +349,67 @@ fun SakuMainScreen(
                         .border(1.dp, Color(0xFF262626), RoundedCornerShape(18.dp))
                         .padding(18.dp)
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // Top Review Counts
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Dynamic Kanji Box & Font Scaling
-                            val kanjiText = activeCard.kanji
-                            val kanjiFontSize = when {
-                                kanjiText.length > 4 -> 20.sp
-                                kanjiText.length > 2 -> 26.sp
-                                kanjiText.length == 2 -> 32.sp
-                                else -> 38.sp
-                            }
-                            val kanjiBoxWidth = if (kanjiText.length > 2) (kanjiText.length * 22).dp.coerceIn(68.dp, 120.dp) else 68.dp
+                            val newCountStr = if (activeCard.newCount > 0) activeCard.newCount.toString() else "15"
+                            val learnCountStr = if (activeCard.learnCount > 0) activeCard.learnCount.toString() else "17"
+                            val reviewCountStr = if (activeCard.reviewCount > 0) activeCard.reviewCount.toString() else "21"
 
-                            Box(
-                                modifier = Modifier
-                                    .size(width = kanjiBoxWidth, height = 68.dp)
-                                    .background(Color(0xFF1F1F1F), RoundedCornerShape(12.dp))
-                                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = kanjiText,
-                                    fontSize = kanjiFontSize,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Serif,
-                                    color = Color.White,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(16.dp))
-
-                            if (!isPreviewRevealed) {
-                                // FRONT STATE PREVIEW: Example/Context Prompt
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "EXAMPLE / CONTEXT",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF888888),
-                                        letterSpacing = 1.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    val frontExample = activeCard.exampleSentence.ifEmpty {
-                                        activeCard.example.substringBefore("•").trim().ifEmpty { activeCard.kanji }
-                                    }
-                                    Text(
-                                        text = frontExample,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.White
-                                    )
-                                }
-                            } else {
-                                // BACK STATE PREVIEW: Reading, Meaning, and Full Example with Translation
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = activeCard.kana,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White
-                                        )
-                                        if (activeCard.romaji.isNotEmpty()) {
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(
-                                                text = activeCard.romaji,
-                                                fontSize = 14.sp,
-                                                color = Color(0xFFAAAAAA)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(3.dp))
-                                    Text(
-                                        text = activeCard.meaning,
-                                        fontSize = 15.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color.White
-                                    )
-                                    if (activeCard.example.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(3.dp))
-                                        Text(
-                                            text = activeCard.example,
-                                            fontSize = 13.sp,
-                                            color = Color(0xFF888888)
-                                        )
-                                    }
-                                }
-                            }
+                            Text(
+                                text = newCountStr,
+                                color = Color(0xFF5C8AFF),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = learnCountStr,
+                                color = Color(0xFFE06C75),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = reviewCountStr,
+                                color = Color(0xFF98C379),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         if (!isPreviewRevealed) {
+                            // FRONT STATE: Large Kanji + Sentence Prompt
+                            Text(
+                                text = activeCard.kanji,
+                                fontSize = 42.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Serif,
+                                color = Color.White
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            val frontSentence = activeCard.exampleSentence.ifEmpty {
+                                activeCard.example.substringBefore("•").trim().ifEmpty { activeCard.kanji }
+                            }
+                            Text(
+                                text = frontSentence,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
                             // "Show Answer" Button (Front State)
                             Box(
                                 modifier = Modifier
@@ -462,56 +428,183 @@ fun SakuMainScreen(
                                 )
                             }
                         } else {
-                            // Review Ease Buttons: Again, Hard, Good, Easy (Back State)
+                            // BACK STATE: Furigana on top of Kanji, Kanji, Meaning, Furigana Sentence, Translation
+                            val furiganaWord = activeCard.furigana.ifEmpty { activeCard.kana }
+                            if (furiganaWord.isNotEmpty()) {
+                                Text(
+                                    text = furiganaWord,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFFDDDDDD)
+                                )
+                            }
+
+                            Text(
+                                text = activeCard.kanji,
+                                fontSize = 38.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Serif,
+                                color = Color.White
+                            )
+
+                            Text(
+                                text = activeCard.meaning,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+
+                            val sentenceSource = activeCard.exampleFurigana.ifEmpty { activeCard.exampleSentence }
+                            val segments = JapaneseFieldParser.parseFuriganaSegments(sentenceSource, targetWord = activeCard.kanji)
+
+                            if (segments.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    segments.forEach { seg ->
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            if (seg.reading.isNotEmpty()) {
+                                                Text(
+                                                    text = seg.reading,
+                                                    fontSize = 11.sp,
+                                                    color = if (seg.isTarget) Color(0xFF6CA0DC) else Color(0xFFCCCCCC)
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "",
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                            Text(
+                                                text = seg.text,
+                                                fontSize = 16.sp,
+                                                fontWeight = if (seg.isTarget) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (seg.isTarget) Color(0xFF6CA0DC) else Color.White
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            val transText = activeCard.exampleTranslation.ifEmpty {
+                                activeCard.example.substringAfter("•", "").trim()
+                            }
+                            if (transText.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = transText,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFFCCCCCC)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // 3 Action Buttons: Again, Hard, Open Anki
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(46.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                ReviewEase.entries.forEach { ease ->
-                                    val color = when (ease) {
-                                        ReviewEase.AGAIN -> Color(0xFFFF6B6B)
-                                        ReviewEase.HARD -> Color(0xFFFFA94D)
-                                        ReviewEase.GOOD -> Color(0xFF51CF66)
-                                        ReviewEase.EASY -> Color(0xFF74C0FC)
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(if (isAnsweringCard) Color(0xFF1A1A1A) else Color(0xFF242424))
-                                            .clickable(enabled = !isAnsweringCard) {
-                                                coroutineScope.launch {
-                                                    isAnsweringCard = true
-                                                    try {
-                                                        if (activeCard.noteId > 0) {
-                                                            ankiClient.answerCard(activeCard, ease.value)
-                                                        }
-                                                        val dueCards = ankiClient.getDueCards(selectedDeckId)
-                                                        activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
-                                                            ?: dueCards.firstOrNull()
-                                                            ?: ankiClient.getSamplePreviewCard()
-                                                        prefs.saveActiveCard(activeCard)
-                                                        isPreviewRevealed = false
-                                                        onUpdateWidgets(activeCard)
-                                                    } catch (e: Exception) {
-                                                        // Error handling for card answer
-                                                    } finally {
-                                                        isAnsweringCard = false
+                                // Again
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isAnsweringCard) Color(0xFF1A1A1A) else Color(0xFF242424))
+                                        .clickable(enabled = !isAnsweringCard) {
+                                            coroutineScope.launch {
+                                                isAnsweringCard = true
+                                                try {
+                                                    if (activeCard.noteId > 0) {
+                                                        ankiClient.answerCard(activeCard, ReviewEase.AGAIN.value)
                                                     }
+                                                    val dueCards = ankiClient.getDueCards(selectedDeckId)
+                                                    activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
+                                                        ?: dueCards.firstOrNull()
+                                                        ?: ankiClient.getSamplePreviewCard()
+                                                    prefs.saveActiveCard(activeCard)
+                                                    isPreviewRevealed = false
+                                                    onUpdateWidgets(activeCard)
+                                                } catch (e: Exception) {
+                                                    // Error handling
+                                                } finally {
+                                                    isAnsweringCard = false
                                                 }
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = ease.label,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isAnsweringCard) color.copy(alpha = 0.4f) else color
-                                        )
-                                    }
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Again",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isAnsweringCard) Color(0xFFFF6B6B).copy(alpha = 0.4f) else Color(0xFFFF6B6B)
+                                    )
+                                }
+
+                                // Hard
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isAnsweringCard) Color(0xFF1A1A1A) else Color(0xFF242424))
+                                        .clickable(enabled = !isAnsweringCard) {
+                                            coroutineScope.launch {
+                                                isAnsweringCard = true
+                                                try {
+                                                    if (activeCard.noteId > 0) {
+                                                        ankiClient.answerCard(activeCard, ReviewEase.HARD.value)
+                                                    }
+                                                    val dueCards = ankiClient.getDueCards(selectedDeckId)
+                                                    activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
+                                                        ?: dueCards.firstOrNull()
+                                                        ?: ankiClient.getSamplePreviewCard()
+                                                    prefs.saveActiveCard(activeCard)
+                                                    isPreviewRevealed = false
+                                                    onUpdateWidgets(activeCard)
+                                                } catch (e: Exception) {
+                                                    // Error handling
+                                                } finally {
+                                                    isAnsweringCard = false
+                                                }
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Hard",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isAnsweringCard) Color(0xFFFFA94D).copy(alpha = 0.4f) else Color(0xFFFFA94D)
+                                    )
+                                }
+
+                                // Open Anki
+                                val context = LocalContext.current
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1.3f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFF242424))
+                                        .clickable {
+                                            val intent = ankiClient.getOpenAnkiIntent(activeCard.noteId)
+                                            context.startActivity(intent)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Open Anki",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF74C0FC)
+                                    )
                                 }
                             }
                         }

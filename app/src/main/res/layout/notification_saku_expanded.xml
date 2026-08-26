@@ -1,148 +1,275 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="12dp"
-    android:background="#141414">
+    android:background="#1E1E1E"
+    android:padding="12dp">
 
-    <!-- Top Card Content -->
+    <!-- FRONT STATE (Question) -->
     <LinearLayout
+        android:id="@+id/layout_exp_front"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:visibility="visible">
 
-        <!-- Kanji Box -->
-        <TextView
-            android:id="@+id/tv_exp_kanji"
-            android:layout_width="wrap_content"
-            android:minWidth="56dp"
-            android:layout_height="56dp"
-            android:paddingHorizontal="6dp"
-            android:gravity="center"
-            android:text="日"
-            android:textColor="@android:color/white"
-            android:textSize="30sp"
-            android:textStyle="bold"
-            android:fontFamily="serif"
-            android:maxLines="1"
-            android:background="@drawable/bg_kanji_box" />
-
-        <!-- Details -->
+        <!-- Top Review Counts: 15 17 21 -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="14dp"
-            android:orientation="vertical">
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:id="@+id/tv_exp_kana"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="ひ"
-                    android:textColor="@android:color/white"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tv_exp_romaji"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:text="hi"
-                    android:textColor="#AAAAAA"
-                    android:textSize="13sp" />
-            </LinearLayout>
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="4dp"
+            android:paddingBottom="6dp">
 
             <TextView
-                android:id="@+id/tv_exp_meaning"
+                android:id="@+id/tv_exp_front_count_new"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="sun, day"
-                android:textColor="@android:color/white"
-                android:textSize="14sp"
+                android:text="15"
+                android:textColor="#5C8AFF"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/tv_exp_example"
+                android:id="@+id/tv_exp_front_count_learn"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="日本 • Japan"
-                android:textColor="#888888"
+                android:layout_marginStart="10dp"
+                android:text="17"
+                android:textColor="#E06C75"
                 android:textSize="12sp"
-                android:maxLines="2"
-                android:ellipsize="end" />
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_exp_front_count_review"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:text="21"
+                android:textColor="#98C379"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Big Target Kanji -->
+        <TextView
+            android:id="@+id/tv_exp_front_kanji"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="九"
+            android:textColor="@android:color/white"
+            android:textSize="44sp"
+            android:textStyle="bold"
+            android:fontFamily="serif"
+            android:layout_marginTop="8dp" />
+
+        <!-- Example Sentence Prompt -->
+        <TextView
+            android:id="@+id/tv_exp_front_sentence"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="野球は九人で1チームです。"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="12dp"
+            android:maxLines="3"
+            android:ellipsize="end" />
+
+        <!-- Show Answer Button -->
+        <TextView
+            android:id="@+id/btn_exp_front_show_answer"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:gravity="center"
+            android:text="Show answer"
+            android:textColor="@android:color/white"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:background="@drawable/bg_button_ease" />
+    </LinearLayout>
+
+    <!-- BACK STATE (Answer Revealed) -->
+    <LinearLayout
+        android:id="@+id/layout_exp_back"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:visibility="gone">
+
+        <!-- Top Review Counts -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingHorizontal="4dp"
+            android:paddingBottom="4dp">
+
+            <TextView
+                android:id="@+id/tv_exp_back_count_new"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="15"
+                android:textColor="#5C8AFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_exp_back_count_learn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:text="17"
+                android:textColor="#E06C75"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tv_exp_back_count_review"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:text="21"
+                android:textColor="#98C379"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Furigana above Kanji -->
+        <TextView
+            android:id="@+id/tv_exp_back_furigana"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="きゅう"
+            android:textColor="#DDDDDD"
+            android:textSize="14sp"
+            android:layout_marginTop="2dp" />
+
+        <!-- Big Target Kanji -->
+        <TextView
+            android:id="@+id/tv_exp_back_kanji"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="九"
+            android:textColor="@android:color/white"
+            android:textSize="40sp"
+            android:textStyle="bold"
+            android:fontFamily="serif" />
+
+        <!-- English Meaning -->
+        <TextView
+            android:id="@+id/tv_exp_back_meaning"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="nine"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_marginTop="2dp" />
+
+        <!-- Rendered Furigana Sentence Canvas (Pixel-perfect aligned) -->
+        <ImageView
+            android:id="@+id/iv_exp_back_sentence_canvas"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="6dp"
+            android:adjustViewBounds="true"
+            android:visibility="gone" />
+
+        <!-- Aligned Furigana Line for Sentence (Fallback) -->
+        <TextView
+            android:id="@+id/tv_exp_back_example_furigana"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="や きゅう   きゅうにん   ひと"
+            android:textColor="#6CA0DC"
+            android:textSize="11sp"
+            android:layout_marginTop="8dp"
+            android:maxLines="1" />
+
+        <!-- Sentence Line -->
+        <TextView
+            android:id="@+id/tv_exp_back_example_sentence"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="野球は九人で1チームです。"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <!-- English Sentence Translation -->
+        <TextView
+            android:id="@+id/tv_exp_back_example_trans"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="In baseball there are nine people on one team."
+            android:textColor="#CCCCCC"
+            android:textSize="13sp"
+            android:layout_marginTop="3dp"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <!-- 3 Buttons: Again, Hard, Open Anki -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/btn_exp_back_again"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:gravity="center"
+                android:text="Again"
+                android:textColor="#FF6B6B"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_ease" />
+
+            <TextView
+                android:id="@+id/btn_exp_back_hard"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:gravity="center"
+                android:text="Hard"
+                android:textColor="#FFA94D"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_ease" />
+
+            <TextView
+                android:id="@+id/btn_exp_back_open_anki"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.3"
+                android:gravity="center"
+                android:text="Open Anki"
+                android:textColor="#74C0FC"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_ease" />
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Bottom Action Bar (Anki Review Ease Buttons - Styled TextViews) -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="12dp"
-        android:orientation="horizontal"
-        android:gravity="center">
+</FrameLayout>
 
-        <TextView
-            android:id="@+id/btn_exp_again"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginEnd="5dp"
-            android:gravity="center"
-            android:text="Again"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#FF6B6B"
-            android:background="@drawable/bg_button_ease" />
-
-        <TextView
-            android:id="@+id/btn_exp_hard"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginEnd="5dp"
-            android:gravity="center"
-            android:text="Hard"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#FFA94D"
-            android:background="@drawable/bg_button_ease" />
-
-        <TextView
-            android:id="@+id/btn_exp_good"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginEnd="5dp"
-            android:gravity="center"
-            android:text="Good"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#51CF66"
-            android:background="@drawable/bg_button_ease" />
-
-        <TextView
-            android:id="@+id/btn_exp_easy"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:text="Easy"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:textColor="#74C0FC"
-            android:background="@drawable/bg_button_ease" />
-    </LinearLayout>
-
-</LinearLayout>

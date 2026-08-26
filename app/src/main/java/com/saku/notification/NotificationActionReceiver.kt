@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 class NotificationActionReceiver : BroadcastReceiver() {
 
     companion object {
+        const val ACTION_SHOW_ANSWER = "com.saku.action.SHOW_ANSWER"
         const val ACTION_NEXT = "com.saku.action.NEXT_CARD"
         const val ACTION_GRADE = "com.saku.action.GRADE_CARD"
         const val EXTRA_EASE = "extra_ease"
@@ -30,6 +31,16 @@ class NotificationActionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 when (intent.action) {
+                    ACTION_SHOW_ANSWER -> {
+                        prefs.isAnswerRevealed = true
+                        val currentCard = prefs.getActiveCard()
+                        LockScreenCardService.updateNotification(context, currentCard, showAnswer = true)
+                        try {
+                            SakuGlanceWidget().updateAll(context)
+                        } catch (e: Exception) {
+                            // Widget update safety
+                        }
+                    }
                     ACTION_GRADE -> {
                         val currentCard = prefs.getActiveCard()
                         val ease = intent.getIntExtra(EXTRA_EASE, ReviewEase.GOOD.value)
@@ -62,8 +73,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
         prefs.saveActiveCard(nextCard)
         prefs.isAnswerRevealed = false
 
-        // Update Lock Screen Notification
-        LockScreenCardService.updateNotification(context, nextCard)
+        // Update Lock Screen Notification (in front / unrevealed state)
+        if (prefs.isLockScreenCardEnabled) {
+            LockScreenCardService.updateNotification(context, nextCard, showAnswer = false)
+        }
 
         // Update Home Screen Glance Widget
         try {
@@ -73,3 +86,4 @@ class NotificationActionReceiver : BroadcastReceiver() {
         }
     }
 }
+

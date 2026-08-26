@@ -27,10 +27,14 @@ class LockScreenCardService : Service {
 
         fun startService(context: Context) {
             val intent = Intent(context, LockScreenCardService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                // Foreground service start error handling
             }
         }
 
@@ -110,9 +114,10 @@ class LockScreenCardService : Service {
                 .setCustomContentView(compactView)
                 .setCustomBigContentView(expandedView)
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
-                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOngoing(true)
+                .setSilent(true)
                 .setContentIntent(openAppIntent)
                 .build()
         }
@@ -121,12 +126,14 @@ class LockScreenCardService : Service {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    "Saku Lock Screen Cards",
-                    NotificationManager.IMPORTANCE_LOW
+                    "Saku Flashcards",
+                    NotificationManager.IMPORTANCE_DEFAULT
                 ).apply {
                     description = "Displays minimal Japanese flashcards on Lock Screen & AOD"
                     setShowBadge(false)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    setSound(null, null)
+                    enableVibration(false)
                 }
                 val notificationManager =
                     context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

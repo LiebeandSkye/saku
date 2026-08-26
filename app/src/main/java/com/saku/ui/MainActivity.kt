@@ -1,6 +1,8 @@
 package com.saku.ui
 
+import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -15,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -26,6 +29,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
 import com.saku.anki.AnkiDroidClient
 import com.saku.anki.AnkiDroidContract
@@ -43,7 +47,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: SakuPreferences
     private lateinit var ankiClient: AnkiDroidClient
 
-    private val requestPermissionLauncher = registerForActivityResult(
+    private val requestAnkiPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
@@ -53,10 +57,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            LockScreenCardService.startService(this)
+            Toast.makeText(this, "Lock screen card enabled!", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = SakuPreferences(this)
         ankiClient = AnkiDroidClient(this)
+
+        checkAndRequestNotificationPermission()
 
         if (prefs.isLockScreenCardEnabled) {
             LockScreenCardService.startService(this)
@@ -79,8 +94,13 @@ class MainActivity : ComponentActivity() {
                     SakuMainScreen(
                         prefs = prefs,
                         ankiClient = ankiClient,
-                        onRequestPermission = {
-                            requestPermissionLauncher.launch(AnkiDroidContract.PERMISSION)
+                        onRequestAnkiPermission = {
+                            requestAnkiPermissionLauncher.launch(AnkiDroidContract.PERMISSION)
+                        },
+                        onRequestNotificationPermission = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
                         },
                         onInstallAnkiDroid = {
                             AnkiPermissionHelper.openPlayStoreForAnkiDroid(this)
@@ -88,13 +108,29 @@ class MainActivity : ComponentActivity() {
                         onToggleLockScreen = { enabled ->
                             prefs.isLockScreenCardEnabled = enabled
                             if (enabled) {
+                                checkAndRequestNotificationPermission()
                                 LockScreenCardService.startService(this)
                             } else {
                                 LockScreenCardService.stopService(this)
                             }
+                        },
+                        onUpdateWidgets = { card ->
+                            LockScreenCardService.updateNotification(this, card)
                         }
                     )
                 }
+            }
+        }
+    }
+
+    private fun checkAndRequestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }
@@ -105,9 +141,11 @@ class MainActivity : ComponentActivity() {
 fun SakuMainScreen(
     prefs: SakuPreferences,
     ankiClient: AnkiDroidClient,
-    onRequestPermission: () -> Unit,
+    onRequestAnkiPermission: () -> Unit,
+    onRequestNotificationPermission: () -> Unit,
     onInstallAnkiDroid: () -> Unit,
-    onToggleLockScreen: (Boolean) -> Unit
+    onToggleLockScreen: (Boolean) -> Unit,
+    onUpdateWidgets: (CardModel) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     var isAnkiInstalled by remember { mutableStateOf(ankiClient.isAnkiDroidInstalled()) }
@@ -131,6 +169,7 @@ fun SakuMainScreen(
                 if (dueCards.isNotEmpty()) {
                     activeCard = dueCards.first()
                     prefs.saveActiveCard(activeCard)
+                    onUpdateWidgets(activeCard)
                 }
             }
             isLoading = false
@@ -209,7 +248,7 @@ fun SakuMainScreen(
                             }
                             Spacer(modifier = Modifier.height(12.dp))
                             Button(
-                                onClick = onRequestPermission,
+                                onClick = onRequestAnkiPermission,
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
                             ) {
                                 Text("Connect to AnkiDroid (1-Tap)")
@@ -330,6 +369,7 @@ fun SakuMainScreen(
                                                 activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
                                                     ?: ankiClient.getSamplePreviewCard()
                                                 prefs.saveActiveCard(activeCard)
+                                                onUpdateWidgets(activeCard)
                                             }
                                         }
                                         .padding(vertical = 8.dp),

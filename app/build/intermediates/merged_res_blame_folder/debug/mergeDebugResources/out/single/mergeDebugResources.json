@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "com.saku.app-debug-61:/layout_notification_saku_compact.xml.flat",
+        "source": "com.saku.app-main-63:/layout/notification_saku_compact.xml"
+    },
+    {
+        "merged": "com.saku.app-debug-61:/layout_notification_saku_expanded.xml.flat",
+        "source": "com.saku.app-main-63:/layout/notification_saku_expanded.xml"
+    },
+    {
+        "merged": "com.saku.app-debug-61:/drawable_bg_button_ease.xml.flat",
+        "source": "com.saku.app-main-63:/drawable/bg_button_ease.xml"
+    },
+    {
+        "merged": "com.saku.app-debug-61:/xml_saku_widget_info.xml.flat",
+        "source": "com.saku.app-main-63:/xml/saku_widget_info.xml"
+    },
+    {
+        "merged": "com.saku.app-debug-61:/drawable_bg_kanji_box.xml.flat",
+        "source": "com.saku.app-main-63:/drawable/bg_kanji_box.xml"
+    }
+]

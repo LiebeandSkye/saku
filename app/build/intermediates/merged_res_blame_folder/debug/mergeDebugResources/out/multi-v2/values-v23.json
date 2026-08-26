@@ -1,0 +1,36 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.saku.app-mergeDebugResources-59:/values-v23/values-v23.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\U-ser\\.gradle\\caches\\8.10.2\\transforms\\c3e3fe0c18150d71384ea62abcdaa430\\transformed\\work-runtime-2.10.0\\res\\values-v23\\values-v23.xml",
+                    "from": {
+                        "startLines": "2,3",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,121",
+                        "endColumns": "65,62",
+                        "endOffsets": "116,179"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\U-ser\\.gradle\\caches\\8.10.2\\transforms\\1d84b5e3fe1a502b38add013c6ee2e3a\\transformed\\glance-appwidget-1.1.1\\res\\values-v23\\values-v23.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "55",
+                        "endOffsets": "106"
+                    },
+                    "to": {
+                        "startLines": "4",
+                        "startColumns": "4",
+                        "startOffsets": "184",
+                        "endColumns": "55",
+                        "endOffsets": "235"
+                    }
+                }
+            ]
+        }
+    ]
+}

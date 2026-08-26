@@ -203,7 +203,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
                 style = TextStyle(
                     color = color,
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold
                 )
             )
         }

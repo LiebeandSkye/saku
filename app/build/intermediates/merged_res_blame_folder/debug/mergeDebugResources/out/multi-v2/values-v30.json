@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.saku.app-mergeDebugResources-59:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\U-ser\\.gradle\\caches\\8.10.2\\transforms\\41e6292f63dad8b35dd13381c305f02e\\transformed\\material3-release\\res\\values-v30\\values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}

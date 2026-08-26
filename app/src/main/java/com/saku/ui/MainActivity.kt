@@ -1,0 +1,459 @@
+package com.saku.ui
+
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.appwidget.updateAll
+import com.saku.anki.AnkiDroidClient
+import com.saku.anki.AnkiDroidContract
+import com.saku.anki.AnkiPermissionHelper
+import com.saku.data.AnkiDeck
+import com.saku.data.CardModel
+import com.saku.data.ReviewEase
+import com.saku.data.SakuPreferences
+import com.saku.notification.LockScreenCardService
+import com.saku.widget.SakuGlanceWidget
+import kotlinx.coroutines.launch
+
+class MainActivity : ComponentActivity() {
+
+    private lateinit var prefs: SakuPreferences
+    private lateinit var ankiClient: AnkiDroidClient
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            Toast.makeText(this, "AnkiDroid connected successfully!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Permission required to read Anki flashcards", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        prefs = SakuPreferences(this)
+        ankiClient = AnkiDroidClient(this)
+
+        if (prefs.isLockScreenCardEnabled) {
+            LockScreenCardService.startService(this)
+        }
+
+        setContent {
+            MaterialTheme(
+                colorScheme = darkColorScheme(
+                    background = Color(0xFF0A0A0A),
+                    surface = Color(0xFF141414),
+                    primary = Color(0xFFFFFFFF),
+                    onBackground = Color(0xFFFFFFFF),
+                    onSurface = Color(0xFFFFFFFF)
+                )
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    SakuMainScreen(
+                        prefs = prefs,
+                        ankiClient = ankiClient,
+                        onRequestPermission = {
+                            requestPermissionLauncher.launch(AnkiDroidContract.PERMISSION)
+                        },
+                        onInstallAnkiDroid = {
+                            AnkiPermissionHelper.openPlayStoreForAnkiDroid(this)
+                        },
+                        onToggleLockScreen = { enabled ->
+                            prefs.isLockScreenCardEnabled = enabled
+                            if (enabled) {
+                                LockScreenCardService.startService(this)
+                            } else {
+                                LockScreenCardService.stopService(this)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SakuMainScreen(
+    prefs: SakuPreferences,
+    ankiClient: AnkiDroidClient,
+    onRequestPermission: () -> Unit,
+    onInstallAnkiDroid: () -> Unit,
+    onToggleLockScreen: (Boolean) -> Unit
+) {
+    val coroutineScope = rememberCoroutineScope()
+    var isAnkiInstalled by remember { mutableStateOf(ankiClient.isAnkiDroidInstalled()) }
+    var hasPermission by remember { mutableStateOf(ankiClient.isPermissionGranted()) }
+    var decks by remember { mutableStateOf<List<AnkiDeck>>(emptyList()) }
+    var selectedDeckId by remember { mutableStateOf(prefs.selectedDeckId) }
+    var activeCard by remember { mutableStateOf(prefs.getActiveCard()) }
+    var isLockScreenEnabled by remember { mutableStateOf(prefs.isLockScreenCardEnabled) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    fun refreshData() {
+        coroutineScope.launch {
+            isLoading = true
+            isAnkiInstalled = ankiClient.isAnkiDroidInstalled()
+            hasPermission = ankiClient.isPermissionGranted()
+
+            if (hasPermission) {
+                val fetchedDecks = ankiClient.getDecks()
+                decks = fetchedDecks
+                val dueCards = ankiClient.getDueCards(selectedDeckId)
+                if (dueCards.isNotEmpty()) {
+                    activeCard = dueCards.first()
+                    prefs.saveActiveCard(activeCard)
+                }
+            }
+            isLoading = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        refreshData()
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Saku • 咲く",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 20.sp,
+                        letterSpacing = 1.sp
+                    )
+                },
+                actions = {
+                    IconButton(onClick = { refreshData() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF0A0A0A),
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // 1. Connection Status Card
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161616))
+                ) {
+                    Column(modifier = Modifier.padding(18.dp)) {
+                        Text(
+                            text = "ANKIDROID CONNECTION",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF888888),
+                            letterSpacing = 1.2.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (!isAnkiInstalled) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFA94D))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("AnkiDroid is not installed on this device", fontSize = 14.sp)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = onInstallAnkiDroid,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                            ) {
+                                Text("Install AnkiDroid from Play Store")
+                            }
+                        } else if (!hasPermission) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFA94D))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("Permission required to read your cards", fontSize = 14.sp)
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = onRequestPermission,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                            ) {
+                                Text("Connect to AnkiDroid (1-Tap)")
+                            }
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF51CF66))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("Connected to AnkiDroid (FSRS / SM-2 synced)", fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Live Widget Preview
+            item {
+                Text(
+                    text = "LIVE WIDGET PREVIEW",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF888888),
+                    letterSpacing = 1.2.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF141414), RoundedCornerShape(18.dp))
+                        .border(1.dp, Color(0xFF262626), RoundedCornerShape(18.dp))
+                        .padding(18.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Kanji Box
+                            Box(
+                                modifier = Modifier
+                                    .size(68.dp)
+                                    .background(Color(0xFF1F1F1F), RoundedCornerShape(12.dp))
+                                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = activeCard.kanji,
+                                    fontSize = 38.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Serif,
+                                    color = Color.White
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            // Details
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = activeCard.kana,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    if (activeCard.romaji.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = activeCard.romaji,
+                                            fontSize = 14.sp,
+                                            color = Color(0xFFAAAAAA)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = activeCard.meaning,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White
+                                )
+                                if (activeCard.example.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = activeCard.example,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF888888)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Review Ease Buttons Demo
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ReviewEase.entries.forEach { ease ->
+                                val color = when (ease) {
+                                    ReviewEase.AGAIN -> Color(0xFFFF6B6B)
+                                    ReviewEase.HARD -> Color(0xFFFFA94D)
+                                    ReviewEase.GOOD -> Color(0xFF51CF66)
+                                    ReviewEase.EASY -> Color(0xFF74C0FC)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(Color(0xFF222222), RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            coroutineScope.launch {
+                                                if (activeCard.cardId > 0) {
+                                                    ankiClient.answerCard(activeCard.cardId, ease.value)
+                                                }
+                                                val dueCards = ankiClient.getDueCards(selectedDeckId)
+                                                activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
+                                                    ?: ankiClient.getSamplePreviewCard()
+                                                prefs.saveActiveCard(activeCard)
+                                            }
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = ease.label,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = color
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Lock Screen & AOD Toggle
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161616))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Lock Screen & AOD Display",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Keep a minimal card pinned on your OxygenOS Lock Screen and Always-On Display",
+                                fontSize = 12.sp,
+                                color = Color(0xFF888888)
+                            )
+                        }
+                        Switch(
+                            checked = isLockScreenEnabled,
+                            onCheckedChange = {
+                                isLockScreenEnabled = it
+                                onToggleLockScreen(it)
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF333333)
+                            )
+                        )
+                    }
+                }
+            }
+
+            // 4. Deck Selection
+            item {
+                Text(
+                    text = "SELECT DECK",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF888888),
+                    letterSpacing = 1.2.sp
+                )
+            }
+
+            if (decks.isEmpty()) {
+                item {
+                    Text(
+                        text = if (hasPermission) "No decks found in AnkiDroid." else "Connect to AnkiDroid above to select your decks.",
+                        fontSize = 13.sp,
+                        color = Color(0xFF666666)
+                    )
+                }
+            } else {
+                items(decks) { deck ->
+                    val isSelected = deck.id == selectedDeckId
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                selectedDeckId = deck.id
+                                prefs.selectedDeckId = deck.id
+                                prefs.selectedDeckName = deck.name
+                                refreshData()
+                            },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) Color(0xFF222222) else Color(0xFF141414)
+                        ),
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, Color.White) else null
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = deck.name,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 14.sp
+                            )
+                            if (isSelected) {
+                                Text(
+                                    text = "Active",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF51CF66)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(30.dp))
+            }
+        }
+    }
+}

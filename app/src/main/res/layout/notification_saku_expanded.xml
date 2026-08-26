@@ -193,7 +193,7 @@
             android:layout_height="wrap_content"
             android:gravity="center"
             android:text="や きゅう   きゅうにん   ひと"
-            android:textColor="#6CA0DC"
+            android:textColor="#51CF66"
             android:textSize="11sp"
             android:layout_marginTop="8dp"
             android:maxLines="1" />
@@ -223,10 +223,10 @@
             android:maxLines="2"
             android:ellipsize="end" />
 
-        <!-- 3 Buttons: Again, Hard, Open Anki -->
+        <!-- Action Buttons: Again, Hard, Good, Open Anki -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="42dp"
+            android:layout_height="40dp"
             android:layout_marginTop="12dp"
             android:orientation="horizontal"
             android:gravity="center">
@@ -236,11 +236,11 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="6dp"
+                android:layout_marginEnd="4dp"
                 android:gravity="center"
                 android:text="Again"
                 android:textColor="#FF6B6B"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_button_ease" />
 
@@ -249,11 +249,24 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="6dp"
+                android:layout_marginEnd="4dp"
                 android:gravity="center"
                 android:text="Hard"
                 android:textColor="#FFA94D"
-                android:textSize="13sp"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_ease" />
+
+            <TextView
+                android:id="@+id/btn_exp_back_good"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="4dp"
+                android:gravity="center"
+                android:text="Good"
+                android:textColor="#51CF66"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_button_ease" />
 
@@ -261,11 +274,11 @@
                 android:id="@+id/btn_exp_back_open_anki"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:layout_weight="1.3"
+                android:layout_weight="1.2"
                 android:gravity="center"
                 android:text="Open Anki"
                 android:textColor="#74C0FC"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_button_ease" />
         </LinearLayout>

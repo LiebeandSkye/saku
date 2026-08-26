@@ -652,9 +652,9 @@ object FuriganaBitmapRenderer {
         kanjiTextSizeSp: Float = 16f,
         furiganaTextSizeSp: Float = 10f,
         defaultTextColor: Int = Color.WHITE,
-        targetTextColor: Int = Color.parseColor("#6CA0DC"),
+        targetTextColor: Int = Color.parseColor("#51CF66"),
         furiganaDefaultColor: Int = Color.parseColor("#CCCCCC"),
-        furiganaTargetColor: Int = Color.parseColor("#6CA0DC")
+        furiganaTargetColor: Int = Color.parseColor("#51CF66")
     ): Bitmap? {
         if (segments.isEmpty()) return null
 

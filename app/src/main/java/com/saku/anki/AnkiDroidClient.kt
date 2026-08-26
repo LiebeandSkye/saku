@@ -115,6 +115,8 @@ class AnkiDroidClient(private val context: Context) {
                 }
             }
             Log.d(TAG, "Successfully fetched ${decks.size} decks from AnkiDroid ($authority)")
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException: AnkiDroid API might be disabled in AnkiDroid Settings -> Advanced -> AnkiDroid API", e)
         } catch (e: Exception) {
             Log.e(TAG, "Error fetching decks from AnkiDroid ($authority)", e)
         } finally {
@@ -124,67 +126,168 @@ class AnkiDroidClient(private val context: Context) {
         decks
     }
 
+    suspend fun getSelectedDeckFromAnki(): Pair<Long, String>? = withContext(Dispatchers.IO) {
+        if (!isPermissionGranted()) return@withContext null
+        val authority = getAuthority()
+        val selectedDeckUri = AnkiDroidContract.Decks.getSelectedDeckUri(authority)
+        var cursor: Cursor? = null
+        try {
+            cursor = context.contentResolver.query(selectedDeckUri, null, null, null, null)
+            if (cursor != null && cursor.moveToFirst()) {
+                val idIdx = cursor.getColumnIndex(AnkiDroidContract.Decks.DECK_ID)
+                val nameIdx = cursor.getColumnIndex(AnkiDroidContract.Decks.DECK_NAME)
+                val id = if (idIdx != -1) cursor.getLong(idIdx) else -1L
+                val name = if (nameIdx != -1) cursor.getString(nameIdx) ?: "Default Deck" else "Default Deck"
+                if (id > 0) return@withContext Pair(id, name)
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Could not fetch selected_deck from AnkiDroid: ${e.message}")
+        } finally {
+            cursor?.close()
+        }
+        null
+    }
+
     suspend fun getDueCards(deckId: Long, limit: Int = 30): List<CardModel> = withContext(Dispatchers.IO) {
         if (!isPermissionGranted()) {
             return@withContext listOf(getSamplePreviewCard())
         }
 
         val authority = getAuthority()
-        val cardsUri = AnkiDroidContract.Cards.getContentUri(authority)
         val cards = mutableListOf<CardModel>()
 
-        // 1. Determine Anki search query strings with explicit exclusion of suspended and buried cards
-        val searchQueries = mutableListOf<String>()
-        if (deckId > 0) {
-            searchQueries.add("did:$deckId -is:suspended -is:buried (is:due or is:learn)")
-            searchQueries.add("did:$deckId -is:suspended -is:buried is:new")
-            searchQueries.add("did:$deckId -is:suspended -is:buried")
-            searchQueries.add("did:$deckId")
-        } else {
-            searchQueries.add("-is:suspended -is:buried (is:due or is:learn)")
-            searchQueries.add("-is:suspended -is:buried is:new")
-            searchQueries.add("-is:suspended -is:buried")
-            searchQueries.add("")
+        // 1. Primary Method: Official AnkiDroid ReviewInfo (schedule) ContentProvider
+        val scheduledCards = queryScheduledReviewCards(authority, deckId, limit)
+        if (scheduledCards.isNotEmpty()) {
+            cards.addAll(scheduledCards)
+            Log.d(TAG, "Fetched ${cards.size} due cards from AnkiDroid schedule provider ($authority)")
+            return@withContext cards
         }
 
-        for (query in searchQueries) {
-            val queryCards = queryCardsWithSelection(cardsUri, query, limit, deckId)
-            if (queryCards.isNotEmpty()) {
-                cards.addAll(queryCards)
-                break
-            }
+        // 2. Secondary Method: Query Cards table with valid SQLite selection
+        val cardsByQuery = queryCardsTableDirectly(authority, deckId, limit)
+        if (cardsByQuery.isNotEmpty()) {
+            cards.addAll(cardsByQuery)
+            Log.d(TAG, "Fetched ${cards.size} cards from cards table fallback ($authority)")
+            return@withContext cards
         }
 
-        // 2. Secondary Fallback: Query Notes ContentProvider directly if cards search was empty
-        if (cards.isEmpty()) {
-            val directNotes = queryNotesDirectly(authority, deckId, limit)
-            if (directNotes.isNotEmpty()) {
-                cards.addAll(directNotes)
-            }
+        // 3. Tertiary Fallback: Query Notes ContentProvider directly
+        val directNotes = queryNotesDirectly(authority, deckId, limit)
+        if (directNotes.isNotEmpty()) {
+            cards.addAll(directNotes)
+            Log.d(TAG, "Fetched ${cards.size} cards from notes table fallback ($authority)")
+            return@withContext cards
         }
 
-        if (cards.isEmpty()) {
-            Log.d(TAG, "No valid cards found for deck $deckId in AnkiDroid, returning preview placeholder")
-            cards.add(getSamplePreviewCard())
-        }
-
+        Log.d(TAG, "No cards found in AnkiDroid for deck $deckId ($authority)")
         cards
     }
 
-    private fun queryCardsWithSelection(
-        cardsUri: Uri,
-        selectionQuery: String,
-        limit: Int,
-        selectedDeckId: Long = -1L
-    ): List<CardModel> {
+    /**
+     * Queries AnkiDroid's official ReviewInfo (schedule) ContentProvider to get genuine due/learn/new cards.
+     */
+    private fun queryScheduledReviewCards(authority: String, deckId: Long, limit: Int): List<CardModel> {
         val result = mutableListOf<CardModel>()
+        val scheduleUri = AnkiDroidContract.ReviewInfo.getContentUri(authority)
         var cursor: Cursor? = null
+
+        val (selection, selectionArgs) = if (deckId > 0) {
+            Pair("limit=?, deckID=?", arrayOf(limit.toString(), deckId.toString()))
+        } else {
+            Pair("limit=?", arrayOf(limit.toString()))
+        }
+
+        try {
+            cursor = context.contentResolver.query(
+                scheduleUri,
+                null,
+                selection,
+                selectionArgs,
+                null
+            )
+
+            cursor?.let { c ->
+                val noteIdIdx = c.getColumnIndex(AnkiDroidContract.ReviewInfo.NOTE_ID)
+                val cardOrdIdx = c.getColumnIndex(AnkiDroidContract.ReviewInfo.CARD_ORD)
+
+                while (c.moveToNext() && result.size < limit) {
+                    val noteId = if (noteIdIdx != -1) c.getLong(noteIdIdx) else 0L
+                    val cardOrd = if (cardOrdIdx != -1) c.getInt(cardOrdIdx) else 0
+
+                    if (noteId > 0) {
+                        val cardModel = fetchNoteDetails(
+                            noteId = noteId,
+                            cardId = noteId,
+                            cardOrd = cardOrd,
+                            deckId = deckId,
+                            interval = 0,
+                            fallbackQuestion = "",
+                            fallbackAnswer = ""
+                        )
+                        if (cardModel != null) {
+                            result.add(cardModel)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "Schedule query with args failed: ${e.message}. Trying without selection args...")
+            // Fallback for older AnkiDroid builds where selection is null
+            try {
+                cursor?.close()
+                cursor = context.contentResolver.query(scheduleUri, null, null, null, null)
+                cursor?.let { c ->
+                    val noteIdIdx = c.getColumnIndex(AnkiDroidContract.ReviewInfo.NOTE_ID)
+                    val cardOrdIdx = c.getColumnIndex(AnkiDroidContract.ReviewInfo.CARD_ORD)
+                    while (c.moveToNext() && result.size < limit) {
+                        val noteId = if (noteIdIdx != -1) c.getLong(noteIdIdx) else 0L
+                        val cardOrd = if (cardOrdIdx != -1) c.getInt(cardOrdIdx) else 0
+                        if (noteId > 0) {
+                            val cardModel = fetchNoteDetails(
+                                noteId = noteId,
+                                cardId = noteId,
+                                cardOrd = cardOrd,
+                                deckId = deckId,
+                                interval = 0,
+                                fallbackQuestion = "",
+                                fallbackAnswer = ""
+                            )
+                            if (cardModel != null) {
+                                result.add(cardModel)
+                            }
+                        }
+                    }
+                }
+            } catch (e2: Exception) {
+                Log.e(TAG, "Error querying schedule from AnkiDroid ($authority)", e2)
+            }
+        } finally {
+            cursor?.close()
+        }
+        return result
+    }
+
+    /**
+     * Queries AnkiDroid's cards ContentProvider with standard SQL WHERE syntax.
+     */
+    private fun queryCardsTableDirectly(authority: String, deckId: Long, limit: Int): List<CardModel> {
+        val result = mutableListOf<CardModel>()
+        val cardsUri = AnkiDroidContract.Cards.getContentUri(authority)
+        var cursor: Cursor? = null
+
+        val (selection, selectionArgs) = if (deckId > 0) {
+            Pair("${AnkiDroidContract.Cards.DECK_ID} = ?", arrayOf(deckId.toString()))
+        } else {
+            Pair(null, null)
+        }
+
         try {
             cursor = context.contentResolver.query(
                 cardsUri,
                 null,
-                selectionQuery.ifEmpty { null },
-                null,
+                selection,
+                selectionArgs,
                 null
             )
 
@@ -199,12 +302,11 @@ class AnkiDroidClient(private val context: Context) {
                 val answerSimpleIdx = c.getColumnIndex(AnkiDroidContract.Cards.ANSWER_SIMPLE)
                 val answerIdx = c.getColumnIndex(AnkiDroidContract.Cards.ANSWER)
 
-                var count = 0
-                while (c.moveToNext() && count < limit) {
+                while (c.moveToNext() && result.size < limit) {
                     val cardId = if (cardIdIdx != -1) c.getLong(cardIdIdx) else 0L
                     val noteId = if (noteIdIdx != -1) c.getLong(noteIdIdx) else 0L
                     val cardOrd = if (cardOrdIdx != -1) c.getInt(cardOrdIdx) else 0
-                    val dId = if (deckIdIdx != -1) c.getLong(deckIdIdx) else selectedDeckId
+                    val dId = if (deckIdIdx != -1) c.getLong(deckIdIdx) else deckId
                     val interval = if (ivlIdx != -1) c.getInt(ivlIdx) else 0
 
                     val qSimple = if (questionSimpleIdx != -1) c.getString(questionSimpleIdx) else null
@@ -218,12 +320,11 @@ class AnkiDroidClient(private val context: Context) {
                     val cardModel = fetchNoteDetails(noteId, cardId, cardOrd, dId, interval, qStr, aStr)
                     if (cardModel != null) {
                         result.add(cardModel)
-                        count++
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Error querying cards with query '$selectionQuery'", e)
+            Log.e(TAG, "Error querying cards directly from AnkiDroid ($authority)", e)
         } finally {
             cursor?.close()
         }
@@ -480,7 +581,13 @@ class AnkiDroidClient(private val context: Context) {
             }
             val updated = context.contentResolver.update(scheduleUri, values, null, null)
             Log.d(TAG, "Answered card noteId=$noteId ord=$cardOrd ease=$ease -> updated rows: $updated")
-            updated > 0
+            if (updated > 0) {
+                true
+            } else {
+                // Try insert fallback for specific AnkiDroid versions
+                val insertUri = context.contentResolver.insert(scheduleUri, values)
+                insertUri != null
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error answering card noteId=$noteId ord=$cardOrd with ease $ease", e)
             false

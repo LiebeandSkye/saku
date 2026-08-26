@@ -91,6 +91,7 @@ class LockScreenCardService : Service {
 
             val againPendingIntent = createGradePendingIntent(ReviewEase.AGAIN, 10)
             val hardPendingIntent = createGradePendingIntent(ReviewEase.HARD, 11)
+            val goodPendingIntent = createGradePendingIntent(ReviewEase.GOOD, 12)
 
             // Open Anki PendingIntent
             val ankiClient = AnkiDroidClient(context)
@@ -145,8 +146,8 @@ class LockScreenCardService : Service {
                     val compactBitmap = FuriganaBitmapRenderer.renderFuriganaSentenceBitmap(
                         context = context,
                         segments = segments,
-                        kanjiTextSizeSp = 14f,
-                        furiganaTextSizeSp = 9.5f
+                        kanjiTextSizeSp = 13f,
+                        furiganaTextSizeSp = 9f
                     )
 
                     if (compactBitmap != null) {
@@ -169,6 +170,7 @@ class LockScreenCardService : Service {
 
                     setOnClickPendingIntent(R.id.btn_back_again, againPendingIntent)
                     setOnClickPendingIntent(R.id.btn_back_hard, hardPendingIntent)
+                    setOnClickPendingIntent(R.id.btn_back_good, goodPendingIntent)
                     setOnClickPendingIntent(R.id.btn_back_open_anki, openAnkiPendingIntent)
                 }
             }
@@ -201,8 +203,8 @@ class LockScreenCardService : Service {
                     val expandedBitmap = FuriganaBitmapRenderer.renderFuriganaSentenceBitmap(
                         context = context,
                         segments = segments,
-                        kanjiTextSizeSp = 16f,
-                        furiganaTextSizeSp = 10.5f
+                        kanjiTextSizeSp = 15f,
+                        furiganaTextSizeSp = 10f
                     )
 
                     if (expandedBitmap != null) {
@@ -225,6 +227,7 @@ class LockScreenCardService : Service {
 
                     setOnClickPendingIntent(R.id.btn_exp_back_again, againPendingIntent)
                     setOnClickPendingIntent(R.id.btn_exp_back_hard, hardPendingIntent)
+                    setOnClickPendingIntent(R.id.btn_exp_back_good, goodPendingIntent)
                     setOnClickPendingIntent(R.id.btn_exp_back_open_anki, openAnkiPendingIntent)
                 }
             }
@@ -239,39 +242,6 @@ class LockScreenCardService : Service {
                 .setOngoing(true)
                 .setSilent(true)
                 .setContentIntent(openAppIntent)
-
-            // Add Native Android Notification Action Buttons for maximum clickability on lockscreen & shade
-            if (!showAnswer) {
-                builder.addAction(
-                    NotificationCompat.Action.Builder(
-                        android.R.drawable.ic_media_play,
-                        "Show Answer",
-                        showAnswerPendingIntent
-                    ).build()
-                )
-            } else {
-                builder.addAction(
-                    NotificationCompat.Action.Builder(
-                        0,
-                        "Again",
-                        againPendingIntent
-                    ).build()
-                )
-                builder.addAction(
-                    NotificationCompat.Action.Builder(
-                        0,
-                        "Hard",
-                        hardPendingIntent
-                    ).build()
-                )
-                builder.addAction(
-                    NotificationCompat.Action.Builder(
-                        android.R.drawable.ic_menu_send,
-                        "Open Anki",
-                        openAnkiPendingIntent
-                    ).build()
-                )
-            }
 
             return builder.build()
         }

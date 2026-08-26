@@ -87,7 +87,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
         val textColorWhite = fixedColor(Color.White)
         val textColorSubtle = fixedColor(Color(0xFFCCCCCC))
         val textColorMuted = fixedColor(Color(0xFF888888))
-        val textColorFurigana = fixedColor(Color(0xFF6CA0DC))
+        val textColorFurigana = fixedColor(Color(0xFF51CF66))
         val cardBgColor = fixedColor(Color(0xFF161616))
         val buttonBgColor = fixedColor(Color(0xFF262626))
 
@@ -96,8 +96,8 @@ class SakuGlanceWidget : GlanceAppWidget() {
         val countReviewColor = fixedColor(Color(0xFF98C379))
 
         val kanjiFontSize = if (isVeryCompact) 26.sp else if (isCompactHeight) 32.sp else 38.sp
-        val buttonHeight = if (isVeryCompact) 32.dp else if (isCompactHeight) 38.dp else 44.dp
-        val buttonFontSize = if (isVeryCompact) 11.sp else 13.sp
+        val buttonHeight = if (isVeryCompact) 32.dp else if (isCompactHeight) 38.dp else 42.dp
+        val buttonFontSize = if (isVeryCompact) 11.sp else 12.sp
 
         val newCountStr = if (card.newCount > 0) card.newCount.toString() else "15"
         val learnCountStr = if (card.learnCount > 0) card.learnCount.toString() else "17"
@@ -297,7 +297,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
                         )
                     }
                 } else {
-                    // Back: 3 Buttons (Again, Hard, Open Anki)
+                    // Back: 4 Buttons (Again, Hard, Good, Open Anki)
                     Row(
                         modifier = GlanceModifier
                             .fillMaxWidth()
@@ -312,7 +312,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
                             fontSize = buttonFontSize,
                             ease = ReviewEase.AGAIN
                         )
-                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        Spacer(modifier = GlanceModifier.width(4.dp))
 
                         // Hard Button
                         EaseButton(
@@ -321,7 +321,16 @@ class SakuGlanceWidget : GlanceAppWidget() {
                             fontSize = buttonFontSize,
                             ease = ReviewEase.HARD
                         )
-                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        Spacer(modifier = GlanceModifier.width(4.dp))
+
+                        // Good Button
+                        EaseButton(
+                            label = "Good",
+                            color = fixedColor(Color(0xFF51CF66)),
+                            fontSize = buttonFontSize,
+                            ease = ReviewEase.GOOD
+                        )
+                        Spacer(modifier = GlanceModifier.width(4.dp))
 
                         // Open Anki Button
                         Box(
@@ -330,12 +339,12 @@ class SakuGlanceWidget : GlanceAppWidget() {
                                 .fillMaxHeight()
                                 .background(buttonBgColor)
                                 .cornerRadius(8.dp)
-                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                                .padding(horizontal = 2.dp, vertical = 2.dp)
                                 .clickable(actionRunCallback<SakuOpenAnkiAction>()),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Open Anki",
+                                text = "Open",
                                 style = TextStyle(
                                     color = fixedColor(Color(0xFF74C0FC)),
                                     fontSize = buttonFontSize,

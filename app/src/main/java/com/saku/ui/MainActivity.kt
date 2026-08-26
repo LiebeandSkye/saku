@@ -202,6 +202,14 @@ fun SakuMainScreen(
                 if (!onlyCards) {
                     val fetchedDecks = ankiClient.getDecks()
                     decks = fetchedDecks
+                    if (selectedDeckId == -1L && prefs.selectedDeckId == -1L) {
+                        val ankiSelected = ankiClient.getSelectedDeckFromAnki()
+                        if (ankiSelected != null && decks.any { it.id == ankiSelected.first }) {
+                            selectedDeckId = ankiSelected.first
+                            prefs.selectedDeckId = ankiSelected.first
+                            prefs.selectedDeckName = ankiSelected.second
+                        }
+                    }
                 }
                 val dueCards = ankiClient.getDueCards(selectedDeckId)
                 if (dueCards.isNotEmpty()) {
@@ -469,7 +477,7 @@ fun SakuMainScreen(
                                                 Text(
                                                     text = seg.reading,
                                                     fontSize = 11.sp,
-                                                    color = if (seg.isTarget) Color(0xFF6CA0DC) else Color(0xFFCCCCCC)
+                                                    color = if (seg.isTarget) Color(0xFF51CF66) else Color(0xFFCCCCCC)
                                                 )
                                             } else {
                                                 Text(
@@ -481,7 +489,7 @@ fun SakuMainScreen(
                                                 text = seg.text,
                                                 fontSize = 16.sp,
                                                 fontWeight = if (seg.isTarget) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (seg.isTarget) Color(0xFF6CA0DC) else Color.White
+                                                color = if (seg.isTarget) Color(0xFF51CF66) else Color.White
                                             )
                                         }
                                     }
@@ -502,12 +510,12 @@ fun SakuMainScreen(
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            // 3 Action Buttons: Again, Hard, Open Anki
+                            // 4 Action Buttons: Again, Hard, Good, Open Anki
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(46.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 // Again
                                 Box(
@@ -541,7 +549,7 @@ fun SakuMainScreen(
                                 ) {
                                     Text(
                                         text = "Again",
-                                        fontSize = 13.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isAnsweringCard) Color(0xFFFF6B6B).copy(alpha = 0.4f) else Color(0xFFFF6B6B)
                                     )
@@ -579,9 +587,47 @@ fun SakuMainScreen(
                                 ) {
                                     Text(
                                         text = "Hard",
-                                        fontSize = 13.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isAnsweringCard) Color(0xFFFFA94D).copy(alpha = 0.4f) else Color(0xFFFFA94D)
+                                    )
+                                }
+
+                                // Good
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isAnsweringCard) Color(0xFF1A1A1A) else Color(0xFF242424))
+                                        .clickable(enabled = !isAnsweringCard) {
+                                            coroutineScope.launch {
+                                                isAnsweringCard = true
+                                                try {
+                                                    if (activeCard.noteId > 0) {
+                                                        ankiClient.answerCard(activeCard, ReviewEase.GOOD.value)
+                                                    }
+                                                    val dueCards = ankiClient.getDueCards(selectedDeckId)
+                                                    activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
+                                                        ?: dueCards.firstOrNull()
+                                                        ?: ankiClient.getSamplePreviewCard()
+                                                    prefs.saveActiveCard(activeCard)
+                                                    isPreviewRevealed = false
+                                                    onUpdateWidgets(activeCard)
+                                                } catch (e: Exception) {
+                                                    // Error handling
+                                                } finally {
+                                                    isAnsweringCard = false
+                                                }
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Good",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isAnsweringCard) Color(0xFF51CF66).copy(alpha = 0.4f) else Color(0xFF51CF66)
                                     )
                                 }
 
@@ -589,7 +635,7 @@ fun SakuMainScreen(
                                 val context = LocalContext.current
                                 Box(
                                     modifier = Modifier
-                                        .weight(1.3f)
+                                        .weight(1.2f)
                                         .fillMaxHeight()
                                         .clip(RoundedCornerShape(8.dp))
                                         .background(Color(0xFF242424))
@@ -601,7 +647,7 @@ fun SakuMainScreen(
                                 ) {
                                     Text(
                                         text = "Open Anki",
-                                        fontSize = 13.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF74C0FC)
                                     )
@@ -667,9 +713,10 @@ fun SakuMainScreen(
             if (decks.isEmpty()) {
                 item {
                     Text(
-                        text = if (hasPermission) "No decks found. Please make sure you have cards in AnkiDroid and that AnkiDroid Third-party API is accessible." else "Connect to AnkiDroid above to select your decks.",
+                        text = if (hasPermission) "No decks found. If you have decks in AnkiDroid, please ensure Third-Party API is enabled: Open AnkiDroid ➔ Settings ➔ Advanced ➔ AnkiDroid API." else "Connect to AnkiDroid above to select your decks.",
                         fontSize = 13.sp,
-                        color = Color(0xFF9E9E9E)
+                        color = Color(0xFF9E9E9E),
+                        lineHeight = 18.sp
                     )
                 }
             } else {

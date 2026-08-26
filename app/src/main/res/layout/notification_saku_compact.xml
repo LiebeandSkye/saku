@@ -2,8 +2,8 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="#1E1E1E"
-    android:padding="8dp">
+    android:background="#161616"
+    android:padding="6dp">
 
     <!-- FRONT / QUESTION STATE -->
     <LinearLayout
@@ -20,8 +20,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingHorizontal="4dp"
-            android:paddingBottom="4dp">
+            android:paddingHorizontal="4dp">
 
             <TextView
                 android:id="@+id/tv_front_count_new"
@@ -61,7 +60,7 @@
             android:gravity="center"
             android:text="九"
             android:textColor="@android:color/white"
-            android:textSize="32sp"
+            android:textSize="26sp"
             android:textStyle="bold"
             android:fontFamily="serif"
             android:layout_marginTop="2dp" />
@@ -74,17 +73,17 @@
             android:gravity="center"
             android:text="野球は九人で1チームです。"
             android:textColor="@android:color/white"
-            android:textSize="14sp"
-            android:layout_marginTop="4dp"
-            android:maxLines="2"
+            android:textSize="13sp"
+            android:layout_marginTop="2dp"
+            android:maxLines="1"
             android:ellipsize="end" />
 
         <!-- Show Answer Button -->
         <TextView
             android:id="@+id/btn_front_show_answer"
             android:layout_width="match_parent"
-            android:layout_height="36dp"
-            android:layout_marginTop="8dp"
+            android:layout_height="34dp"
+            android:layout_marginTop="6dp"
             android:gravity="center"
             android:text="Show answer"
             android:textColor="@android:color/white"
@@ -108,8 +107,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:paddingHorizontal="4dp"
-            android:paddingBottom="2dp">
+            android:paddingHorizontal="4dp">
 
             <TextView
                 android:id="@+id/tv_back_count_new"
@@ -149,30 +147,39 @@
             android:gravity="center"
             android:text="きゅう"
             android:textColor="#CCCCCC"
-            android:textSize="12sp" />
+            android:textSize="11sp" />
 
-        <!-- Big Kanji -->
-        <TextView
-            android:id="@+id/tv_back_kanji"
+        <!-- Big Kanji + Meaning -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="九"
-            android:textColor="@android:color/white"
-            android:textSize="30sp"
-            android:textStyle="bold"
-            android:fontFamily="serif" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <!-- Meaning -->
-        <TextView
-            android:id="@+id/tv_back_meaning"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="nine"
-            android:textColor="@android:color/white"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+            <TextView
+                android:id="@+id/tv_back_kanji"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="九"
+                android:textColor="@android:color/white"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:fontFamily="serif" />
+
+            <TextView
+                android:id="@+id/tv_back_meaning"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:gravity="center"
+                android:text="nine"
+                android:textColor="@android:color/white"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
 
         <!-- Rendered Furigana Sentence Canvas (Pixel-perfect aligned) -->
         <ImageView
@@ -180,7 +187,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:adjustViewBounds="true"
             android:visibility="gone" />
 
@@ -190,10 +197,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:text="や きゅう   きゅうにん   ひと"
-            android:textColor="#6CA0DC"
+            android:text="や きゅう   きゅうにん"
+            android:textColor="#51CF66"
             android:textSize="10sp"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="2dp"
             android:maxLines="1" />
 
         <!-- Sentence Line -->
@@ -204,7 +211,7 @@
             android:gravity="center"
             android:text="野球は九人で1チームです。"
             android:textColor="@android:color/white"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:maxLines="1"
             android:ellipsize="end" />
 
@@ -216,16 +223,15 @@
             android:gravity="center"
             android:text="In baseball there are nine people on one team."
             android:textColor="#AAAAAA"
-            android:textSize="11sp"
-            android:layout_marginTop="2dp"
+            android:textSize="10sp"
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- 3 Action Buttons: Again, Hard, Open Anki -->
+        <!-- Action Buttons: Again, Hard, Good, Open Anki -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="36dp"
-            android:layout_marginTop="8dp"
+            android:layout_height="32dp"
+            android:layout_marginTop="6dp"
             android:orientation="horizontal"
             android:gravity="center">
 
@@ -234,11 +240,11 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="3dp"
                 android:gravity="center"
                 android:text="Again"
                 android:textColor="#FF6B6B"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_button_ease" />
 
@@ -247,11 +253,24 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="3dp"
                 android:gravity="center"
                 android:text="Hard"
                 android:textColor="#FFA94D"
-                android:textSize="12sp"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="@drawable/bg_button_ease" />
+
+            <TextView
+                android:id="@+id/btn_back_good"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="3dp"
+                android:gravity="center"
+                android:text="Good"
+                android:textColor="#51CF66"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_button_ease" />
 
@@ -263,7 +282,7 @@
                 android:gravity="center"
                 android:text="Open Anki"
                 android:textColor="#74C0FC"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_button_ease" />
         </LinearLayout>

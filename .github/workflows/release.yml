@@ -35,18 +35,23 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
+      - name: Rename APK to Saku.apk
+        run: |
+          mkdir -p release-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/Saku.apk
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Saku-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Saku-apk
+          path: release-artifacts/Saku.apk
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/app-debug.apk
-          name: Release ${{ github.ref_name }}
+          files: release-artifacts/Saku.apk
+          name: Saku ${{ github.ref_name }}
           draft: false
           prerelease: false
           generate_release_notes: true

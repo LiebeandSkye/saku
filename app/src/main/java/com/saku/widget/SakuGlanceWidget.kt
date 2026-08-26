@@ -2,6 +2,7 @@ package com.saku.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -14,6 +15,7 @@ import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
+import androidx.glance.color.ColorProvider
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -29,7 +31,6 @@ import androidx.glance.text.FontFamily
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
 import com.saku.data.CardModel
 import com.saku.data.ReviewEase
 import com.saku.data.SakuPreferences
@@ -49,11 +50,11 @@ class SakuGlanceWidget : GlanceAppWidget() {
 
     @Composable
     fun SakuWidgetContent(card: CardModel) {
-        val textColorWhite = ColorProvider(android.graphics.Color.WHITE)
-        val textColorSubtle = ColorProvider(android.graphics.Color.parseColor("#AAAAAA"))
-        val textColorMuted = ColorProvider(android.graphics.Color.parseColor("#777777"))
-        val cardBgColor = ColorProvider(android.graphics.Color.parseColor("#121212"))
-        val kanjiBoxBg = ColorProvider(android.graphics.Color.parseColor("#1E1E1E"))
+        val textColorWhite = ColorProvider(Color.White)
+        val textColorSubtle = ColorProvider(Color(0xFFAAAAAA))
+        val textColorMuted = ColorProvider(Color(0xFF777777))
+        val cardBgColor = ColorProvider(Color(0xFF121212))
+        val kanjiBoxBg = ColorProvider(Color(0xFF1E1E1E))
 
         Box(
             modifier = GlanceModifier
@@ -157,25 +158,25 @@ class SakuGlanceWidget : GlanceAppWidget() {
                 ) {
                     EaseButton(
                         label = "Again",
-                        color = ColorProvider(android.graphics.Color.parseColor("#FF6B6B")),
+                        color = ColorProvider(Color(0xFFFF6B6B)),
                         ease = ReviewEase.AGAIN
                     )
                     Spacer(modifier = GlanceModifier.width(6.dp))
                     EaseButton(
                         label = "Hard",
-                        color = ColorProvider(android.graphics.Color.parseColor("#FFA94D")),
+                        color = ColorProvider(Color(0xFFFFA94D)),
                         ease = ReviewEase.HARD
                     )
                     Spacer(modifier = GlanceModifier.width(6.dp))
                     EaseButton(
                         label = "Good",
-                        color = ColorProvider(android.graphics.Color.parseColor("#51CF66")),
+                        color = ColorProvider(Color(0xFF51CF66)),
                         ease = ReviewEase.GOOD
                     )
                     Spacer(modifier = GlanceModifier.width(6.dp))
                     EaseButton(
                         label = "Easy",
-                        color = ColorProvider(android.graphics.Color.parseColor("#74C0FC")),
+                        color = ColorProvider(Color(0xFF74C0FC)),
                         ease = ReviewEase.EASY
                     )
                 }
@@ -185,7 +186,7 @@ class SakuGlanceWidget : GlanceAppWidget() {
 
     @Composable
     private fun EaseButton(label: String, color: ColorProvider, ease: ReviewEase) {
-        val buttonBg = ColorProvider(android.graphics.Color.parseColor("#222222"))
+        val buttonBg = ColorProvider(Color(0xFF222222))
         Box(
             modifier = GlanceModifier
                 .background(buttonBg)

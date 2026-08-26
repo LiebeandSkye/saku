@@ -4,6 +4,7 @@
 ### Minimal Spaced Repetition Japanese Flashcard Widget for Android
 
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?style=flat&logo=android&logoColor=white)](https://android.com)
+[![Latest Release](https://img.shields.io/github/v/release/LiebeandSkye/saku?style=flat&color=FF69B4&logo=github)](https://github.com/LiebeandSkye/saku/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%20%26%20Glance-4285F4?style=flat&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Anki Integration](https://img.shields.io/badge/Anki-AnkiDroid%20API%20(FSRS%20%26%20SM--2)-0080FF?style=flat&logo=anki&logoColor=white)](https://github.com/ankidroid/Anki-Android)
@@ -44,8 +45,8 @@
 ## 📥 Download & Install
 
 ### Option 1: Download Pre-built APK (Direct Download)
-1. Go to the [**Releases**](https://github.com/your-username/Saku/releases) page.
-2. Download the latest **`app-debug.apk`** (or `Saku.apk`) directly onto your phone.
+1. Go to the [**Releases**](https://github.com/LiebeandSkye/saku/releases) page.
+2. Download **`Saku.apk`** directly onto your phone.
 3. Tap the downloaded file and select **Install** *(if prompted by Google Play Protect, tap "More details" $\rightarrow$ "Install anyway")*.
 
 ### Option 2: 5-Second First-Time Setup
@@ -118,8 +119,8 @@ context.contentResolver.update(answerUri, values, null, null)
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/Saku.git
-cd Saku
+git clone https://github.com/LiebeandSkye/saku.git
+cd saku
 ```
 
 ### 2. Build via Command Line
@@ -161,7 +162,7 @@ Saku is built with extreme privacy in mind. It does **NOT** request internet per
 ## 🤝 Contributing
 
 Contributions, issues, and feature requests are welcome!
-Feel free to check the [issues page](https://github.com/your-username/Saku/issues) if you want to contribute.
+Feel free to check the [issues page](https://github.com/LiebeandSkye/saku/issues) if you want to contribute.
 
 1. Fork the Project
 2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)

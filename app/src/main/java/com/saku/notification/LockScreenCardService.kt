@@ -144,16 +144,38 @@ class LockScreenCardService : Service {
 
     override fun onCreate() {
         super.onCreate()
-        val prefs = SakuPreferences(this)
-        val card = prefs.getActiveCard()
-        startForeground(NOTIFICATION_ID, buildCardNotification(this, card))
+        startForegroundCompat()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startForegroundCompat()
+        return START_STICKY
+    }
+
+    private fun startForegroundCompat() {
         val prefs = SakuPreferences(this)
         val card = prefs.getActiveCard()
-        startForeground(NOTIFICATION_ID, buildCardNotification(this, card))
-        return START_STICKY
+        val notification = buildCardNotification(this, card)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.cancel(NOTIFICATION_ID)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

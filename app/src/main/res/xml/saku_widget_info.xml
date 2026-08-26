@@ -9,4 +9,6 @@
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen|keyguard"
+    android:initialLayout="@layout/saku_widget_initial_layout"
+    android:previewLayout="@layout/saku_widget_initial_layout"
     android:description="@string/widget_description" />

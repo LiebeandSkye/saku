@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:orientation="vertical"
     android:padding="12dp"
-    android:background="@android:color/transparent">
+    android:background="#141414">
 
     <!-- Top Card Content -->
     <LinearLayout
@@ -16,14 +16,17 @@
         <!-- Kanji Box -->
         <TextView
             android:id="@+id/tv_exp_kanji"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="wrap_content"
+            android:minWidth="56dp"
+            android:layout_height="56dp"
+            android:paddingHorizontal="6dp"
             android:gravity="center"
             android:text="日"
             android:textColor="@android:color/white"
-            android:textSize="36sp"
+            android:textSize="30sp"
             android:textStyle="bold"
             android:fontFamily="serif"
+            android:maxLines="1"
             android:background="@drawable/bg_kanji_box" />
 
         <!-- Details -->
@@ -82,55 +85,59 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Bottom Action Bar (Anki Review Ease Buttons - Large & Easy to Tap) -->
+    <!-- Bottom Action Bar (Anki Review Ease Buttons - Styled TextViews) -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="42dp"
+        android:layout_height="40dp"
         android:layout_marginTop="12dp"
         android:orientation="horizontal"
         android:gravity="center">
 
-        <Button
+        <TextView
             android:id="@+id/btn_exp_again"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:layout_marginEnd="5dp"
+            android:gravity="center"
             android:text="Again"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="#FF6B6B"
             android:background="@drawable/bg_button_ease" />
 
-        <Button
+        <TextView
             android:id="@+id/btn_exp_hard"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:layout_marginEnd="5dp"
+            android:gravity="center"
             android:text="Hard"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="#FFA94D"
             android:background="@drawable/bg_button_ease" />
 
-        <Button
+        <TextView
             android:id="@+id/btn_exp_good"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:layout_marginEnd="5dp"
+            android:gravity="center"
             android:text="Good"
             android:textSize="12sp"
             android:textStyle="bold"
             android:textColor="#51CF66"
             android:background="@drawable/bg_button_ease" />
 
-        <Button
+        <TextView
             android:id="@+id/btn_exp_easy"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
+            android:gravity="center"
             android:text="Easy"
             android:textSize="12sp"
             android:textStyle="bold"

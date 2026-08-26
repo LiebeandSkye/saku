@@ -18,7 +18,7 @@ object JapaneseFieldParser {
     private val SCRIPT_TAG_PATTERN = Pattern.compile("(?i)<script[^>]*>.*?</script>", Pattern.DOTALL)
     private val HTML_TAG_PATTERN = Pattern.compile("<[^>]*>")
     private val SOUND_TAG_PATTERN = Pattern.compile("\\[sound:[^]]+]")
-    private val RUBY_TAG_PATTERN = Pattern.compile("(?i)<ruby>(?:<rb>)?(.*?)(?:</rb>)?<rt>(.*?)</rt></ruby>")
+    private val RUBY_TAG_PATTERN = Pattern.compile("(?i)<ruby[^>]*>(?:<rb[^>]*>)?(.*?)(?:</rb>)?(?:<rp[^>]*>.*?</rp>)?<rt[^>]*>(.*?)</rt>(?:<rp[^>]*>.*?</rp>)?</ruby>")
     private val FURIGANA_BRACKET_PATTERN = Pattern.compile("(?:^|\\s)?([^ \\[\\]]+)\\[([^\\]]+)\\]")
 
     // Japanese Unicode ranges
@@ -323,18 +323,21 @@ object JapaneseFieldParser {
 
         val digraphs = mapOf(
             "きゃ" to "kya", "きゅ" to "kyu", "きょ" to "kyo",
-            "しゃ" to "sha", "しゅ" to "shu", "しょ" to "sho",
-            "ちゃ" to "cha", "ちゅ" to "chu", "ちょ" to "cho",
+            "しゃ" to "sha", "しゅ" to "shu", "しょ" to "sho", "しぇ" to "she",
+            "ちゃ" to "cha", "ちゅ" to "chu", "ちょ" to "cho", "ちぇ" to "che",
             "にゃ" to "nya", "にゅ" to "nyu", "にょ" to "nyo",
             "ひゃ" to "hya", "ひゅ" to "hyu", "ひょ" to "hyo",
             "みゃ" to "mya", "みゅ" to "myu", "みょ" to "myo",
             "りゃ" to "rya", "りゅ" to "ryu", "りょ" to "ryo",
             "ぎゃ" to "gya", "ぎゅ" to "gyu", "ぎょ" to "gyo",
-            "じゃ" to "ja", "じゅ" to "ju", "じょ" to "jo",
+            "じゃ" to "ja", "じゅ" to "ju", "じょ" to "jo", "じぇ" to "je",
+            "ぢゃ" to "ja", "ぢゅ" to "ju", "ぢょ" to "jo",
             "びゃ" to "bya", "びゅ" to "byu", "びょ" to "byo",
             "ぴゃ" to "pya", "ぴゅ" to "pyu", "ぴょ" to "pyo",
             "ふぁ" to "fa", "ふぃ" to "fi", "ふぇ" to "fe", "ふぉ" to "fo",
-            "てぃ" to "ti", "でぃ" to "di"
+            "てぃ" to "ti", "でぃ" to "di", "どぅ" to "du",
+            "つぁ" to "tsa", "つぃ" to "tsi", "つぇ" to "tse", "つぉ" to "tso",
+            "ゔぁ" to "va", "ゔぃ" to "vi", "ゔぇ" to "ve", "ゔぉ" to "vo"
         )
 
         val monophthongs = mapOf(
@@ -353,7 +356,7 @@ object JapaneseFieldParser {
             "だ" to "da", "ぢ" to "ji", "づ" to "zu", "で" to "de", "ど" to "do",
             "ば" to "ba", "び" to "bi", "ぶ" to "bu", "べ" to "be", "ぼ" to "bo",
             "ぱ" to "pa", "ぴ" to "pi", "ぷ" to "pu", "ぺ" to "pe", "ぽ" to "po",
-            "ぁ" to "a", "ぃ" to "i", "ぅ" to "u", "ぇ" to "e", "ぉ" to "o"
+            "ゔ" to "vu", "ぁ" to "a", "ぃ" to "i", "ぅ" to "u", "ぇ" to "e", "ぉ" to "o"
         )
 
         val vowels = setOf('a', 'i', 'u', 'e', 'o')

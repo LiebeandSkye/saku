@@ -24,13 +24,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.saku.anki.AnkiDroidClient
 import com.saku.anki.AnkiDroidContract
@@ -183,16 +188,19 @@ fun SakuMainScreen(
     var isLockScreenEnabled by remember { mutableStateOf(prefs.isLockScreenCardEnabled) }
     var isPreviewRevealed by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+    var isAnsweringCard by remember { mutableStateOf(false) }
 
-    fun refreshData() {
+    fun refreshData(onlyCards: Boolean = false) {
         coroutineScope.launch {
             isLoading = true
             isAnkiInstalled = ankiClient.isAnkiDroidInstalled()
             hasPermission = ankiClient.isPermissionGranted()
 
             if (hasPermission) {
-                val fetchedDecks = ankiClient.getDecks()
-                decks = fetchedDecks
+                if (!onlyCards) {
+                    val fetchedDecks = ankiClient.getDecks()
+                    decks = fetchedDecks
+                }
                 val dueCards = ankiClient.getDueCards(selectedDeckId)
                 if (dueCards.isNotEmpty()) {
                     activeCard = dueCards.first()
@@ -202,6 +210,24 @@ fun SakuMainScreen(
             }
             isPreviewRevealed = false
             isLoading = false
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                activeCard = prefs.getActiveCard()
+                isLockScreenEnabled = prefs.isLockScreenCardEnabled
+                selectedDeckId = prefs.selectedDeckId
+                if (ankiClient.isPermissionGranted()) {
+                    refreshData(onlyCards = true)
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -326,20 +352,31 @@ fun SakuMainScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Kanji Box
+                            // Dynamic Kanji Box & Font Scaling
+                            val kanjiText = activeCard.kanji
+                            val kanjiFontSize = when {
+                                kanjiText.length > 4 -> 20.sp
+                                kanjiText.length > 2 -> 26.sp
+                                kanjiText.length == 2 -> 32.sp
+                                else -> 38.sp
+                            }
+                            val kanjiBoxWidth = if (kanjiText.length > 2) (kanjiText.length * 22).dp.coerceIn(68.dp, 120.dp) else 68.dp
+
                             Box(
                                 modifier = Modifier
-                                    .size(68.dp)
+                                    .size(width = kanjiBoxWidth, height = 68.dp)
                                     .background(Color(0xFF1F1F1F), RoundedCornerShape(12.dp))
                                     .border(1.dp, Color(0xFF333333), RoundedCornerShape(12.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = activeCard.kanji,
-                                    fontSize = 38.sp,
+                                    text = kanjiText,
+                                    fontSize = kanjiFontSize,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Serif,
-                                    color = Color.White
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
@@ -412,7 +449,8 @@ fun SakuMainScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(46.dp)
-                                    .background(Color(0xFF262626), RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF262626))
                                     .clickable { isPreviewRevealed = true },
                                 contentAlignment = Alignment.Center
                             ) {
@@ -442,19 +480,27 @@ fun SakuMainScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .fillMaxHeight()
-                                            .background(Color(0xFF242424), RoundedCornerShape(8.dp))
-                                            .clickable {
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(if (isAnsweringCard) Color(0xFF1A1A1A) else Color(0xFF242424))
+                                            .clickable(enabled = !isAnsweringCard) {
                                                 coroutineScope.launch {
-                                                    if (activeCard.noteId > 0) {
-                                                        ankiClient.answerCard(activeCard, ease.value)
+                                                    isAnsweringCard = true
+                                                    try {
+                                                        if (activeCard.noteId > 0) {
+                                                            ankiClient.answerCard(activeCard, ease.value)
+                                                        }
+                                                        val dueCards = ankiClient.getDueCards(selectedDeckId)
+                                                        activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
+                                                            ?: dueCards.firstOrNull()
+                                                            ?: ankiClient.getSamplePreviewCard()
+                                                        prefs.saveActiveCard(activeCard)
+                                                        isPreviewRevealed = false
+                                                        onUpdateWidgets(activeCard)
+                                                    } catch (e: Exception) {
+                                                        // Error handling for card answer
+                                                    } finally {
+                                                        isAnsweringCard = false
                                                     }
-                                                    val dueCards = ankiClient.getDueCards(selectedDeckId)
-                                                    activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
-                                                        ?: dueCards.firstOrNull()
-                                                        ?: ankiClient.getSamplePreviewCard()
-                                                    prefs.saveActiveCard(activeCard)
-                                                    isPreviewRevealed = false
-                                                    onUpdateWidgets(activeCard)
                                                 }
                                             },
                                         contentAlignment = Alignment.Center
@@ -463,7 +509,7 @@ fun SakuMainScreen(
                                             text = ease.label,
                                             fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = color
+                                            color = if (isAnsweringCard) color.copy(alpha = 0.4f) else color
                                         )
                                     }
                                 }
@@ -530,7 +576,7 @@ fun SakuMainScreen(
                     Text(
                         text = if (hasPermission) "No decks found. Please make sure you have cards in AnkiDroid and that AnkiDroid Third-party API is accessible." else "Connect to AnkiDroid above to select your decks.",
                         fontSize = 13.sp,
-                        color = Color(0xFF666666)
+                        color = Color(0xFF9E9E9E)
                     )
                 }
             } else {
@@ -544,7 +590,7 @@ fun SakuMainScreen(
                                 selectedDeckId = -1L
                                 prefs.selectedDeckId = -1L
                                 prefs.selectedDeckName = "All Decks"
-                                refreshData()
+                                refreshData(onlyCards = true)
                             },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
@@ -576,7 +622,7 @@ fun SakuMainScreen(
                     }
                 }
 
-                items(decks) { deck ->
+                items(decks, key = { it.id }) { deck ->
                     val isSelected = deck.id == selectedDeckId
                     Card(
                         modifier = Modifier
@@ -585,7 +631,7 @@ fun SakuMainScreen(
                                 selectedDeckId = deck.id
                                 prefs.selectedDeckId = deck.id
                                 prefs.selectedDeckName = deck.name
-                                refreshData()
+                                refreshData(onlyCards = true)
                             },
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(

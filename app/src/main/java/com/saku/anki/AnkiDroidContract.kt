@@ -37,7 +37,8 @@ object AnkiDroidContract {
 
         const val DECK_ID = "deck_id"
         const val DECK_NAME = "deck_name"
-        const val DECK_COUNTS = "deck_count"
+        const val DECK_COUNTS = "deck_counts"
+        const val DECK_COUNTS_LEGACY = "deck_count"
         const val OPTIONS = "options"
         const val DECK_DYN = "deck_dyn"
         const val DECK_DESC = "deck_desc"

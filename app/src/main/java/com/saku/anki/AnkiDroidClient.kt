@@ -62,7 +62,7 @@ class AnkiDroidClient(private val context: Context) {
         try {
             cursor = context.contentResolver.query(
                 decksUri,
-                AnkiDroidContract.Decks.DEFAULT_PROJECTION,
+                null,
                 null,
                 null,
                 null
@@ -71,7 +71,8 @@ class AnkiDroidClient(private val context: Context) {
             cursor?.let { c ->
                 val idIdx = c.getColumnIndex(AnkiDroidContract.Decks.DECK_ID)
                 val nameIdx = c.getColumnIndex(AnkiDroidContract.Decks.DECK_NAME)
-                val countIdx = c.getColumnIndex(AnkiDroidContract.Decks.DECK_COUNTS)
+                val countIdx = c.getColumnIndex(AnkiDroidContract.Decks.DECK_COUNTS).takeIf { it != -1 }
+                    ?: c.getColumnIndex(AnkiDroidContract.Decks.DECK_COUNTS_LEGACY)
 
                 while (c.moveToNext()) {
                     val id = if (idIdx != -1) c.getLong(idIdx) else 0L
@@ -79,17 +80,20 @@ class AnkiDroidClient(private val context: Context) {
                     var dueCount = 0
 
                     if (countIdx != -1) {
-                        val countJson = c.getString(countIdx)
-                        if (!countJson.isNullOrEmpty()) {
+                        val countRaw = c.getString(countIdx)
+                        if (!countRaw.isNullOrEmpty()) {
                             try {
-                                val jsonArray = JSONArray(countJson)
-                                // Format: [learnCount, reviewCount, newCount]
-                                val learn = jsonArray.optInt(0, 0)
-                                val review = jsonArray.optInt(1, 0)
-                                val newCards = jsonArray.optInt(2, 0)
-                                dueCount = learn + review + newCards
+                                if (countRaw.startsWith("[")) {
+                                    val jsonArray = JSONArray(countRaw)
+                                    val learn = jsonArray.optInt(0, 0)
+                                    val review = jsonArray.optInt(1, 0)
+                                    val newCards = jsonArray.optInt(2, 0)
+                                    dueCount = learn + review + newCards
+                                } else {
+                                    dueCount = countRaw.toIntOrNull() ?: 0
+                                }
                             } catch (e: Exception) {
-                                // Ignore JSON parse errors for counts
+                                // Ignore parse error
                             }
                         }
                     }
@@ -184,17 +188,13 @@ class AnkiDroidClient(private val context: Context) {
                     val dId = if (deckIdIdx != -1) c.getLong(deckIdIdx) else 0L
                     val interval = if (ivlIdx != -1) c.getInt(ivlIdx) else 0
 
-                    val qStr = if (questionSimpleIdx != -1) {
-                        c.getString(questionSimpleIdx) ?: ""
-                    } else if (questionIdx != -1) {
-                        c.getString(questionIdx) ?: ""
-                    } else ""
+                    val qSimple = if (questionSimpleIdx != -1) c.getString(questionSimpleIdx) else null
+                    val qStr = qSimple?.takeIf { it.isNotBlank() }
+                        ?: (if (questionIdx != -1) c.getString(questionIdx) ?: "" else "")
 
-                    val aStr = if (answerSimpleIdx != -1) {
-                        c.getString(answerSimpleIdx) ?: ""
-                    } else if (answerIdx != -1) {
-                        c.getString(answerIdx) ?: ""
-                    } else ""
+                    val aSimple = if (answerSimpleIdx != -1) c.getString(answerSimpleIdx) else null
+                    val aStr = aSimple?.takeIf { it.isNotBlank() }
+                        ?: (if (answerIdx != -1) c.getString(answerIdx) ?: "" else "")
 
                     val cardModel = fetchNoteDetails(noteId, cardId, cardOrd, dId, interval, qStr, aStr)
                     if (cardModel != null) {
@@ -216,11 +216,10 @@ class AnkiDroidClient(private val context: Context) {
         val notesUri = AnkiDroidContract.Notes.getContentUri(authority)
         var cursor: Cursor? = null
         try {
-            val selection = if (deckId > 0) "did:$deckId" else null
             cursor = context.contentResolver.query(
                 notesUri,
                 null,
-                selection,
+                null,
                 null,
                 null
             )

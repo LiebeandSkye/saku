@@ -25,14 +25,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
 
         val prefs = SakuPreferences(context)
         val ankiClient = AnkiDroidClient(context)
-        val currentCard = prefs.getActiveCard()
-
         val pendingResult = goAsync()
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 when (intent.action) {
                     ACTION_GRADE -> {
+                        val currentCard = prefs.getActiveCard()
                         val ease = intent.getIntExtra(EXTRA_EASE, ReviewEase.GOOD.value)
                         if (currentCard.noteId > 0) {
                             ankiClient.answerCard(currentCard, ease)
@@ -54,12 +53,14 @@ class NotificationActionReceiver : BroadcastReceiver() {
         prefs: SakuPreferences,
         ankiClient: AnkiDroidClient
     ) {
+        val currentCard = prefs.getActiveCard()
         val dueCards = ankiClient.getDueCards(prefs.selectedDeckId, limit = 20)
-        val nextCard = dueCards.firstOrNull { it.cardId != prefs.getActiveCard().cardId }
+        val nextCard = dueCards.firstOrNull { it.cardId != currentCard.cardId }
             ?: dueCards.firstOrNull()
             ?: ankiClient.getSamplePreviewCard()
 
         prefs.saveActiveCard(nextCard)
+        prefs.isAnswerRevealed = false
 
         // Update Lock Screen Notification
         LockScreenCardService.updateNotification(context, nextCard)

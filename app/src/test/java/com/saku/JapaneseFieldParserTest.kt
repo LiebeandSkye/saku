@@ -147,4 +147,20 @@ class JapaneseFieldParserTest {
         assertTrue(result.meaning.contains("to study"))
         assertTrue(result.example.contains("勉強します"))
     }
+
+    @Test
+    fun testYomichanRubyWithAttributesAndParenthesisTags() {
+        val yomichanHtml = "<ruby class=\"furigana\"><rb>咲</rb><rp>(</rp><rt class=\"reading\">さ</rt><rp>)</rp></ruby>く"
+        val (kanji, kana) = JapaneseFieldParser.extractKanjiAndKana(yomichanHtml)
+        assertEquals("咲く", kanji)
+        assertEquals("さく", kana)
+        assertEquals("saku", JapaneseFieldParser.kanaToRomaji(kana))
+    }
+
+    @Test
+    fun testLoanwordAndVoicedRomaji() {
+        assertEquals("paatii", JapaneseFieldParser.kanaToRomaji("パーティー"))
+        assertEquals("kafe", JapaneseFieldParser.kanaToRomaji("カフェ"))
+        assertEquals("disuko", JapaneseFieldParser.kanaToRomaji("ディスコ"))
+    }
 }

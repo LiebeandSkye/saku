@@ -37,6 +37,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import com.saku.anki.AnkiDroidClient
 import com.saku.data.CardModel
 import com.saku.data.ReviewEase
 import com.saku.data.SakuPreferences
@@ -47,7 +48,22 @@ class SakuGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val prefs = SakuPreferences(context)
-        val activeCard = prefs.getActiveCard()
+        val ankiClient = AnkiDroidClient(context)
+        var activeCard = prefs.getActiveCard()
+
+        if (activeCard.cardId <= 0 && ankiClient.isAnkiDroidInstalled() && ankiClient.isPermissionGranted()) {
+            try {
+                val dueCards = ankiClient.getDueCards(prefs.selectedDeckId, limit = 10)
+                val realCard = dueCards.firstOrNull { it.cardId > 0 }
+                if (realCard != null) {
+                    activeCard = realCard
+                    prefs.saveActiveCard(activeCard)
+                }
+            } catch (e: Exception) {
+                // Log and continue with saved card
+            }
+        }
+
         val isAnswerRevealed = prefs.isAnswerRevealed
 
         provideContent {

@@ -155,59 +155,44 @@ object JapaneseFieldParser {
         }
 
         // 1. Extract Kanji / Expression
-        var rawKanji = findFieldByKeywords(
-            fieldsByName,
-            listOf(
-                "vocabulary-kanji", "vocabulary_kanji", "vocab-kanji", "vocab_kanji",
-                "vocabulary", "vocab", "kanji", "expression", "target word", "word",
-                "term", "front", "japanese"
-            )
+        val kanjiKeywords = listOf(
+            "vocabularykanji", "vocabkanji", "kanji", "expression", "targetword", "word",
+            "term", "front", "japanese", "vocabulary", "vocab", "vocabword", "japaneseword"
         )
+        var rawKanji = findFieldByKeywords(fieldsByName, kanjiKeywords)
 
         // 2. Extract Kana / Reading
-        var rawKana = findFieldByKeywords(
-            fieldsByName,
-            listOf(
-                "vocabulary-kana", "vocabulary_kana", "vocab-kana", "vocab_kana",
-                "reading", "kana", "furigana", "furiganaplain", "yomikata",
-                "pronunciation", "hiragana"
-            )
+        val kanaKeywords = listOf(
+            "vocabularykana", "vocabkana", "reading", "kana", "furigana", "furiganaplain",
+            "yomikata", "pronunciation", "hiragana", "katakana", "vocabreading", "readingkana"
         )
+        var rawKana = findFieldByKeywords(fieldsByName, kanaKeywords)
 
         // 3. Extract Meaning / English
-        val rawMeaning = findFieldByKeywords(
-            fieldsByName,
-            listOf(
-                "vocabulary-english", "vocabulary_english", "vocab-english", "vocab_english",
-                "meaning", "english", "glossary", "definition", "translation",
-                "vocab meaning", "primary meaning", "back"
-            )
+        val meaningKeywords = listOf(
+            "vocabularyenglish", "vocabenglish", "meaning", "english", "glossary", "definition",
+            "translation", "vocabmeaning", "primarymeaning", "back", "englishmeaning", "shortdefinition"
         )
+        val rawMeaning = findFieldByKeywords(fieldsByName, meaningKeywords)
 
         // 4. Extract Example Sentence
-        val rawExample = findFieldByKeywords(
-            fieldsByName,
-            listOf(
-                "sentence-expression", "sentence_expression", "sentence-kanji", "sentence_kanji",
-                "example sentence", "sentence", "example", "context", "japanese sentence",
-                "sentkanji", "sentenceexpression"
-            )
+        val exampleKeywords = listOf(
+            "sentenceexpression", "sentencekanji", "examplesentence", "sentence", "example",
+            "context", "japanesesentence", "sentkanji", "examplejapanese", "sentexpression", "sample"
         )
+        val rawExample = findFieldByKeywords(fieldsByName, exampleKeywords)
 
         // 5. Extract Example Translation
-        val rawExampleTranslation = findFieldByKeywords(
-            fieldsByName,
-            listOf(
-                "sentence-english", "sentence_english", "sentence-meaning", "sentence_meaning",
-                "sentence translation", "sentence-translation", "example translation",
-                "example english", "senteng", "sentmeaning"
-            )
+        val exampleTransKeywords = listOf(
+            "sentenceenglish", "sentencemeaning", "sentencetranslation", "exampletranslation",
+            "exampleenglish", "senteng", "sentmeaning", "examplemeaning", "senttrans"
         )
+        val rawExampleTranslation = findFieldByKeywords(fieldsByName, exampleTransKeywords)
 
         // Fallback: If no field names matched, infer from positional values
         val cleanValues = fieldValues.map { cleanHtml(it) }.filter { it.isNotEmpty() && !it.startsWith("[sound:") }
         val inferredKanji = if (rawKanji.isEmpty()) {
-            cleanValues.firstOrNull { hasJapaneseChars(it) } ?: cleanValues.getOrNull(0) ?: ""
+            cleanValues.firstOrNull { hasJapaneseChars(it) && it.length < 20 } ?: cleanValues.getOrNull(0) ?: ""
         } else rawKanji
 
         // Process furigana / ruby on Kanji
@@ -228,14 +213,46 @@ object JapaneseFieldParser {
         } else rawMeaning
 
         val inferredExample = if (rawExample.isEmpty()) {
-            cleanValues.firstOrNull { hasJapaneseChars(it) && it != inferredKanji && it != inferredKana && it.length > 5 } ?: ""
+            cleanValues.firstOrNull { hasJapaneseChars(it) && it != inferredKanji && it != inferredKana && it.length > 4 } ?: ""
         } else rawExample
 
-        val finalKanji = cleanHtml(extractedKanji).ifEmpty { cleanHtml(fallbackQuestion).ifEmpty { "日" } }
-        val finalKana = cleanHtml(inferredKana).ifEmpty { extractedKanaFromExpr.ifEmpty { "ひ" } }
+        // Parse fallback Question & Answer if provided (for cards queried from rendered HTML)
+        var fallbackParsedKanji = ""
+        var fallbackParsedKana = ""
+        var fallbackParsedMeaning = ""
+        var fallbackParsedExample = ""
 
-        val finalMeaning = cleanHtml(inferredMeaning).ifEmpty { cleanHtml(fallbackAnswer).ifEmpty { "sun, day" } }
-        val finalExample = cleanHtml(inferredExample)
+        if (fallbackQuestion.isNotEmpty() || fallbackAnswer.isNotEmpty()) {
+            val (qKanji, qKana) = extractKanjiAndKana(fallbackQuestion)
+            fallbackParsedKanji = qKanji
+            fallbackParsedKana = qKana
+
+            val answerClean = fallbackAnswer
+                .replace(Regex("(?i)<hr\\s*(id=[\"']?answer[\"']?)?\\s*/?>"), " @@SPLIT@@ ")
+            val answerParts = answerClean.split("@@SPLIT@@").map { cleanHtml(it) }
+            val answerBack = answerParts.lastOrNull { it.isNotEmpty() } ?: cleanHtml(fallbackAnswer)
+
+            if (!hasJapaneseChars(answerBack)) {
+                fallbackParsedMeaning = answerBack
+            } else {
+                // Contains Japanese - could be example sentence or definition
+                val lines = answerBack.split("\n", "  ").map { it.trim() }.filter { it.isNotEmpty() }
+                for (line in lines) {
+                    if (!hasJapaneseChars(line) && fallbackParsedMeaning.isEmpty()) {
+                        fallbackParsedMeaning = line
+                    } else if (hasJapaneseChars(line) && line.length > 5 && fallbackParsedExample.isEmpty()) {
+                        fallbackParsedExample = line
+                    }
+                }
+                if (fallbackParsedMeaning.isEmpty()) fallbackParsedMeaning = answerBack
+            }
+        }
+
+        val finalKanji = cleanHtml(extractedKanji).ifEmpty { fallbackParsedKanji.ifEmpty { "日" } }
+        val finalKana = cleanHtml(inferredKana).ifEmpty { fallbackParsedKana.ifEmpty { "ひ" } }
+
+        val finalMeaning = cleanHtml(inferredMeaning).ifEmpty { fallbackParsedMeaning.ifEmpty { "sun, day" } }
+        val finalExample = cleanHtml(inferredExample).ifEmpty { fallbackParsedExample }
         val finalExampleTrans = cleanHtml(rawExampleTranslation)
         val (cleanExampleSentence, _) = extractKanjiAndKana(finalExample)
         val fullExample = if (finalExample.isNotEmpty() && finalExampleTrans.isNotEmpty()) {
@@ -257,17 +274,29 @@ object JapaneseFieldParser {
         )
     }
 
+    private fun normalizeKey(key: String): String {
+        return key.lowercase().replace(Regex("[^a-z0-9]"), "")
+    }
+
     private fun findFieldByKeywords(fieldsByName: Map<String, String>, keywords: List<String>): String {
+        val normalizedMap = mutableMapOf<String, String>()
+        for ((k, v) in fieldsByName) {
+            normalizedMap[normalizeKey(k)] = v
+        }
+
+        // Exact match on normalized keys
         for (keyword in keywords) {
-            // Check exact key match
-            fieldsByName[keyword]?.let {
+            val normKw = normalizeKey(keyword)
+            normalizedMap[normKw]?.let {
                 if (it.isNotEmpty()) return it
             }
         }
+
+        // Contains match on normalized keys
         for (keyword in keywords) {
-            // Check contains key match
-            for ((key, value) in fieldsByName) {
-                if (key.contains(keyword) && value.isNotEmpty()) {
+            val normKw = normalizeKey(keyword)
+            for ((normKey, value) in normalizedMap) {
+                if (normKey.contains(normKw) && value.isNotEmpty()) {
                     return value
                 }
             }

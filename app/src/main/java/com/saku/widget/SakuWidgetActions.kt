@@ -56,6 +56,7 @@ class SakuGradeCardAction : ActionCallback {
                 ?: ankiClient.getSamplePreviewCard()
 
             prefs.saveActiveCard(nextCard)
+            prefs.isAnswerRevealed = false
 
             if (prefs.isLockScreenCardEnabled) {
                 LockScreenCardService.updateNotification(context, nextCard)

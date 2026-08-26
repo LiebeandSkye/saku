@@ -104,4 +104,47 @@ class JapaneseFieldParserTest {
         assertEquals("cat", result.meaning)
         assertTrue(result.example.contains("猫がいます"))
     }
+
+    @Test
+    fun testNormalizedFieldNamingWithUnderscoresAndPrefixes() {
+        val fieldNames = listOf(
+            "Core::Vocab_Kanji",
+            "Core::Vocab_Kana",
+            "Core::Vocab_Meaning",
+            "Core::Sent_Kanji",
+            "Core::Sent_Meaning"
+        )
+        val fieldValues = listOf(
+            "車",
+            "くるま",
+            "car, vehicle",
+            "車を運転します。",
+            "I drive a car."
+        )
+
+        val result = JapaneseFieldParser.mapFieldsToJapaneseCard(fieldNames, fieldValues)
+        assertEquals("車", result.kanji)
+        assertEquals("くるま", result.kana)
+        assertEquals("kuruma", result.romaji)
+        assertEquals("car, vehicle", result.meaning)
+        assertEquals("車を運転します。 • I drive a car.", result.example)
+    }
+
+    @Test
+    fun testRenderedHtmlFallbackParsing() {
+        val fallbackQ = "<div>勉強[べんきょう]</div>"
+        val fallbackA = "<div>勉強</div><hr id=\"answer\"><div>to study</div><div>毎日日本語を勉強します。</div>"
+
+        val result = JapaneseFieldParser.mapFieldsToJapaneseCard(
+            fieldNames = emptyList(),
+            fieldValues = emptyList(),
+            fallbackQuestion = fallbackQ,
+            fallbackAnswer = fallbackA
+        )
+        assertEquals("勉強", result.kanji)
+        assertEquals("べんきょう", result.kana)
+        assertEquals("benkyou", result.romaji)
+        assertTrue(result.meaning.contains("to study"))
+        assertTrue(result.example.contains("勉強します"))
+    }
 }

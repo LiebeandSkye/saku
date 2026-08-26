@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.glance.appwidget.updateAll
+import androidx.lifecycle.lifecycleScope
 import com.saku.anki.AnkiDroidClient
 import com.saku.anki.AnkiDroidContract
 import com.saku.anki.AnkiPermissionHelper
@@ -40,6 +41,7 @@ import com.saku.data.ReviewEase
 import com.saku.data.SakuPreferences
 import com.saku.notification.LockScreenCardService
 import com.saku.widget.SakuGlanceWidget
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -133,6 +135,13 @@ class MainActivity : ComponentActivity() {
                         },
                         onUpdateWidgets = { card ->
                             LockScreenCardService.updateNotification(this, card)
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                try {
+                                    SakuGlanceWidget().updateAll(this@MainActivity)
+                                } catch (e: Exception) {
+                                    // Widget update safety
+                                }
+                            }
                         }
                     )
                 }

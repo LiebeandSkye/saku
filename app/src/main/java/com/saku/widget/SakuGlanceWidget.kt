@@ -48,26 +48,28 @@ class SakuGlanceWidget : GlanceAppWidget() {
     override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val prefs = SakuPreferences(context)
+        val initialPrefs = SakuPreferences(context)
         val ankiClient = AnkiDroidClient(context)
-        var activeCard = prefs.getActiveCard()
 
-        if (activeCard.cardId <= 0 && ankiClient.isAnkiDroidInstalled() && ankiClient.isPermissionGranted()) {
+        // Cold start initialization if no card is cached yet
+        if (initialPrefs.getActiveCard().cardId <= 0 && ankiClient.isAnkiDroidInstalled() && ankiClient.isPermissionGranted()) {
             try {
-                val dueCards = ankiClient.getDueCards(prefs.selectedDeckId, limit = 10)
+                val dueCards = ankiClient.getDueCards(initialPrefs.selectedDeckId, limit = 10)
                 val realCard = dueCards.firstOrNull { it.cardId > 0 }
                 if (realCard != null) {
-                    activeCard = realCard
-                    prefs.saveActiveCard(activeCard)
+                    initialPrefs.saveActiveCard(realCard)
                 }
             } catch (e: Exception) {
                 // Log and continue with saved card
             }
         }
 
-        val isAnswerRevealed = prefs.isAnswerRevealed
-
         provideContent {
+            val widgetContext = androidx.glance.LocalContext.current
+            val prefs = SakuPreferences(widgetContext)
+            val activeCard = prefs.getActiveCard()
+            val isAnswerRevealed = prefs.isAnswerRevealed
+
             GlanceTheme {
                 SakuWidgetContent(card = activeCard, isAnswerRevealed = isAnswerRevealed)
             }
@@ -311,15 +313,6 @@ class SakuGlanceWidget : GlanceAppWidget() {
                             color = fixedColor(Color(0xFFFF6B6B)),
                             fontSize = buttonFontSize,
                             ease = ReviewEase.AGAIN
-                        )
-                        Spacer(modifier = GlanceModifier.width(4.dp))
-
-                        // Hard Button
-                        EaseButton(
-                            label = "Hard",
-                            color = fixedColor(Color(0xFFFFA94D)),
-                            fontSize = buttonFontSize,
-                            ease = ReviewEase.HARD
                         )
                         Spacer(modifier = GlanceModifier.width(4.dp))
 

@@ -555,44 +555,6 @@ fun SakuMainScreen(
                                     )
                                 }
 
-                                // Hard
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(if (isAnsweringCard) Color(0xFF1A1A1A) else Color(0xFF242424))
-                                        .clickable(enabled = !isAnsweringCard) {
-                                            coroutineScope.launch {
-                                                isAnsweringCard = true
-                                                try {
-                                                    if (activeCard.noteId > 0) {
-                                                        ankiClient.answerCard(activeCard, ReviewEase.HARD.value)
-                                                    }
-                                                    val dueCards = ankiClient.getDueCards(selectedDeckId)
-                                                    activeCard = dueCards.firstOrNull { it.cardId != activeCard.cardId }
-                                                        ?: dueCards.firstOrNull()
-                                                        ?: ankiClient.getSamplePreviewCard()
-                                                    prefs.saveActiveCard(activeCard)
-                                                    isPreviewRevealed = false
-                                                    onUpdateWidgets(activeCard)
-                                                } catch (e: Exception) {
-                                                    // Error handling
-                                                } finally {
-                                                    isAnsweringCard = false
-                                                }
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "Hard",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isAnsweringCard) Color(0xFFFFA94D).copy(alpha = 0.4f) else Color(0xFFFFA94D)
-                                    )
-                                }
-
                                 // Good
                                 Box(
                                     modifier = Modifier

@@ -240,23 +240,10 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="3dp"
+                android:layout_marginEnd="4dp"
                 android:gravity="center"
                 android:text="Again"
                 android:textColor="#FF6B6B"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:background="@drawable/bg_button_ease" />
-
-            <TextView
-                android:id="@+id/btn_back_hard"
-                android:layout_width="0dp"
-                android:layout_height="match_parent"
-                android:layout_weight="1"
-                android:layout_marginEnd="3dp"
-                android:gravity="center"
-                android:text="Hard"
-                android:textColor="#FFA94D"
                 android:textSize="11sp"
                 android:textStyle="bold"
                 android:background="@drawable/bg_button_ease" />
@@ -266,7 +253,7 @@
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="3dp"
+                android:layout_marginEnd="4dp"
                 android:gravity="center"
                 android:text="Good"
                 android:textColor="#51CF66"

@@ -90,7 +90,6 @@ class LockScreenCardService : Service {
             }
 
             val againPendingIntent = createGradePendingIntent(ReviewEase.AGAIN, 10)
-            val hardPendingIntent = createGradePendingIntent(ReviewEase.HARD, 11)
             val goodPendingIntent = createGradePendingIntent(ReviewEase.GOOD, 12)
 
             // Open Anki PendingIntent
@@ -169,7 +168,6 @@ class LockScreenCardService : Service {
                     setTextViewText(R.id.tv_back_example_trans, sentenceTrans)
 
                     setOnClickPendingIntent(R.id.btn_back_again, againPendingIntent)
-                    setOnClickPendingIntent(R.id.btn_back_hard, hardPendingIntent)
                     setOnClickPendingIntent(R.id.btn_back_good, goodPendingIntent)
                     setOnClickPendingIntent(R.id.btn_back_open_anki, openAnkiPendingIntent)
                 }
@@ -226,7 +224,6 @@ class LockScreenCardService : Service {
                     setTextViewText(R.id.tv_exp_back_example_trans, sentenceTrans)
 
                     setOnClickPendingIntent(R.id.btn_exp_back_again, againPendingIntent)
-                    setOnClickPendingIntent(R.id.btn_exp_back_hard, hardPendingIntent)
                     setOnClickPendingIntent(R.id.btn_exp_back_good, goodPendingIntent)
                     setOnClickPendingIntent(R.id.btn_exp_back_open_anki, openAnkiPendingIntent)
                 }

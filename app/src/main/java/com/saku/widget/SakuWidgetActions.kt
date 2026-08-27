@@ -30,6 +30,7 @@ class SakuNextCardAction : ActionCallback {
                 LockScreenCardService.updateNotification(context, nextCard, showAnswer = false)
             }
 
+            SakuGlanceWidget().update(context, glanceId)
             SakuGlanceWidget().updateAll(context)
         }
     }
@@ -63,6 +64,7 @@ class SakuGradeCardAction : ActionCallback {
                 LockScreenCardService.updateNotification(context, nextCard, showAnswer = false)
             }
 
+            SakuGlanceWidget().update(context, glanceId)
             SakuGlanceWidget().updateAll(context)
         }
     }
@@ -72,12 +74,14 @@ class SakuToggleAnswerAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         withContext(Dispatchers.IO) {
             val prefs = SakuPreferences(context)
-            prefs.isAnswerRevealed = !prefs.isAnswerRevealed
+            val newRevealed = !prefs.isAnswerRevealed
+            prefs.isAnswerRevealed = newRevealed
 
             if (prefs.isLockScreenCardEnabled) {
-                LockScreenCardService.updateNotification(context, prefs.getActiveCard(), showAnswer = prefs.isAnswerRevealed)
+                LockScreenCardService.updateNotification(context, prefs.getActiveCard(), showAnswer = newRevealed)
             }
 
+            SakuGlanceWidget().update(context, glanceId)
             SakuGlanceWidget().updateAll(context)
         }
     }

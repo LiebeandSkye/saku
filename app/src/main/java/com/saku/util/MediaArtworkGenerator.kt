@@ -40,15 +40,16 @@ object MediaArtworkGenerator {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
+        // 1. Draw full widget background picture (blurred & dimmed if set, or clean transparent/dark)
         drawBackground(context, prefs, canvas, width, height)
 
         val baseDensity = (width.toFloat() / 360f).coerceIn(0.9f, 4.0f)
         val fontScale = fontScaleMultiplier.coerceIn(0.7f, 2.5f)
         val sp = baseDensity * fontScale
 
-        val topInset = max(38f * baseDensity, height * 0.085f)
+        val topInset = max(34f * baseDensity, height * 0.08f)
         val statsY = topInset + 10f * baseDensity
-        val sideInset = max(22f * baseDensity, width * 0.06f)
+        val sideInset = max(20f * baseDensity, width * 0.06f)
 
         val deckName = card?.deckName?.ifEmpty { "Saku" } ?: "All Caught Up"
         val deckTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -56,6 +57,7 @@ object MediaArtworkGenerator {
             textSize = 11.5f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.RIGHT
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
 
         canvas.drawText(
@@ -79,21 +81,25 @@ object MediaArtworkGenerator {
             color = Color.parseColor("#8AB4F8")
             textSize = 11.5f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
         val dotPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#94A3B8")
             textSize = 10.5f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
         val learnPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#F28B82")
             textSize = 11.5f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
         val revPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#81C995")
             textSize = 11.5f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
 
         val wNew = newPaint.measureText(newText)
@@ -193,6 +199,7 @@ object MediaArtworkGenerator {
                 color = Color.parseColor("#F1F5F9")
                 textSize = (if (cleanMeaning.length > 30) 11.5f else 13.5f) * sp
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
             }
             StaticLayout.Builder.obtain(
                 cleanMeaning,
@@ -236,6 +243,7 @@ object MediaArtworkGenerator {
                 color = Color.WHITE
                 textSize = 14.5f * sp
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
             }
             StaticLayout.Builder.obtain(
                 rawSentence,
@@ -259,6 +267,7 @@ object MediaArtworkGenerator {
                 color = Color.parseColor("#CBD5E1")
                 textSize = 11f * sp
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
             }
             StaticLayout.Builder.obtain(
                 cleanSentenceMeaning,
@@ -293,8 +302,9 @@ object MediaArtworkGenerator {
             imgDrawHeight = 0f
         }
 
-        val contentTop = statsY + 16f * baseDensity
-        val contentBottom = if (showBottomControls) (height - 30f * baseDensity) else (height - 16f * baseDensity)
+        val contentTop = statsY + 14f * baseDensity
+        // When showBottomControls is false (used by widget), leave room for the bottom floating buttons
+        val contentBottom = if (showBottomControls) (height - 30f * baseDensity) else (height - 52f * baseDensity)
         val availableH = max(60f * baseDensity, contentBottom - contentTop)
 
         var totalContentH = vocabH
@@ -324,7 +334,7 @@ object MediaArtworkGenerator {
 
         curY += dividerGapTop
         val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#38FFFFFF")
+            color = Color.parseColor("#4DFFFFFF")
             strokeWidth = 2f
         }
         canvas.drawLine(
@@ -378,6 +388,7 @@ object MediaArtworkGenerator {
                 textSize = 9.5f * sp
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 textAlign = Paint.Align.CENTER
+                setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
             }
             canvas.drawText(
                 hintText,
@@ -403,6 +414,7 @@ object MediaArtworkGenerator {
             textSize = 26f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
         canvas.drawText(
             "お疲れ様でした！",
@@ -416,6 +428,7 @@ object MediaArtworkGenerator {
             textSize = 13f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
         canvas.drawText(
             "All reviews complete for today! 🎉",
@@ -425,7 +438,7 @@ object MediaArtworkGenerator {
         )
 
         val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#38FFFFFF")
+            color = Color.parseColor("#4DFFFFFF")
             strokeWidth = 2f
         }
         canvas.drawLine(
@@ -441,6 +454,7 @@ object MediaArtworkGenerator {
             textSize = 12f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             textAlign = Paint.Align.CENTER
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
         canvas.drawText(
             "また明日頑張りましょう！",
@@ -454,6 +468,7 @@ object MediaArtworkGenerator {
             textSize = 10.5f * sp
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             textAlign = Paint.Align.CENTER
+            setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
         }
         canvas.drawText(
             "Come back tomorrow for your next cards.",
@@ -468,6 +483,7 @@ object MediaArtworkGenerator {
                 textSize = 9.5f * sp
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 textAlign = Paint.Align.CENTER
+                setShadowLayer(4f * baseDensity, 0f, 1.5f * baseDensity, Color.parseColor("#99000000"))
             }
             canvas.drawText(
                 "• Tap Open Anki to Study Ahead •",
@@ -480,7 +496,7 @@ object MediaArtworkGenerator {
 
     private fun drawBackground(context: Context, prefs: PreferencesManager, canvas: Canvas, width: Int, height: Int) {
         val bgType = prefs.backgroundType
-        val radius = prefs.blurRadius
+        val radius = prefs.blurRadius.coerceAtLeast(1)
         val dimAlpha = (prefs.dimOpacity * 255).toInt().coerceIn(0, 255)
         val artworkAlpha = (prefs.artworkOpacity * 255).toInt().coerceIn(0, 255)
         val dstRect = RectF(0f, 0f, width.toFloat(), height.toFloat())
@@ -512,7 +528,7 @@ object MediaArtworkGenerator {
                 val preset = ImageBlurUtil.createPresetBackground(bgType, width, height)
                 ImageBlurUtil.fastBlur(preset, 0.5f, radius)
             }
-            else -> null
+            else -> null // "transparent" / "none" has no background picture
         }
 
         if (bitmapToDraw != null) {
@@ -546,6 +562,7 @@ object MediaArtworkGenerator {
         }
         canvas.drawBitmap(bitmap, srcRect, dstRect, bmpPaint)
 
+        // Dark dimming overlay to guarantee high contrast and UI legibility
         if (dimAlpha > 0) {
             val dimPaint = Paint().apply {
                 color = Color.argb(dimAlpha, 0, 0, 0)

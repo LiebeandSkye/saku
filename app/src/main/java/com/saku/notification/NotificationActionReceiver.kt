@@ -3,87 +3,60 @@ package com.saku.notification
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.glance.appwidget.updateAll
-import com.saku.anki.AnkiDroidClient
-import com.saku.data.ReviewEase
-import com.saku.data.SakuPreferences
-import com.saku.widget.SakuGlanceWidget
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import com.saku.data.CardSessionManager
+import com.saku.data.PreferencesManager
 
 class NotificationActionReceiver : BroadcastReceiver() {
 
-    companion object {
-        const val ACTION_SHOW_ANSWER = "com.saku.action.SHOW_ANSWER"
-        const val ACTION_NEXT = "com.saku.action.NEXT_CARD"
-        const val ACTION_GRADE = "com.saku.action.GRADE_CARD"
-        const val EXTRA_EASE = "extra_ease"
-    }
-
-    override fun onReceive(context: Context, intent: Intent?) {
-        if (intent == null) return
-
-        val prefs = SakuPreferences(context)
-        val ankiClient = AnkiDroidClient(context)
-        val pendingResult = goAsync()
-
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                when (intent.action) {
-                    ACTION_SHOW_ANSWER -> {
-                        prefs.isAnswerRevealed = true
-                        val currentCard = prefs.getActiveCard()
-                        LockScreenCardService.updateNotification(context, currentCard, showAnswer = true)
-                        try {
-                            SakuGlanceWidget().updateAll(context)
-                        } catch (e: Exception) {
-                            // Widget update safety
-                        }
-                    }
-                    ACTION_GRADE -> {
-                        val currentCard = prefs.getActiveCard()
-                        val ease = intent.getIntExtra(EXTRA_EASE, ReviewEase.GOOD.value)
-                        if (currentCard.noteId > 0) {
-                            ankiClient.answerCard(currentCard, ease)
-                        }
-                        loadNextCardAndUpdate(context, prefs, ankiClient)
-                    }
-                    ACTION_NEXT -> {
-                        loadNextCardAndUpdate(context, prefs, ankiClient)
-                    }
-                }
-            } finally {
-                pendingResult.finish()
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.action) {
+            ACTION_REVEAL, ACTION_SHOW_ANSWER -> {
+                CardSessionManager.toggleReveal(context)
+            }
+            ACTION_GRADE_AGAIN -> {
+                CardSessionManager.gradeCard(context, 1)
+            }
+            ACTION_GRADE_GOOD -> {
+                CardSessionManager.gradeCard(context, 3)
+            }
+            ACTION_GRADE -> {
+                val ease = intent.getIntExtra(EXTRA_EASE, 3)
+                CardSessionManager.gradeCard(context, ease)
+            }
+            ACTION_SUSPEND -> {
+                CardSessionManager.suspendCurrentCard(context)
+            }
+            ACTION_UNDO -> {
+                CardSessionManager.undoLastReview(context)
+            }
+            ACTION_SNOOZE -> {
+                val prefs = PreferencesManager(context)
+                val durationMs = prefs.snoozeDurationMinutes * 60 * 1000L
+                prefs.snoozeUntil = System.currentTimeMillis() + durationMs
+                LockScreenCardService.updateNotification(context)
+            }
+            ACTION_UNSNOOZE -> {
+                val prefs = PreferencesManager(context)
+                prefs.snoozeUntil = 0L
+                LockScreenCardService.updateNotification(context)
+            }
+            ACTION_DISMISSED -> {
+                LockScreenCardService.updateNotification(context)
             }
         }
     }
 
-    private suspend fun loadNextCardAndUpdate(
-        context: Context,
-        prefs: SakuPreferences,
-        ankiClient: AnkiDroidClient
-    ) {
-        val currentCard = prefs.getActiveCard()
-        val dueCards = ankiClient.getDueCards(prefs.selectedDeckId, limit = 20)
-        val nextCard = dueCards.firstOrNull { it.cardId != currentCard.cardId }
-            ?: dueCards.firstOrNull()
-            ?: ankiClient.getSamplePreviewCard()
-
-        prefs.saveActiveCard(nextCard)
-        prefs.isAnswerRevealed = false
-
-        // Update Lock Screen Notification (in front / unrevealed state)
-        if (prefs.isLockScreenCardEnabled) {
-            LockScreenCardService.updateNotification(context, nextCard, showAnswer = false)
-        }
-
-        // Update Home Screen Glance Widget
-        try {
-            SakuGlanceWidget().updateAll(context)
-        } catch (e: Exception) {
-            // Glance update exception handling
-        }
+    companion object {
+        const val ACTION_REVEAL = "com.saku.action.REVEAL"
+        const val ACTION_SHOW_ANSWER = "com.saku.action.SHOW_ANSWER"
+        const val ACTION_GRADE_AGAIN = "com.saku.action.GRADE_AGAIN"
+        const val ACTION_GRADE_GOOD = "com.saku.action.GRADE_GOOD"
+        const val ACTION_GRADE = "com.saku.action.GRADE"
+        const val ACTION_SUSPEND = "com.saku.action.SUSPEND"
+        const val ACTION_UNDO = "com.saku.action.UNDO"
+        const val ACTION_SNOOZE = "com.saku.action.SNOOZE"
+        const val ACTION_UNSNOOZE = "com.saku.action.UNSNOOZE"
+        const val ACTION_DISMISSED = "com.saku.action.DISMISSED"
+        const val EXTRA_EASE = "extra_ease"
     }
 }
-

@@ -66,17 +66,11 @@
         <!-- Lock Screen & Notification Action Receiver -->
         <receiver
             android:name=".notification.NotificationActionReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.saku.action.SHOW_ANSWER" />
-                <action android:name="com.saku.action.NEXT_CARD" />
-                <action android:name="com.saku.action.GRADE_CARD" />
-            </intent-filter>
-        </receiver>
+            android:exported="false" />
 
-        <!-- Home Screen Glance AppWidget Receiver -->
+        <!-- Home Screen AppWidget Receiver -->
         <receiver
-            android:name=".widget.SakuWidgetReceiver"
+            android:name=".widget.SakuWidgetProvider"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

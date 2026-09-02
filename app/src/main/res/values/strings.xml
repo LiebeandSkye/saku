@@ -1,4 +1,28 @@
 <resources>
     <string name="app_name">Saku</string>
-    <string name="widget_description">Minimal Spaced Repetition Japanese Flashcards</string>
+    <string name="widget_description">Minimal Japanese Flashcards with Custom Gallery Art</string>
+    <string name="notification_channel_name">Saku Due Cards</string>
+    <string name="notification_channel_description">Shows your active Japanese flashcard on Lock Screen &amp; AOD</string>
+    <string name="all_caught_up">🎉 All caught up! No cards due.</string>
+    <string name="cards_due">You have %d cards due</string>
+    <string name="review_now">Review Now</string>
+    <string name="snooze">Snooze 1hr</string>
+    <string name="show_answer">Show Answer</string>
+    <string name="close">Close</string>
+    <string name="cards_remaining">%d cards left</string>
+    <string name="again">Again</string>
+    <string name="hard">Hard</string>
+    <string name="good">Good</string>
+    <string name="easy">Easy</string>
+    <string name="ankidroid_not_installed">Install AnkiDroid to get started</string>
+    <string name="api_permission_needed">Tap to grant AnkiDroid API permission</string>
+    <string name="service_enabled">Lock screen card service is running</string>
+    <string name="service_disabled">Lock screen card service is stopped</string>
+    <string name="settings_title">Saku Settings</string>
+    <string name="select_decks">Select Decks</string>
+    <string name="update_frequency">Update Frequency</string>
+    <string name="snooze_duration">Snooze Duration</string>
+    <string name="ankidroid_status">AnkiDroid Status</string>
+    <string name="connected">Connected</string>
+    <string name="not_connected">Not Connected</string>
 </resources>

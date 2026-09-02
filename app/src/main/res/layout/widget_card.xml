@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:padding="8dp">
+
+    <ImageView
+        android:id="@+id/iv_widget_artwork"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="centerCrop"
+        android:adjustViewBounds="false" />
+
+    <LinearLayout
+        android:id="@+id/widget_button_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="6dp">
+
+        <TextView
+            android:id="@+id/btn_widget_again"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/btn_again_bg"
+            android:gravity="center"
+            android:text="Again"
+            android:textColor="#EF5350"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_widget_reveal"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1.2"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/btn_reveal_bg"
+            android:gravity="center"
+            android:text="Reveal"
+            android:textColor="#90CAF9"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_widget_good"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/btn_good_bg"
+            android:gravity="center"
+            android:text="Good"
+            android:textColor="#66BB6A"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btn_widget_open"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="0.9"
+            android:background="@drawable/btn_action_bg"
+            android:gravity="center"
+            android:text="Anki"
+            android:textColor="#E2E8F0"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+</LinearLayout>

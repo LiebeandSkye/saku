@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Saku</string>
+    <string name="app_name">アンキ</string>
     <string name="widget_description">Minimal Japanese Flashcards with Custom Gallery Art</string>
     <string name="notification_channel_name">Saku Due Cards</string>
     <string name="notification_channel_description">Shows your active Japanese flashcard on Lock Screen &amp; AOD</string>

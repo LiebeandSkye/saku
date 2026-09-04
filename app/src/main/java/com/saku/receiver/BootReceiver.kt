@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import com.saku.data.PreferencesManager
 import com.saku.notification.LockScreenCardService
+import com.saku.widget.SakuWidgetProvider
 import com.saku.worker.DueCountWorker
 
 class BootReceiver : BroadcastReceiver() {
@@ -20,6 +21,7 @@ class BootReceiver : BroadcastReceiver() {
                 LockScreenCardService.startService(context)
                 DueCountWorker.schedule(context, prefs.updateIntervalMinutes.toLong())
             }
+            SakuWidgetProvider.updateAllWidgets(context)
         }
     }
 }

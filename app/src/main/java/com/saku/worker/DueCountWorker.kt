@@ -9,6 +9,7 @@ import androidx.work.WorkerParameters
 import com.saku.data.CardSessionManager
 import com.saku.data.PreferencesManager
 import com.saku.notification.LockScreenCardService
+import com.saku.widget.SakuWidgetProvider
 import java.util.concurrent.TimeUnit
 
 class DueCountWorker(
@@ -23,6 +24,7 @@ class DueCountWorker(
         if (prefs.isSnoozed) return Result.success()
 
         LockScreenCardService.updateNotification(applicationContext)
+        SakuWidgetProvider.updateAllWidgets(applicationContext)
         return Result.success()
     }
 

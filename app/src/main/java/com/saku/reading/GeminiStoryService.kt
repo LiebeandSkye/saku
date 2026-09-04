@@ -2,6 +2,7 @@ package com.saku.reading
 
 import com.saku.data.AnkiVocabularyItem
 import com.saku.data.GeneratedStory
+import com.saku.data.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -28,7 +29,7 @@ class GeminiStoryService {
         apiKey: String,
         jlptLevel: String,
         vocabularyList: List<AnkiVocabularyItem>,
-        preferredModel: String = "gemini-2.5-flash"
+        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL
     ): Result<GeneratedStory> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("Gemini API key is required"))
@@ -52,8 +53,14 @@ class GeminiStoryService {
 
         val prompt = buildJlptStoryPrompt(jlptLevel, wordPromptList)
 
-        // Try preferred model first, then fallback to gemini-1.5-flash
-        val modelsToTry = listOf(preferredModel, "gemini-2.5-flash", "gemini-1.5-flash").distinct()
+        // Try preferred model first, then fallback to other modern Gemini 3.x Flash models
+        val modelsToTry = listOf(
+            preferredModel,
+            PreferencesManager.DEFAULT_GEMINI_MODEL,
+            "gemini-3.7-flash",
+            "gemini-3.6-flash",
+            "gemini-3.5-flash"
+        ).distinct()
 
         var lastError: Exception? = null
         for (model in modelsToTry) {

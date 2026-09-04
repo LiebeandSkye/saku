@@ -5,9 +5,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.net.Uri
 import android.text.Layout
@@ -16,6 +18,7 @@ import android.text.TextPaint
 import com.saku.R
 import com.saku.data.CardInfo
 import com.saku.data.PreferencesManager
+import java.io.File
 import kotlin.math.max
 import kotlin.math.min
 
@@ -314,7 +317,17 @@ object MediaArtworkGenerator {
         if (sentMeaningH > 0f) totalContentH += 6f * baseDensity + sentMeaningH
         if (imgDrawHeight > 0f) totalContentH += 8f * baseDensity + imgDrawHeight
 
-        val startY = contentTop + max(0f, (availableH - totalContentH) / 2f)
+        val shouldDrawSentMeaning = sentMeaningH > 0f && (totalContentH <= availableH || availableH > 180f * baseDensity)
+        val shouldDrawImage = imageBitmap != null && imgDrawHeight > 0f && (totalContentH <= availableH || availableH > 220f * baseDensity)
+
+        var effectiveContentH = vocabH
+        if (meaningH > 0f) effectiveContentH += 6f * baseDensity + meaningH
+        effectiveContentH += dividerH
+        effectiveContentH += sentenceH
+        if (shouldDrawSentMeaning) effectiveContentH += 6f * baseDensity + sentMeaningH
+        if (shouldDrawImage) effectiveContentH += 8f * baseDensity + imgDrawHeight
+
+        val startY = contentTop + max(0f, (availableH - effectiveContentH) / 2f)
         var curY = startY
 
         if (vocabRubyBmp != null) {
@@ -358,16 +371,16 @@ object MediaArtworkGenerator {
             curY += sentenceH
         }
 
-        if (sentMeaningLayout != null) {
+        if (shouldDrawSentMeaning) {
             curY += 6f * baseDensity
             canvas.save()
             canvas.translate(width * 0.08f, curY)
-            sentMeaningLayout.draw(canvas)
+            sentMeaningLayout?.draw(canvas)
             canvas.restore()
             curY += sentMeaningH
         }
 
-        if (imageBitmap != null && imgDrawHeight > 0f) {
+        if (shouldDrawImage && imageBitmap != null) {
             curY += 8f * baseDensity
             val imgLeft = (width - imgDrawWidth) / 2f
             val dstRect = RectF(imgLeft, curY, imgLeft + imgDrawWidth, curY + imgDrawHeight)
@@ -496,7 +509,7 @@ object MediaArtworkGenerator {
 
     private fun drawBackground(context: Context, prefs: PreferencesManager, canvas: Canvas, width: Int, height: Int) {
         val bgType = prefs.backgroundType
-        val radius = prefs.blurRadius.coerceAtLeast(1)
+        val radius = prefs.blurRadius.coerceAtLeast(0)
         val dimAlpha = (prefs.dimOpacity * 255).toInt().coerceIn(0, 255)
         val artworkAlpha = (prefs.artworkOpacity * 255).toInt().coerceIn(0, 255)
         val dstRect = RectF(0f, 0f, width.toFloat(), height.toFloat())
@@ -505,34 +518,157 @@ object MediaArtworkGenerator {
             "anki_lock", "default" -> {
                 try {
                     val original = BitmapFactory.decodeResource(context.resources, R.drawable.anki_lock)
-                    if (original != null && radius > 0) ImageBlurUtil.fastBlur(original, 0.25f, radius) else original
-                } catch (e: Exception) {
+                    if (original != null && radius > 0) {
+                        val blurred = ImageBlurUtil.fastBlur(original, 0.25f, radius)
+                        if (blurred != original) original.recycle()
+                        blurred
+                    } else original
+                } catch (e: Throwable) {
                     null
                 }
             }
             "custom" -> {
                 val uriStr = prefs.customImageUri
                 if (!uriStr.isNullOrBlank()) {
-                    try {
-                        val uri = Uri.parse(uriStr)
-                        context.contentResolver.openInputStream(uri)?.use { stream ->
-                            val original = BitmapFactory.decodeStream(stream)
-                            if (original != null && radius > 0) ImageBlurUtil.fastBlur(original, 0.25f, radius) else original
-                        }
-                    } catch (e: Exception) {
-                        null
-                    }
+                    loadCustomBackgroundBitmap(context, uriStr, width, height, radius)
                 } else null
             }
             "dark_blur", "sunset" -> {
-                val preset = ImageBlurUtil.createPresetBackground(bgType, width, height)
-                ImageBlurUtil.fastBlur(preset, 0.5f, radius)
+                try {
+                    val preset = ImageBlurUtil.createPresetBackground(bgType, width, height)
+                    if (radius > 0) {
+                        val blurred = ImageBlurUtil.fastBlur(preset, 0.25f, radius)
+                        if (blurred != preset) {
+                            preset.recycle()
+                        }
+                        blurred
+                    } else {
+                        preset
+                    }
+                } catch (t: Throwable) {
+                    null
+                }
             }
             else -> null // "transparent" / "none" has no background picture
         }
 
         if (bitmapToDraw != null) {
             drawCroppedBitmapWithOverlay(canvas, bitmapToDraw, artworkAlpha, dimAlpha, dstRect)
+            // Recycle temporary generated bitmaps to prevent memory leaks
+            if (bgType == "dark_blur" || bgType == "sunset" || bgType == "custom" || bgType == "anki_lock") {
+                try {
+                    bitmapToDraw.recycle()
+                } catch (e: Exception) {}
+            }
+        } else if (bgType == "dark_blur" || bgType == "sunset") {
+            drawPresetGradientDirectly(canvas, bgType, width, height, dimAlpha)
+        }
+    }
+
+    private fun loadCustomBackgroundBitmap(
+        context: Context,
+        uriOrPath: String,
+        targetWidth: Int,
+        targetHeight: Int,
+        blurRadius: Int
+    ): Bitmap? {
+        return try {
+            val maxTargetDim = max(targetWidth, targetHeight).coerceAtLeast(300)
+
+            val openStream: () -> java.io.InputStream? = {
+                if (uriOrPath.startsWith("/")) {
+                    val f = File(uriOrPath)
+                    if (f.exists()) f.inputStream() else null
+                } else {
+                    val uri = Uri.parse(uriOrPath)
+                    if (uri.scheme == "file") {
+                        val f = File(uri.path ?: "")
+                        if (f.exists()) f.inputStream() else null
+                    } else {
+                        context.contentResolver.openInputStream(uri)
+                    }
+                }
+            }
+
+            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            openStream()?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, boundsOptions)
+            } ?: return null
+
+            if (boundsOptions.outWidth <= 0 || boundsOptions.outHeight <= 0) return null
+
+            var inSampleSize = 1
+            while (boundsOptions.outWidth / (inSampleSize * 2) >= maxTargetDim &&
+                boundsOptions.outHeight / (inSampleSize * 2) >= maxTargetDim
+            ) {
+                inSampleSize *= 2
+            }
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+
+            val decoded = openStream()?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOptions)
+            } ?: return null
+
+            if (blurRadius > 0) {
+                val blurred = ImageBlurUtil.fastBlur(decoded, 0.25f, blurRadius)
+                if (blurred != decoded) {
+                    decoded.recycle()
+                }
+                blurred
+            } else {
+                decoded
+            }
+        } catch (t: Throwable) {
+            t.printStackTrace()
+            null
+        }
+    }
+
+    private fun drawPresetGradientDirectly(canvas: Canvas, type: String, width: Int, height: Int, dimAlpha: Int) {
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val w = width.toFloat().coerceAtLeast(1f)
+        val h = height.toFloat().coerceAtLeast(1f)
+
+        when (type) {
+            "dark_blur" -> {
+                paint.shader = LinearGradient(
+                    0f, 0f, w, h,
+                    intArrayOf(
+                        Color.parseColor("#1A1F2C"),
+                        Color.parseColor("#0F172A"),
+                        Color.parseColor("#090D16")
+                    ),
+                    floatArrayOf(0f, 0.5f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            "sunset" -> {
+                paint.shader = LinearGradient(
+                    0f, 0f, 0f, h,
+                    intArrayOf(
+                        Color.parseColor("#3B1D54"),
+                        Color.parseColor("#2C1635"),
+                        Color.parseColor("#150D24")
+                    ),
+                    floatArrayOf(0f, 0.5f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+            }
+            else -> {
+                paint.color = Color.parseColor("#0F172A")
+            }
+        }
+        canvas.drawRect(0f, 0f, w, h, paint)
+
+        if (dimAlpha > 0) {
+            val dimPaint = Paint().apply {
+                color = Color.argb(dimAlpha, 0, 0, 0)
+            }
+            canvas.drawRect(0f, 0f, w, h, dimPaint)
         }
     }
 
@@ -543,10 +679,14 @@ object MediaArtworkGenerator {
         dimAlpha: Int,
         dstRect: RectF
     ) {
+        if (bitmap.isRecycled) return
+
         val bmpW = bitmap.width.toFloat()
         val bmpH = bitmap.height.toFloat()
         val targetW = dstRect.width()
         val targetH = dstRect.height()
+
+        if (bmpW <= 0f || bmpH <= 0f || targetW <= 0f || targetH <= 0f) return
 
         val scale = max(targetW / bmpW, targetH / bmpH)
         val scaledW = bmpW * scale
@@ -556,7 +696,12 @@ object MediaArtworkGenerator {
         val cropW = min(bmpW - cropX, targetW / scale)
         val cropH = min(bmpH - cropY, targetH / scale)
 
-        val srcRect = Rect(cropX.toInt(), cropY.toInt(), (cropX + cropW).toInt(), (cropY + cropH).toInt())
+        val srcLeft = cropX.toInt().coerceIn(0, (bitmap.width - 1).coerceAtLeast(0))
+        val srcTop = cropY.toInt().coerceIn(0, (bitmap.height - 1).coerceAtLeast(0))
+        val srcRight = (cropX + cropW).toInt().coerceIn(srcLeft + 1, bitmap.width)
+        val srcBottom = (cropY + cropH).toInt().coerceIn(srcTop + 1, bitmap.height)
+
+        val srcRect = Rect(srcLeft, srcTop, srcRight, srcBottom)
         val bmpPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply {
             alpha = artworkAlpha
         }

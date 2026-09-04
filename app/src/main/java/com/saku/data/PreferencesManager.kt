@@ -67,8 +67,15 @@ class PreferencesManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_READING_JLPT_LEVEL, value).apply()
 
     var geminiModel: String
-        get() = prefs.getString(KEY_GEMINI_MODEL, "gemini-2.5-flash") ?: "gemini-2.5-flash"
-        set(value) = prefs.edit().putString(KEY_GEMINI_MODEL, value).apply()
+        get() {
+            val saved = prefs.getString(KEY_GEMINI_MODEL, null)
+            return if (saved.isNullOrBlank() || saved.startsWith("gemini-1.") || saved.startsWith("gemini-2.")) {
+                DEFAULT_GEMINI_MODEL
+            } else {
+                saved
+            }
+        }
+        set(value) = prefs.edit().putString(KEY_GEMINI_MODEL, value.trim()).apply()
 
     var hasAcceptedInternetDisclosure: Boolean
         get() = prefs.getBoolean(KEY_INTERNET_DISCLOSURE, false)
@@ -100,6 +107,31 @@ class PreferencesManager(context: Context) {
     }
 
     companion object {
+        const val DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+
+        val AVAILABLE_GEMINI_MODELS = listOf(
+            GeminiModelOption("gemini-3.8-flash", "Gemini 3.8 Flash", "Latest & Recommended"),
+            GeminiModelOption("gemini-3.7-flash", "Gemini 3.7 Flash", "Fast & Intelligent"),
+            GeminiModelOption("gemini-3.6-flash", "Gemini 3.6 Flash", "Stable Flash"),
+            GeminiModelOption("gemini-3.5-flash", "Gemini 3.5 Flash", "Balanced"),
+            GeminiModelOption("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite", "Ultra-light Speed")
+        )
+
+        fun getModelDisplayName(modelId: String): String {
+            return AVAILABLE_GEMINI_MODELS.firstOrNull { it.id.equals(modelId, ignoreCase = true) }?.name ?: modelId
+        }
+
+        fun getShortModelLabel(modelId: String): String {
+            return when (modelId.lowercase()) {
+                "gemini-3.8-flash" -> "3.8 Flash"
+                "gemini-3.7-flash" -> "3.7 Flash"
+                "gemini-3.6-flash" -> "3.6 Flash"
+                "gemini-3.5-flash" -> "3.5 Flash"
+                "gemini-3.5-flash-lite" -> "3.5 Lite"
+                else -> modelId.removePrefix("gemini-")
+            }
+        }
+
         private const val KEY_SERVICE_ENABLED = "service_enabled"
         private const val KEY_SELECTED_DECKS = "selected_decks"
         private const val KEY_UPDATE_INTERVAL = "update_interval"
@@ -118,3 +150,9 @@ class PreferencesManager(context: Context) {
         private const val KEY_INTERNET_DISCLOSURE = "internet_disclosure_accepted"
     }
 }
+
+data class GeminiModelOption(
+    val id: String,
+    val name: String,
+    val tag: String
+)

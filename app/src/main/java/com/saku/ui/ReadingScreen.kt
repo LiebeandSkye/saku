@@ -107,8 +107,10 @@ fun ReadingScreen(
     // State
     var apiKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
     var selectedJlpt by remember { mutableStateOf(prefs.readingJlptLevel) }
+    var selectedModel by remember { mutableStateOf(prefs.geminiModel) }
     var showJlptMenu by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
+    var showModelDialog by remember { mutableStateOf(false) }
 
     var vocabSummary by remember { mutableStateOf<ReadingVocabularySummary?>(null) }
     var isLoadingVocab by remember { mutableStateOf(false) }
@@ -159,7 +161,7 @@ fun ReadingScreen(
                 apiKey = apiKey,
                 jlptLevel = selectedJlpt,
                 vocabularyList = words,
-                preferredModel = prefs.geminiModel
+                preferredModel = selectedModel
             )
             result.onSuccess { story ->
                 currentStory = story
@@ -180,120 +182,173 @@ fun ReadingScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Top Control Bar: JLPT Dropdown & Key Settings
+        // 1. Top Control Bar: JLPT Dropdown, Model & Key Settings
         Card(
             shape = RoundedCornerShape(18.dp),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF141414)),
             border = BorderStroke(1.dp, Color(0xFF262626))
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
             ) {
-                // JLPT Level Selector Dropdown
-                Box {
-                    Surface(
-                        onClick = { showJlptMenu = true },
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF1E293B),
-                        border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // JLPT Level Selector Dropdown
+                    Box {
+                        Surface(
+                            onClick = { showJlptMenu = true },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1E293B),
+                            border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f))
                         ) {
-                            Icon(
-                                Icons.Filled.School,
-                                contentDescription = null,
-                                tint = Color(0xFF38BDF8),
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Level: $selectedJlpt",
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                fontSize = 14.sp
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                Icons.Filled.ArrowDropDown,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.School,
+                                    contentDescription = null,
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Level: $selectedJlpt",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    fontSize = 14.sp
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Filled.ArrowDropDown,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = showJlptMenu,
+                            onDismissRequest = { showJlptMenu = false }
+                        ) {
+                            jlptLevels.forEach { level ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "$level ${getJlptLabel(level)}",
+                                            fontWeight = if (level == selectedJlpt) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (level == selectedJlpt) Color(0xFF38BDF8) else Color.White
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedJlpt = level
+                                        prefs.readingJlptLevel = level
+                                        showJlptMenu = false
+                                    }
+                                )
+                            }
                         }
                     }
 
-                    DropdownMenu(
-                        expanded = showJlptMenu,
-                        onDismissRequest = { showJlptMenu = false }
-                    ) {
-                        jlptLevels.forEach { level ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = "$level ${getJlptLabel(level)}",
-                                        fontWeight = if (level == selectedJlpt) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (level == selectedJlpt) Color(0xFF38BDF8) else Color.White
-                                    )
-                                },
-                                onClick = {
-                                    selectedJlpt = level
-                                    prefs.readingJlptLevel = level
-                                    showJlptMenu = false
-                                }
+                    // API Key & History Action Buttons
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // History Button
+                        IconButton(
+                            onClick = {
+                                savedStories = historyManager.getStories()
+                                showHistorySheet = true
+                            }
+                        ) {
+                            Icon(
+                                Icons.Filled.History,
+                                contentDescription = "Reading History",
+                                tint = if (savedStories.isNotEmpty()) Color(0xFF38BDF8) else Color(0xFF888888)
                             )
+                        }
+
+                        // Key Status / Edit Button
+                        Surface(
+                            onClick = { showApiKeyDialog = true },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (apiKey.isNotBlank()) Color(0xFF162520) else Color(0xFF2D1B1B),
+                            border = BorderStroke(
+                                1.dp,
+                                if (apiKey.isNotBlank()) Color(0xFF10B981).copy(alpha = 0.5f)
+                                else Color(0xFFEF4444).copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Filled.Key,
+                                    contentDescription = null,
+                                    tint = if (apiKey.isNotBlank()) Color(0xFF10B981) else Color(0xFFEF4444),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (apiKey.isNotBlank()) "Key Active" else "Setup Key",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (apiKey.isNotBlank()) Color(0xFF10B981) else Color(0xFFEF4444)
+                                )
+                            }
                         }
                     }
                 }
 
-                // API Key & History Action Buttons
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // History Button
-                    IconButton(
-                        onClick = {
-                            savedStories = historyManager.getStories()
-                            showHistorySheet = true
-                        }
-                    ) {
-                        Icon(
-                            Icons.Filled.History,
-                            contentDescription = "Reading History",
-                            tint = if (savedStories.isNotEmpty()) Color(0xFF38BDF8) else Color(0xFF888888)
-                        )
-                    }
+                Spacer(modifier = Modifier.height(10.dp))
 
-                    // Key Status / Edit Button
-                    Surface(
-                        onClick = { showApiKeyDialog = true },
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (apiKey.isNotBlank()) Color(0xFF162520) else Color(0xFF2D1B1B),
-                        border = BorderStroke(
-                            1.dp,
-                            if (apiKey.isNotBlank()) Color(0xFF10B981).copy(alpha = 0.5f)
-                            else Color(0xFFEF4444).copy(alpha = 0.5f)
-                        )
+                // Active Model Bar
+                Surface(
+                    onClick = { showModelDialog = true },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF1E1829),
+                    border = BorderStroke(1.dp, Color(0xFFA855F7).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
-                                Icons.Filled.Key,
+                                Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                tint = if (apiKey.isNotBlank()) Color(0xFF10B981) else Color(0xFFEF4444),
+                                tint = Color(0xFFA855F7),
                                 modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (apiKey.isNotBlank()) "Key Active" else "Setup Key",
+                                text = "Model: ${PreferencesManager.getModelDisplayName(selectedModel)}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = if (apiKey.isNotBlank()) Color(0xFF10B981) else Color(0xFFEF4444)
+                                color = Color(0xFFE2E8F0)
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Switch",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFD8B4FE)
+                            )
+                            Icon(
+                                Icons.Filled.ArrowDropDown,
+                                contentDescription = null,
+                                tint = Color(0xFFD8B4FE),
+                                modifier = Modifier.size(16.dp)
                             )
                         }
                     }
@@ -795,6 +850,20 @@ fun ReadingScreen(
                 Toast.makeText(context, "Gemini API key saved!", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showApiKeyDialog = false }
+        )
+    }
+
+    // Gemini Model Selection Dialog
+    if (showModelDialog) {
+        GeminiModelDialog(
+            currentModel = selectedModel,
+            onSave = { newModel ->
+                selectedModel = newModel
+                prefs.geminiModel = newModel
+                showModelDialog = false
+                Toast.makeText(context, "Gemini model set to $newModel", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showModelDialog = false }
         )
     }
 

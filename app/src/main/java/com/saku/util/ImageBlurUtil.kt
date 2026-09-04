@@ -12,11 +12,17 @@ import kotlin.math.min
 object ImageBlurUtil {
 
     fun fastBlur(sentBitmap: Bitmap, scale: Float = 0.25f, radius: Int = 20): Bitmap {
+        if (sentBitmap.isRecycled) return sentBitmap
+        if (radius < 1) return sentBitmap
+
         val width = max(1, (sentBitmap.width * scale).toInt())
         val height = max(1, (sentBitmap.height * scale).toInt())
 
         val scaledBitmap = Bitmap.createScaledBitmap(sentBitmap, width, height, true)
         val bitmap = scaledBitmap.copy(Bitmap.Config.ARGB_8888, true)
+        if (scaledBitmap != bitmap) {
+            scaledBitmap.recycle()
+        }
 
         if (radius < 1) {
             return bitmap

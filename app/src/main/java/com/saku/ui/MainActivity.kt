@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
@@ -12,6 +13,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import java.io.File
+import java.io.FileOutputStream
+import kotlin.math.max
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -98,6 +102,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -157,24 +162,76 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            try {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            } catch (e: Exception) {
+            val savedPath = saveCustomImageToInternalStorage(uri)
+            if (savedPath != null) {
+                prefs.addSavedImageUri(savedPath)
+                prefs.customImageUri = savedPath
+                prefs.backgroundType = "custom"
+
+                savedImageUrisState = prefs.savedImageUris
+                customImageUriState = savedPath
+                backgroundTypeState = "custom"
+
+                CardSessionManager.notifyAllSurfaces(this)
+                Toast.makeText(this, "Custom wallpaper added!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
             }
-            val uriStr = uri.toString()
-            prefs.addSavedImageUri(uriStr)
-            prefs.customImageUri = uriStr
-            prefs.backgroundType = "custom"
+        }
+    }
 
-            savedImageUrisState = prefs.savedImageUris
-            customImageUriState = uriStr
-            backgroundTypeState = "custom"
+    private fun saveCustomImageToInternalStorage(uri: Uri): String? {
+        return try {
+            val backgroundsDir = File(filesDir, "custom_backgrounds").apply { mkdirs() }
+            val destFile = File(backgroundsDir, "bg_${System.currentTimeMillis()}.jpg")
 
-            CardSessionManager.notifyAllSurfaces(this)
-            Toast.makeText(this, "Custom wallpaper added!", Toast.LENGTH_SHORT).show()
+            // First read image bounds without loading into memory
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            }
+
+            val maxDimension = 1280
+            var inSampleSize = 1
+            if (options.outWidth > maxDimension || options.outHeight > maxDimension) {
+                val halfWidth = options.outWidth / 2
+                val halfHeight = options.outHeight / 2
+                while ((halfWidth / inSampleSize) >= maxDimension && (halfHeight / inSampleSize) >= maxDimension) {
+                    inSampleSize *= 2
+                }
+            }
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+
+            val decodedBitmap = contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOptions)
+            } ?: return null
+
+            val finalBitmap = if (decodedBitmap.width > maxDimension || decodedBitmap.height > maxDimension) {
+                val ratio = maxDimension.toFloat() / max(decodedBitmap.width, decodedBitmap.height)
+                val targetW = (decodedBitmap.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (decodedBitmap.height * ratio).toInt().coerceAtLeast(1)
+                val scaled = Bitmap.createScaledBitmap(decodedBitmap, targetW, targetH, true)
+                if (scaled != decodedBitmap) {
+                    decodedBitmap.recycle()
+                }
+                scaled
+            } else {
+                decodedBitmap
+            }
+
+            FileOutputStream(destFile).use { out ->
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
+            }
+            finalBitmap.recycle()
+
+            destFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 
@@ -520,6 +577,13 @@ class MainActivity : ComponentActivity() {
                     CardSessionManager.notifyAllSurfaces(this@MainActivity)
                 },
                 onRemoveSavedUri = { uriStr ->
+                    try {
+                        val file = File(uriStr)
+                        if (file.exists() && file.absolutePath.contains("custom_backgrounds")) {
+                            file.delete()
+                        }
+                    } catch (e: Exception) {
+                    }
                     prefs.removeSavedImageUri(uriStr)
                     savedImageUrisState = prefs.savedImageUris
                     customImageUriState = prefs.customImageUri
@@ -688,14 +752,23 @@ class MainActivity : ComponentActivity() {
             dimOpacityState,
             artworkOpacityState
         ) {
-            MediaArtworkGenerator.generateArtwork(
-                context = context,
-                card = card,
-                stats = stats,
-                isRevealed = isRevealed,
-                imageBitmap = imageBitmap,
-                showBottomControls = false
-            )
+            try {
+                MediaArtworkGenerator.generateArtwork(
+                    context = context,
+                    card = card,
+                    stats = stats,
+                    isRevealed = isRevealed,
+                    imageBitmap = imageBitmap,
+                    showBottomControls = false,
+                    targetWidth = 512,
+                    targetHeight = 512
+                )
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888).apply {
+                    eraseColor(android.graphics.Color.parseColor("#0F172A"))
+                }
+            }
         }
 
         Card(
@@ -1276,7 +1349,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun ModernGeminiSettingsCard() {
         var showDialog by remember { mutableStateOf(false) }
+        var showModelDialog by remember { mutableStateOf(false) }
         var currentKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
+        var currentModel by remember { mutableStateOf(prefs.geminiModel) }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1322,10 +1397,74 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Configure API key used to craft Japanese reading stories from your studied and suspended Anki flashcards.",
+                    text = "Configure API key and AI model used to craft Japanese reading stories from your studied and suspended Anki flashcards.",
                     fontSize = 13.sp,
                     color = Color(0xFF94A3B8)
                 )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Active Model Selection Tile
+                Text(
+                    text = "ACTIVE MODEL",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF888888),
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    onClick = { showModelDialog = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF1E1829),
+                    border = BorderStroke(1.dp, Color(0xFFA855F7).copy(alpha = 0.45f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color(0xFFA855F7),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = PreferencesManager.getModelDisplayName(currentModel),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = currentModel,
+                                    fontSize = 11.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFFC084FC)
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF3B1E5A)
+                        ) {
+                            Text(
+                                text = "Switch",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFD8B4FE),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
                 Row(
@@ -1345,6 +1484,20 @@ class MainActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(if (currentKey.isNotBlank()) "Change API Key" else "Set API Key")
                     }
+
+                    Button(
+                        onClick = { showModelDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2E1F42),
+                            contentColor = Color(0xFFD8B4FE)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFA855F7))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Pick Model")
+                    }
                 }
             }
         }
@@ -1359,6 +1512,19 @@ class MainActivity : ComponentActivity() {
                     Toast.makeText(this@MainActivity, "Gemini API key saved!", Toast.LENGTH_SHORT).show()
                 },
                 onDismiss = { showDialog = false }
+            )
+        }
+
+        if (showModelDialog) {
+            GeminiModelDialog(
+                currentModel = currentModel,
+                onSave = { newModel ->
+                    currentModel = newModel
+                    prefs.geminiModel = newModel
+                    showModelDialog = false
+                    Toast.makeText(this@MainActivity, "Gemini model set to $newModel", Toast.LENGTH_SHORT).show()
+                },
+                onDismiss = { showModelDialog = false }
             )
         }
     }

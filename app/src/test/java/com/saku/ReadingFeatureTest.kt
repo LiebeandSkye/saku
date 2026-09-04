@@ -63,4 +63,26 @@ class ReadingFeatureTest {
         assertEquals(2, story.targetWords.size)
         assertTrue(story.createdAt > 0)
     }
+
+    @Test
+    fun testGeminiModelPresetsAndLabels() {
+        assertEquals("gemini-3.8-flash", com.saku.data.PreferencesManager.DEFAULT_GEMINI_MODEL)
+
+        val modelIds = com.saku.data.PreferencesManager.AVAILABLE_GEMINI_MODELS.map { it.id }
+        assertTrue(modelIds.contains("gemini-3.8-flash"))
+        assertTrue(modelIds.contains("gemini-3.7-flash"))
+        assertTrue(modelIds.contains("gemini-3.6-flash"))
+        assertTrue(modelIds.contains("gemini-3.5-flash"))
+        assertTrue(modelIds.contains("gemini-3.5-flash-lite"))
+
+        assertEquals("Gemini 3.8 Flash", com.saku.data.PreferencesManager.getModelDisplayName("gemini-3.8-flash"))
+        assertEquals("Gemini 3.7 Flash", com.saku.data.PreferencesManager.getModelDisplayName("gemini-3.7-flash"))
+        assertEquals("custom-model-id", com.saku.data.PreferencesManager.getModelDisplayName("custom-model-id"))
+
+        assertEquals("3.8 Flash", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.8-flash"))
+        assertEquals("3.7 Flash", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.7-flash"))
+        assertEquals("3.6 Flash", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.6-flash"))
+        assertEquals("3.5 Flash", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.5-flash"))
+        assertEquals("3.5 Lite", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.5-flash-lite"))
+    }
 }

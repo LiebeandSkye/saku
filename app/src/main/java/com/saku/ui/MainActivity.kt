@@ -39,11 +39,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Style
@@ -60,6 +62,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -258,6 +263,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainContainer() {
         var isRefreshing by remember { mutableStateOf(false) }
+        var currentTab by remember { mutableIntStateOf(0) }
         val coroutineScope = rememberCoroutineScope()
 
         Scaffold(
@@ -276,7 +282,7 @@ class MainActivity : ComponentActivity() {
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                "Saku • 咲く",
+                                if (currentTab == 0) "Saku • 咲く" else "Saku • 読書 (Reading)",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.sp,
                                 letterSpacing = 0.8.sp
@@ -310,9 +316,58 @@ class MainActivity : ComponentActivity() {
                         actionIconContentColor = Color.White
                     )
                 )
+            },
+            bottomBar = {
+                NavigationBar(
+                    containerColor = Color(0xFF101010),
+                    tonalElevation = 8.dp
+                ) {
+                    NavigationBarItem(
+                        selected = currentTab == 0,
+                        onClick = { currentTab = 0 },
+                        icon = {
+                            Icon(Icons.Filled.Style, contentDescription = "Flashcards")
+                        },
+                        label = {
+                            Text("Flashcards", fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Normal)
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color(0xFF38BDF8),
+                            selectedTextColor = Color(0xFF38BDF8),
+                            indicatorColor = Color(0xFF1E293B),
+                            unselectedIconColor = Color(0xFF888888),
+                            unselectedTextColor = Color(0xFF888888)
+                        )
+                    )
+                    NavigationBarItem(
+                        selected = currentTab == 1,
+                        onClick = { currentTab = 1 },
+                        icon = {
+                            Icon(Icons.Filled.AutoStories, contentDescription = "Reading")
+                        },
+                        label = {
+                            Text("Reading", fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Normal)
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color(0xFF38BDF8),
+                            selectedTextColor = Color(0xFF38BDF8),
+                            indicatorColor = Color(0xFF1E293B),
+                            unselectedIconColor = Color(0xFF888888),
+                            unselectedTextColor = Color(0xFF888888)
+                        )
+                    )
+                }
             }
         ) { padding ->
-            ModernSettingsScreen(padding)
+            if (currentTab == 0) {
+                ModernSettingsScreen(padding)
+            } else {
+                ReadingScreen(
+                    padding = padding,
+                    prefs = prefs,
+                    hasAnkiPermission = hasPermissionState
+                )
+            }
         }
     }
 
@@ -531,6 +586,9 @@ class MainActivity : ComponentActivity() {
                     prefs.snoozeDurationMinutes = minutes
                 }
             )
+
+            // 8. Gemini AI & Reading Settings
+            ModernGeminiSettingsCard()
 
             Spacer(modifier = Modifier.height(32.dp))
         }
@@ -1213,6 +1271,96 @@ class MainActivity : ComponentActivity() {
                 activeTrackColor = MaterialTheme.colorScheme.primary
             )
         )
+    }
+
+    @Composable
+    fun ModernGeminiSettingsCard() {
+        var showDialog by remember { mutableStateOf(false) }
+        var currentKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF161616)),
+            border = BorderStroke(1.dp, Color(0xFF262626))
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            tint = Color(0xFFA855F7),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "GEMINI AI READING",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF888888),
+                            letterSpacing = 1.2.sp
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (currentKey.isNotBlank()) Color(0xFF162520) else Color(0xFF2D1B1B)
+                    ) {
+                        Text(
+                            text = if (currentKey.isNotBlank()) "Connected" else "Not set",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (currentKey.isNotBlank()) Color(0xFF10B981) else Color(0xFFEF4444),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Configure API key used to craft Japanese reading stories from your studied and suspended Anki flashcards.",
+                    fontSize = 13.sp,
+                    color = Color(0xFF94A3B8)
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = { showDialog = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1E293B),
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (currentKey.isNotBlank()) "Change API Key" else "Set API Key")
+                    }
+                }
+            }
+        }
+
+        if (showDialog) {
+            ApiKeySetupDialog(
+                currentKey = currentKey,
+                onSave = { newKey ->
+                    currentKey = newKey
+                    prefs.geminiApiKey = newKey
+                    showDialog = false
+                    Toast.makeText(this@MainActivity, "Gemini API key saved!", Toast.LENGTH_SHORT).show()
+                },
+                onDismiss = { showDialog = false }
+            )
+        }
     }
 }
 

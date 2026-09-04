@@ -34,6 +34,7 @@
 * **🧠 Preserves Your Algorithm (FSRS & SM-2)**: Reviews made on the widget are submitted directly into AnkiDroid. Your intervals, stability, retention factors, and AnkiWeb cloud sync stay 100% accurate and intact.
 * **📱 Lock Screen & Always-On Display (AOD)**: Optimized for **OxygenOS (OnePlus)** and modern Android devices. Pinned high-contrast card right under the lock screen clock without needing to unlock your phone.
 * **⚡ Interactive Home Screen Widget**: Built with **Jetpack Glance** (Compose for AppWidgets). Flip cards, advance cards, or submit ratings (*Again*, *Hard*, *Good*, *Easy*) directly from your home screen.
+* **📖 AI Reading Generator (Gemini Flash)**: Generates customized Japanese graded reading passages tailored directly from your due or studied Anki vocabulary, with instant vocabulary tapping, furigana toggle, English translation, and reading history.
 * **🔋 Ultra Lightweight & Offline**:
   * APK size: **~6 MB**
   * Memory: **< 25 MB RAM** (drops to 0 when idle)
@@ -152,7 +153,8 @@ Saku includes a smart Japanese field and furigana parser (`JapaneseFieldParser.k
 
 ## 🔐 Permissions & Privacy
 
-Saku is built with extreme privacy in mind. It does **NOT** request internet permissions to exfiltrate data:
+Saku is built with extreme privacy in mind. Your flashcard reviews remain completely on your local device:
+* `android.permission.INTERNET`: Used exclusively when the optional **AI Reading Generator** is invoked to call the Google Gemini API using your personal API key. Flashcard reviews and Anki database operations remain 100% offline.
 * `com.ichi2.anki.permission.READ_WRITE_DATABASE`: Used solely to read due cards and record review answers with AnkiDroid locally on your phone.
 * `android.permission.POST_NOTIFICATIONS`: Required on Android 13+ to display the minimal card on your Lock Screen and Always-On Display.
 * `android.permission.FOREGROUND_SERVICE`: Keeps the Lock Screen card pinned cleanly without being killed by Android battery optimizations.

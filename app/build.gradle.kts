@@ -12,8 +12,8 @@ android {
         applicationId = "com.saku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6.0"
+        versionCode = 8
+        versionName = "1.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -64,6 +64,9 @@ dependencies {
     // WorkManager & Coroutines
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
+
+    // Networking (Gemini REST API)
+    implementation(libs.okhttp)
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")

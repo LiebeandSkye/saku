@@ -58,6 +58,22 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString(KEY_CLASSIC_REVEALED_ACTION, "suspend") ?: "suspend"
         set(value) = prefs.edit().putString(KEY_CLASSIC_REVEALED_ACTION, value).apply()
 
+    var geminiApiKey: String?
+        get() = prefs.getString(KEY_GEMINI_API_KEY, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_GEMINI_API_KEY, value?.trim()).apply()
+
+    var readingJlptLevel: String
+        get() = prefs.getString(KEY_READING_JLPT_LEVEL, "N5") ?: "N5"
+        set(value) = prefs.edit().putString(KEY_READING_JLPT_LEVEL, value).apply()
+
+    var geminiModel: String
+        get() = prefs.getString(KEY_GEMINI_MODEL, "gemini-2.5-flash") ?: "gemini-2.5-flash"
+        set(value) = prefs.edit().putString(KEY_GEMINI_MODEL, value).apply()
+
+    var hasAcceptedInternetDisclosure: Boolean
+        get() = prefs.getBoolean(KEY_INTERNET_DISCLOSURE, false)
+        set(value) = prefs.edit().putBoolean(KEY_INTERNET_DISCLOSURE, value).apply()
+
     val isSnoozed: Boolean
         get() = System.currentTimeMillis() < snoozeUntil
 
@@ -96,5 +112,9 @@ class PreferencesManager(context: Context) {
         private const val KEY_DIM_OPACITY = "dim_opacity"
         private const val KEY_ARTWORK_OPACITY = "artwork_opacity"
         private const val KEY_CLASSIC_REVEALED_ACTION = "classic_revealed_action"
+        private const val KEY_GEMINI_API_KEY = "gemini_api_key"
+        private const val KEY_READING_JLPT_LEVEL = "reading_jlpt_level"
+        private const val KEY_GEMINI_MODEL = "gemini_model"
+        private const val KEY_INTERNET_DISCLOSURE = "internet_disclosure_accepted"
     }
 }

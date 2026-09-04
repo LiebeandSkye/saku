@@ -5,6 +5,9 @@
     <!-- AnkiDroid Inter-Process Database Permission -->
     <uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE" />
     
+    <!-- Gemini AI API Internet Access -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    
     <!-- Notification & Lock Screen Permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

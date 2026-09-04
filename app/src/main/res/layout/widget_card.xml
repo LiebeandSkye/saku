@@ -1,29 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg">
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:padding="8dp">
 
-    <!-- Full widget background artwork (covers 100% of the widget behind numbers, words, and buttons) -->
     <ImageView
         android:id="@+id/iv_widget_artwork"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:scaleType="centerCrop" />
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="centerCrop"
+        android:adjustViewBounds="false" />
 
-    <!-- Action buttons floating at the bottom over the blurred background -->
     <LinearLayout
         android:id="@+id/widget_button_container"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:paddingStart="8dp"
-        android:paddingEnd="8dp"
-        android:paddingBottom="8dp"
-        android:paddingTop="4dp">
+        android:paddingTop="6dp">
 
         <TextView
             android:id="@+id/btn_widget_again"
@@ -76,4 +74,4 @@
             android:textSize="13sp" />
     </LinearLayout>
 
-</FrameLayout>
+</LinearLayout>

@@ -131,53 +131,25 @@ class AnkiDroidHelper(private val context: Context) {
         }
     }
 
-    fun getSelectedDeckStats(): Triple<Int, Int, Int> {
-        val uris = listOf(
-            Uri.parse("content://$AUTHORITY/selected_deck"),
-            Uri.parse("content://$AUTHORITY/selected_deck/"),
-            Uri.parse("content://$AUTHORITY/decks/"),
-            Uri.parse("content://$AUTHORITY/decks")
-        )
-
-        for (uri in uris) {
-            try {
-                resolver.query(uri, null, null, null, null)?.use { cur ->
-                    val countsIdx = cur.getColumnIndex(COL_DECK_COUNTS)
-                    val nameIdx = cur.getColumnIndex(COL_DECK_NAME)
-
-                    while (cur.moveToNext()) {
-                        val name = if (nameIdx >= 0) cur.getString(nameIdx) ?: "" else ""
-                        if (countsIdx >= 0) {
-                            val countsStr = cur.getString(countsIdx) ?: ""
-                            val nums = Regex("\\d+").findAll(countsStr).map { it.value.toInt() }.toList()
-                            if (nums.size >= 3) {
-                                val learnC = nums[0]
-                                val revC = nums[1]
-                                var newC = nums[2]
-                                if (newC > 100) {
-                                    val dueNew = getNotesDueCount("deck:\"$name\" is:new is:due")
-                                    if (dueNew > 0) newC = dueNew
-                                }
-                                if (learnC > 0 || revC > 0 || newC > 0) {
-                                    return Triple(newC, learnC, revC)
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-            }
-        }
-
+    fun getSelectedDeckStats(selectedDeckIds: Set<Long> = emptySet()): Triple<Int, Int, Int> {
         val decks = getDeckList()
-        if (decks.isNotEmpty()) {
-            val totalNew = decks.sumOf { it.newCount }
-            val totalLearn = decks.sumOf { it.learnCount }
-            val totalRev = decks.sumOf { it.reviewCount }
-            return Triple(totalNew, totalLearn, totalRev)
+        if (decks.isEmpty()) return Triple(0, 0, 0)
+
+        val targetDecks = if (selectedDeckIds.isNotEmpty()) {
+            decks.filter { it.id in selectedDeckIds }
+        } else {
+            decks
         }
 
-        return Triple(0, 0, 0)
+        var newC = 0
+        var learnC = 0
+        var revC = 0
+        for (deck in targetDecks) {
+            newC += deck.newCount
+            learnC += deck.learnCount
+            revC += deck.reviewCount
+        }
+        return Triple(newC, learnC, revC)
     }
 
     fun getDeckStatsForDeck(deckName: String): Triple<Int, Int, Int> {
@@ -201,7 +173,26 @@ class AnkiDroidHelper(private val context: Context) {
         }
     }
 
-    fun getNextDueCard(deckId: Long? = null, excludeNoteId: Long? = null): CardInfo? {
+    fun getNextDueCard(deckIds: Set<Long> = emptySet(), excludeNoteId: Long? = null): CardInfo? {
+        val decks = getDeckList()
+        val queryDeckIds = if (deckIds.isNotEmpty()) deckIds.toList() else listOf<Long?>(null)
+
+        for (deckId in queryDeckIds) {
+            val card = queryNextDueCardForDeck(deckId, excludeNoteId, decks)
+            if (card != null) return card
+        }
+        return null
+    }
+
+    fun getNextDueCard(deckId: Long?, excludeNoteId: Long? = null): CardInfo? {
+        return getNextDueCard(if (deckId != null) setOf(deckId) else emptySet(), excludeNoteId)
+    }
+
+    private fun queryNextDueCardForDeck(
+        deckId: Long?,
+        excludeNoteId: Long?,
+        decks: List<DeckInfo>
+    ): CardInfo? {
         try {
             val selection = if (deckId != null) "deckID=$deckId, limit=10" else "limit=10"
 
@@ -232,7 +223,7 @@ class AnkiDroidHelper(private val context: Context) {
                     ) ?: ""
 
                     val deckName = if (deckId != null) {
-                        getDeckList().find { it.id == deckId }?.name ?: getDeckNameForNote(noteId)
+                        decks.find { it.id == deckId }?.name ?: getDeckNameForNote(noteId)
                     } else {
                         getDeckNameForNote(noteId)
                     }
@@ -270,7 +261,7 @@ class AnkiDroidHelper(private val context: Context) {
                     return parsed.copy(
                         noteId = noteId,
                         cardOrd = cardOrd,
-                        deckName = deckName.ifEmpty { "Saku" },
+                        deckName = deckName.ifEmpty { decks.firstOrNull()?.name ?: "" },
                         buttonCount = buttonCount,
                         nextReviewTimes = nextTimes,
                         cardType = cardType

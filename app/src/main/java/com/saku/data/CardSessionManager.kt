@@ -38,10 +38,8 @@ object CardSessionManager {
             val ankiHelper = AnkiDroidHelper(context)
             val prefs = PreferencesManager(context)
             val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
-            val deckId = if (selectedDecks.size == 1) selectedDecks.first() else null
-
-            currentCard = ankiHelper.getNextDueCard(deckId)
-            currentStats = ankiHelper.getSelectedDeckStats()
+            currentCard = ankiHelper.getNextDueCard(selectedDecks)
+            currentStats = ankiHelper.getSelectedDeckStats(selectedDecks)
             if (forceRefresh) isRevealed = false
             notifyUi()
         }
@@ -77,7 +75,6 @@ object CardSessionManager {
         val ankiHelper = AnkiDroidHelper(context)
         val prefs = PreferencesManager(context)
         val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
-        val deckId = if (selectedDecks.size == 1) selectedDecks.first() else null
 
         if (card != null) {
             val oldStats = currentStats
@@ -98,8 +95,8 @@ object CardSessionManager {
 
             Thread {
                 ankiHelper.answerCard(card.noteId, card.cardOrd, ease, timeTaken)
-                val nextCard = ankiHelper.getNextDueCard(deckId, excludeNoteId = card.noteId)
-                val freshStats = ankiHelper.getSelectedDeckStats()
+                val nextCard = ankiHelper.getNextDueCard(selectedDecks, excludeNoteId = card.noteId)
+                val freshStats = ankiHelper.getSelectedDeckStats(selectedDecks)
 
                 mainHandler.post {
                     currentCard = nextCard
@@ -125,15 +122,14 @@ object CardSessionManager {
         val ankiHelper = AnkiDroidHelper(context)
         val prefs = PreferencesManager(context)
         val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
-        val deckId = if (selectedDecks.size == 1) selectedDecks.first() else null
 
         if (card != null) {
             previousCard = card
             previousStats = currentStats
             Thread {
                 ankiHelper.suspendCard(card.noteId, card.cardOrd)
-                val nextCard = ankiHelper.getNextDueCard(deckId, excludeNoteId = card.noteId)
-                val freshStats = ankiHelper.getSelectedDeckStats()
+                val nextCard = ankiHelper.getNextDueCard(selectedDecks, excludeNoteId = card.noteId)
+                val freshStats = ankiHelper.getSelectedDeckStats(selectedDecks)
 
                 mainHandler.post {
                     currentCard = nextCard
@@ -167,10 +163,9 @@ object CardSessionManager {
             val ankiHelper = AnkiDroidHelper(context)
             val prefs = PreferencesManager(context)
             val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
-            val deckId = if (selectedDecks.size == 1) selectedDecks.first() else null
 
-            val card = ankiHelper.getNextDueCard(deckId)
-            val stats = ankiHelper.getSelectedDeckStats()
+            val card = ankiHelper.getNextDueCard(selectedDecks)
+            val stats = ankiHelper.getSelectedDeckStats(selectedDecks)
 
             mainHandler.post {
                 currentCard = card

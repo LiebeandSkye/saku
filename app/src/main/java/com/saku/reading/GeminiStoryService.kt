@@ -3,6 +3,7 @@ package com.saku.reading
 import com.saku.data.AnkiVocabularyItem
 import com.saku.data.GeneratedStory
 import com.saku.data.PreferencesManager
+import com.saku.data.StoryQuizQuestion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -18,9 +19,9 @@ import java.util.concurrent.TimeUnit
 class GeminiStoryService {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(40, TimeUnit.SECONDS)
+        .writeTimeout(20, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -35,10 +36,17 @@ class GeminiStoryService {
             return@withContext Result.failure(IllegalArgumentException("Gemini API key is required"))
         }
 
-        // Select a sample of words (up to 25 studied, up to 10 suspended)
-        val studied = vocabularyList.filter { !it.isSuspended }.shuffled().take(25)
-        val suspended = vocabularyList.filter { it.isSuspended }.shuffled().take(10)
-        val selectedWords = (studied + suspended).distinctBy { it.displayWord }
+        // Select up to 25 target words from available learned flashcards (studied or suspended)
+        val studiedPool = vocabularyList.filter { !it.isSuspended }
+        val suspendedPool = vocabularyList.filter { it.isSuspended }
+
+        val selectedWords = if (studiedPool.isNotEmpty() && suspendedPool.isNotEmpty()) {
+            (studiedPool.shuffled().take(18) + suspendedPool.shuffled().take(10)).distinctBy { it.displayWord }
+        } else if (studiedPool.isNotEmpty()) {
+            studiedPool.shuffled().take(25).distinctBy { it.displayWord }
+        } else {
+            suspendedPool.shuffled().take(25).distinctBy { it.displayWord }
+        }
 
         val wordPromptList = if (selectedWords.isNotEmpty()) {
             selectedWords.joinToString(", ") { item ->
@@ -53,32 +61,16 @@ class GeminiStoryService {
 
         val prompt = buildJlptStoryPrompt(jlptLevel, wordPromptList)
 
-        // Try preferred model first, then fallback to other modern Gemini 3.x Flash models
-        val modelsToTry = listOf(
-            preferredModel,
-            PreferencesManager.DEFAULT_GEMINI_MODEL,
-            "gemini-3.7-flash",
-            "gemini-3.6-flash",
-            "gemini-3.5-flash"
-        ).distinct()
-
-        var lastError: Exception? = null
-        for (model in modelsToTry) {
-            try {
-                val story = callGeminiApi(apiKey, model, prompt, jlptLevel, selectedWords.map { it.displayWord })
-                return@withContext Result.success(story)
-            } catch (e: Exception) {
-                lastError = e
-                // If it was an authentication error, don't retry other models
-                if (e.message?.contains("API_KEY_INVALID", ignoreCase = true) == true ||
-                    e.message?.contains("403", ignoreCase = true) == true
-                ) {
-                    break
-                }
-            }
+        // Directly call preferred model with zero fallbacks to ensure maximum speed.
+        // If an error occurs, fail immediately and prompt the user to switch models.
+        try {
+            val story = callGeminiApi(apiKey, preferredModel, prompt, jlptLevel, selectedWords.map { it.displayWord })
+            Result.success(story)
+        } catch (e: Exception) {
+            val errorDetails = e.message ?: "Unknown error"
+            val userMsg = "Model '$preferredModel' failed: $errorDetails\nPlease tap the model selector above to switch to another model (e.g. Gemini 3.5 Flash-Lite or Gemini 3.8 Flash)."
+            Result.failure(IOException(userMsg, e))
         }
-
-        Result.failure(lastError ?: IOException("Failed to generate story with Gemini API"))
     }
 
     private fun callGeminiApi(
@@ -106,8 +98,9 @@ class GeminiStoryService {
             put("contents", contentsArr)
 
             val generationConfig = JSONObject().apply {
-                put("temperature", 0.75)
+                put("temperature", 0.7)
                 put("maxOutputTokens", 2048)
+                put("responseMimeType", "application/json")
             }
             put("generationConfig", generationConfig)
         }
@@ -124,7 +117,7 @@ class GeminiStoryService {
         if (!response.isSuccessful) {
             val errorMsg = try {
                 val errorJson = JSONObject(responseBody)
-                errorJson.optJSONObject("error")?.optString("message") ?: response.message
+                errorJson.optJSONObject("error")?.optString("message") ?: "HTTP ${response.code}: ${response.message}"
             } catch (e: Exception) {
                 "HTTP ${response.code}: ${response.message}"
             }
@@ -149,27 +142,90 @@ class GeminiStoryService {
             throw IOException("Story text was empty")
         }
 
-        // Parse title and body
-        var title = "日本語の物語 ($jlptLevel)"
-        var body = rawText
+        return parseStoryResponse(rawText, jlptLevel, targetWords)
+    }
 
-        val lines = rawText.lines()
-        if (lines.isNotEmpty()) {
-            val firstLine = lines.first().trim()
-            if (firstLine.startsWith("タイトル:") || firstLine.startsWith("タイトル：") || firstLine.startsWith("#")) {
-                title = firstLine.removePrefix("タイトル:").removePrefix("タイトル：").removePrefix("#").trim()
-                body = lines.drop(1).joinToString("\n").trim()
+    private fun parseStoryResponse(
+        rawText: String,
+        jlptLevel: String,
+        targetWords: List<String>
+    ): GeneratedStory {
+        val clean = cleanJsonString(rawText)
+        return try {
+            val json = JSONObject(clean)
+            val title = json.optString("title", "日本語の物語 ($jlptLevel)").ifBlank { "日本語の物語 ($jlptLevel)" }
+            val storyContent = json.optString("storyJapanese", "").ifBlank { json.optString("content", rawText) }
+
+            val qArray = json.optJSONArray("questions")
+            val questions = mutableListOf<StoryQuizQuestion>()
+            if (qArray != null) {
+                for (i in 0 until qArray.length()) {
+                    val qObj = qArray.optJSONObject(i) ?: continue
+                    val optsArray = qObj.optJSONArray("options")
+                    val opts = mutableListOf<String>()
+                    if (optsArray != null) {
+                        for (j in 0 until optsArray.length()) {
+                            opts.add(optsArray.getString(j))
+                        }
+                    }
+                    if (opts.isNotEmpty()) {
+                        questions.add(
+                            StoryQuizQuestion(
+                                id = qObj.optInt("id", i + 1),
+                                questionText = qObj.optString("questionText", ""),
+                                options = opts,
+                                correctOptionIndex = qObj.optInt("correctOptionIndex", 0),
+                                explanation = qObj.optString("explanation", "")
+                            )
+                        )
+                    }
+                }
             }
-        }
 
-        return GeneratedStory(
-            id = UUID.randomUUID().toString(),
-            title = title,
-            content = body,
-            jlptLevel = jlptLevel,
-            createdAt = System.currentTimeMillis(),
-            targetWords = targetWords
-        )
+            GeneratedStory(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                content = storyContent,
+                jlptLevel = jlptLevel,
+                createdAt = System.currentTimeMillis(),
+                targetWords = targetWords,
+                questions = questions
+            )
+        } catch (e: Exception) {
+            // Fallback for raw text responses
+            var title = "日本語の物語 ($jlptLevel)"
+            var body = rawText
+            val lines = rawText.lines()
+            if (lines.isNotEmpty()) {
+                val firstLine = lines.first().trim()
+                if (firstLine.startsWith("タイトル:") || firstLine.startsWith("タイトル：") || firstLine.startsWith("#")) {
+                    title = firstLine.removePrefix("タイトル:").removePrefix("タイトル：").removePrefix("#").trim()
+                    body = lines.drop(1).joinToString("\n").trim()
+                }
+            }
+            GeneratedStory(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                content = body,
+                jlptLevel = jlptLevel,
+                createdAt = System.currentTimeMillis(),
+                targetWords = targetWords,
+                questions = emptyList()
+            )
+        }
+    }
+
+    private fun cleanJsonString(raw: String): String {
+        var clean = raw.trim()
+        if (clean.startsWith("```json", ignoreCase = true)) {
+            clean = clean.substring(7)
+        } else if (clean.startsWith("```")) {
+            clean = clean.substring(3)
+        }
+        if (clean.endsWith("```")) {
+            clean = clean.substring(0, clean.length - 3)
+        }
+        return clean.trim()
     }
 
     private fun buildJlptStoryPrompt(jlptLevel: String, wordPromptList: String): String {
@@ -183,29 +239,36 @@ class GeminiStoryService {
         }
 
         return """
-            [System Context]
-            You are a master Japanese teacher and literary author specializing in immersive graded readers for language learners.
+            You are a master Japanese teacher and graded-reader author specializing in immersive language learning.
+            Write an engaging, coherent Japanese reading passage calibrated strictly to JLPT $jlptLevel.
 
-            [Task Objective]
-            Compose an engaging, coherent Japanese story calibrated precisely to JLPT $jlptLevel reading comprehension.
-
-            [Level Calibration]
+            [JLPT Level Calibration]
             $levelRules
 
-            [Learner Vocabulary to Integrate]
-            Naturally integrate as many of these flashcard words from the student's study deck as possible into the narrative context:
+            [Target Vocabulary from Learner's Flashcards to Naturally Integrate]
+            The learner has studied the following target words from their Anki deck. Actively prioritize weaving these specific words into the story so the reader encounters their learned vocabulary in real context:
             $wordPromptList
 
-            [Negative Constraints]
-            - Do NOT include any romaji.
-            - Do NOT include any English translations, vocabulary glossaries, footnotes, or commentary.
-            - Do NOT include furigana brackets like [ふりがな] or HTML ruby tags. Write clean standard Japanese characters.
-            - Output pure Japanese story text only.
-
-            [Output Format]
-            Line 1: タイトル: [Japanese Story Title]
-            Line 2: (Blank line)
-            Line 3+: [Story paragraphs separated by empty lines]
+            [Requirements]
+            1. Write a natural, compelling story in Japanese (150-300 words).
+            2. Actively prioritize and weave target vocabulary words from the learner's list above into the story wherever natural and appropriate.
+            3. Do NOT use romaji. Do NOT use ruby/furigana brackets like [ふりがな]. Standard Japanese characters only.
+            4. Create 3 to 4 multiple-choice reading comprehension questions testing understanding of the story and key vocabulary from the target list in context.
+               Each question must have exactly 4 options and the 0-indexed correctOptionIndex.
+            5. Return ONLY valid JSON with this exact schema (no markdown formatting, no code blocks):
+            {
+              "title": "Story Title in Japanese",
+              "storyJapanese": "Full Japanese story text with natural paragraph breaks.",
+              "questions": [
+                {
+                  "id": 1,
+                  "questionText": "Question testing comprehension or vocabulary context",
+                  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+                  "correctOptionIndex": 0,
+                  "explanation": "Brief explanation of the answer"
+                }
+              ]
+            }
         """.trimIndent()
     }
 }

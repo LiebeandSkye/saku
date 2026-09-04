@@ -66,7 +66,7 @@ class ReadingFeatureTest {
 
     @Test
     fun testGeminiModelPresetsAndLabels() {
-        assertEquals("gemini-3.8-flash", com.saku.data.PreferencesManager.DEFAULT_GEMINI_MODEL)
+        assertEquals("gemini-3.5-flash-lite", com.saku.data.PreferencesManager.DEFAULT_GEMINI_MODEL)
 
         val modelIds = com.saku.data.PreferencesManager.AVAILABLE_GEMINI_MODELS.map { it.id }
         assertTrue(modelIds.contains("gemini-3.8-flash"))
@@ -83,6 +83,27 @@ class ReadingFeatureTest {
         assertEquals("3.7 Flash", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.7-flash"))
         assertEquals("3.6 Flash", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.6-flash"))
         assertEquals("3.5 Flash", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.5-flash"))
-        assertEquals("3.5 Lite", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.5-flash-lite"))
+        assertEquals("3.5 Lite (Fastest)", com.saku.data.PreferencesManager.getShortModelLabel("gemini-3.5-flash-lite"))
+    }
+
+    @Test
+    fun testVocabularyListPoolFiltering() {
+        val studied = (1..30).map { AnkiVocabularyItem(kanji = "学$it", isSuspended = false) }
+        val suspended = (1..20).map { AnkiVocabularyItem(kanji = "休$it", isSuspended = true) }
+        val combined = studied + suspended
+
+        val studiedOnly = combined.filter { !it.isSuspended }
+        val suspendedOnly = combined.filter { it.isSuspended }
+
+        assertEquals(30, studiedOnly.size)
+        assertEquals(20, suspendedOnly.size)
+
+        // Verify that sampling from both pools takes words from both
+        val sampleStudied = studiedOnly.take(18)
+        val sampleSuspended = suspendedOnly.take(10)
+        val selected = (sampleStudied + sampleSuspended).distinctBy { it.displayWord }
+        assertEquals(28, selected.size)
+        assertTrue(selected.any { it.isSuspended })
+        assertTrue(selected.any { !it.isSuspended })
     }
 }

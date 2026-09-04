@@ -26,6 +26,30 @@ class ReadingHistoryManager(context: Context) {
                         words.add(targetWordsJson.getString(j))
                     }
                 }
+                val questionsJson = obj.optJSONArray("questions")
+                val questions = mutableListOf<StoryQuizQuestion>()
+                if (questionsJson != null) {
+                    for (j in 0 until questionsJson.length()) {
+                        val qObj = questionsJson.getJSONObject(j)
+                        val optsJson = qObj.optJSONArray("options")
+                        val opts = mutableListOf<String>()
+                        if (optsJson != null) {
+                            for (k in 0 until optsJson.length()) {
+                                opts.add(optsJson.getString(k))
+                            }
+                        }
+                        questions.add(
+                            StoryQuizQuestion(
+                                id = qObj.optInt("id", j + 1),
+                                questionText = qObj.optString("questionText", ""),
+                                options = opts,
+                                correctOptionIndex = qObj.optInt("correctOptionIndex", 0),
+                                explanation = qObj.optString("explanation", "")
+                            )
+                        )
+                    }
+                }
+
                 list.add(
                     GeneratedStory(
                         id = obj.optString("id", ""),
@@ -33,7 +57,8 @@ class ReadingHistoryManager(context: Context) {
                         content = obj.optString("content", ""),
                         jlptLevel = obj.optString("jlptLevel", "N5"),
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
-                        targetWords = words
+                        targetWords = words,
+                        questions = questions
                     )
                 )
             }
@@ -74,6 +99,21 @@ class ReadingHistoryManager(context: Context) {
                     val wordsArr = JSONArray()
                     story.targetWords.forEach { wordsArr.put(it) }
                     put("targetWords", wordsArr)
+
+                    val questionsArr = JSONArray()
+                    story.questions.forEach { q ->
+                        val qObj = JSONObject().apply {
+                            put("id", q.id)
+                            put("questionText", q.questionText)
+                            val opts = JSONArray()
+                            q.options.forEach { opts.put(it) }
+                            put("options", opts)
+                            put("correctOptionIndex", q.correctOptionIndex)
+                            put("explanation", q.explanation)
+                        }
+                        questionsArr.put(qObj)
+                    }
+                    put("questions", questionsArr)
                 }
                 array.put(obj)
             }

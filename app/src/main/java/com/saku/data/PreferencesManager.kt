@@ -107,14 +107,14 @@ class PreferencesManager(context: Context) {
     }
 
     companion object {
-        const val DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+        const val DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
         val AVAILABLE_GEMINI_MODELS = listOf(
-            GeminiModelOption("gemini-3.8-flash", "Gemini 3.8 Flash", "Latest & Recommended"),
-            GeminiModelOption("gemini-3.7-flash", "Gemini 3.7 Flash", "Fast & Intelligent"),
+            GeminiModelOption("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite", "Ultra-fast / Low Latency"),
+            GeminiModelOption("gemini-3.8-flash", "Gemini 3.8 Flash", "Latest & Most Intelligent"),
+            GeminiModelOption("gemini-3.7-flash", "Gemini 3.7 Flash", "Fast & Multimodal"),
             GeminiModelOption("gemini-3.6-flash", "Gemini 3.6 Flash", "Stable Flash"),
-            GeminiModelOption("gemini-3.5-flash", "Gemini 3.5 Flash", "Balanced"),
-            GeminiModelOption("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite", "Ultra-light Speed")
+            GeminiModelOption("gemini-3.5-flash", "Gemini 3.5 Flash", "Balanced")
         )
 
         fun getModelDisplayName(modelId: String): String {
@@ -123,11 +123,11 @@ class PreferencesManager(context: Context) {
 
         fun getShortModelLabel(modelId: String): String {
             return when (modelId.lowercase()) {
+                "gemini-3.5-flash-lite" -> "3.5 Lite (Fastest)"
                 "gemini-3.8-flash" -> "3.8 Flash"
                 "gemini-3.7-flash" -> "3.7 Flash"
                 "gemini-3.6-flash" -> "3.6 Flash"
                 "gemini-3.5-flash" -> "3.5 Flash"
-                "gemini-3.5-flash-lite" -> "3.5 Lite"
                 else -> modelId.removePrefix("gemini-")
             }
         }

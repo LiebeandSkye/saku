@@ -62,15 +62,15 @@ fun GeminiModelDialog(
     Dialog(onDismissRequest = onDismiss) {
         Card(
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF161616)),
-            border = BorderStroke(1.dp, Color(0xFF333333)),
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 16.dp)
         ) {
             Column(
                 modifier = Modifier
-                    .padding(22.dp)
+                    .padding(20.dp)
                     .heightIn(max = 560.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -80,22 +80,22 @@ fun GeminiModelDialog(
                     Icon(
                         Icons.Filled.AutoAwesome,
                         contentDescription = null,
-                        tint = Color(0xFFA855F7),
-                        modifier = Modifier.size(24.dp)
+                        tint = SakuColors.AccentLavender,
+                        modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = "Gemini Model",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = Color.White
+                        fontSize = 17.sp,
+                        color = SakuColors.TextPrimary
                     )
                 }
 
                 Text(
                     text = "Select the Gemini AI model to compose personalized reading passages from your flashcards.",
                     fontSize = 13.sp,
-                    color = Color(0xFF94A3B8),
+                    color = SakuColors.TextSecondary,
                     lineHeight = 18.sp
                 )
 
@@ -105,10 +105,10 @@ fun GeminiModelDialog(
                         val isSelected = selectedId.equals(option.id, ignoreCase = true)
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) Color(0xFF231633) else Color(0xFF1A1A1A),
+                            color = if (isSelected) SakuColors.AccentLavenderContainer.copy(alpha = 0.5f) else SakuColors.SurfaceElevated,
                             border = BorderStroke(
                                 1.dp,
-                                if (isSelected) Color(0xFFA855F7) else Color(0xFF2D2D2D)
+                                if (isSelected) SakuColors.AccentLavender.copy(alpha = 0.5f) else SakuColors.BorderSubtle
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -124,8 +124,8 @@ fun GeminiModelDialog(
                                     selected = isSelected,
                                     onClick = { selectedId = option.id },
                                     colors = RadioButtonDefaults.colors(
-                                        selectedColor = Color(0xFFA855F7),
-                                        unselectedColor = Color(0xFF64748B)
+                                        selectedColor = SakuColors.AccentLavender,
+                                        unselectedColor = SakuColors.TextMuted
                                     )
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -139,17 +139,17 @@ fun GeminiModelDialog(
                                             text = option.name,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                             fontSize = 14.sp,
-                                            color = Color.White
+                                            color = SakuColors.TextPrimary
                                         )
                                         Surface(
                                             shape = RoundedCornerShape(6.dp),
-                                            color = if (isSelected) Color(0xFF3B1E5A) else Color(0xFF262626)
+                                            color = if (isSelected) SakuColors.AccentLavenderContainer else SakuColors.SurfaceVariant
                                         ) {
                                             Text(
                                                 text = option.tag,
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = if (isSelected) Color(0xFFD8B4FE) else Color(0xFF94A3B8),
+                                                color = if (isSelected) SakuColors.AccentLavender else SakuColors.TextSecondary,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
@@ -159,7 +159,7 @@ fun GeminiModelDialog(
                                         text = option.id,
                                         fontSize = 11.sp,
                                         fontFamily = FontFamily.Monospace,
-                                        color = if (isSelected) Color(0xFFC084FC) else Color(0xFF71717A)
+                                        color = if (isSelected) SakuColors.AccentLavender else SakuColors.TextMuted
                                     )
                                 }
                             }
@@ -170,10 +170,10 @@ fun GeminiModelDialog(
                     val isCustomSelected = selectedId == "custom"
                     Surface(
                         shape = RoundedCornerShape(14.dp),
-                        color = if (isCustomSelected) Color(0xFF231633) else Color(0xFF1A1A1A),
+                        color = if (isCustomSelected) SakuColors.AccentLavenderContainer.copy(alpha = 0.5f) else SakuColors.SurfaceElevated,
                         border = BorderStroke(
                             1.dp,
-                            if (isCustomSelected) Color(0xFFA855F7) else Color(0xFF2D2D2D)
+                            if (isCustomSelected) SakuColors.AccentLavender.copy(alpha = 0.5f) else SakuColors.BorderSubtle
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -189,8 +189,8 @@ fun GeminiModelDialog(
                                     selected = isCustomSelected,
                                     onClick = { selectedId = "custom" },
                                     colors = RadioButtonDefaults.colors(
-                                        selectedColor = Color(0xFFA855F7),
-                                        unselectedColor = Color(0xFF64748B)
+                                        selectedColor = SakuColors.AccentLavender,
+                                        unselectedColor = SakuColors.TextMuted
                                     )
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
@@ -203,12 +203,12 @@ fun GeminiModelDialog(
                                         text = "Custom Model",
                                         fontWeight = if (isCustomSelected) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 14.sp,
-                                        color = Color.White
+                                        color = SakuColors.TextPrimary
                                     )
                                     Icon(
                                         Icons.Filled.Edit,
                                         contentDescription = null,
-                                        tint = if (isCustomSelected) Color(0xFFA855F7) else Color(0xFF64748B),
+                                        tint = if (isCustomSelected) SakuColors.AccentLavender else SakuColors.TextMuted,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -219,15 +219,15 @@ fun GeminiModelDialog(
                                 OutlinedTextField(
                                     value = customModelInput,
                                     onValueChange = { customModelInput = it },
-                                    placeholder = { Text("e.g. gemini-3.1-pro", color = Color.Gray, fontSize = 13.sp) },
+                                    placeholder = { Text("e.g. gemini-3.1-pro", color = SakuColors.TextMuted, fontSize = 13.sp) },
                                     singleLine = true,
                                     colors = OutlinedTextFieldDefaults.colors(
-                                        focusedTextColor = Color.White,
-                                        unfocusedTextColor = Color.White,
-                                        focusedBorderColor = Color(0xFFA855F7),
-                                        unfocusedBorderColor = Color(0xFF444444),
-                                        focusedContainerColor = Color(0xFF0F0B17),
-                                        unfocusedContainerColor = Color(0xFF0F0B17)
+                                        focusedTextColor = SakuColors.TextPrimary,
+                                        unfocusedTextColor = SakuColors.TextPrimary,
+                                        focusedBorderColor = SakuColors.AccentLavender,
+                                        unfocusedBorderColor = SakuColors.BorderHighlight,
+                                        focusedContainerColor = SakuColors.Surface,
+                                        unfocusedContainerColor = SakuColors.Surface
                                     ),
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -246,10 +246,10 @@ fun GeminiModelDialog(
                     OutlinedButton(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, Color(0xFF444444)),
+                        border = BorderStroke(1.dp, SakuColors.Border),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("Cancel", color = Color.White)
+                        Text("Cancel", color = SakuColors.TextSecondary)
                     }
 
                     Button(
@@ -263,8 +263,8 @@ fun GeminiModelDialog(
                         },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFA855F7),
-                            contentColor = Color.White
+                            containerColor = SakuColors.SagePrimary,
+                            contentColor = SakuColors.OnSage
                         ),
                         modifier = Modifier.weight(1f)
                     ) {

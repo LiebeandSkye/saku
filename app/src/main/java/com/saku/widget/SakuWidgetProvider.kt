@@ -100,34 +100,17 @@ class SakuWidgetProvider : AppWidgetProvider() {
                 val density = context.resources.displayMetrics.density
 
                 val widthDp = if (minWidthDp > 0) minWidthDp else 280
-                val heightDp = if (minHeightDp > 0) minHeightDp else 180
+                val heightDp = if (minHeightDp > 0) minHeightDp else 320
 
-                // Responsive scale based on both width and height
                 val scaleTier = when {
-                    widthDp >= 320 && heightDp >= 250 -> 1.15f
-                    widthDp >= 260 && heightDp >= 180 -> 1.00f
-                    widthDp >= 200 && heightDp >= 130 -> 0.85f
-                    else -> 0.72f
+                    widthDp >= 320 -> 1.20f
+                    widthDp >= 250 -> 1.00f
+                    widthDp >= 180 -> 0.85f
+                    else -> 0.75f
                 }
 
-                // Calculate dimensions strictly bounded to stay safe within RemoteViews 1MB Binder limit
-                val rawW = (widthDp * density).toInt().coerceAtLeast(240)
-                val rawH = (heightDp * density).toInt().coerceAtLeast(160)
-                val maxBytes = 600_000 // RemoteViews Binder limit is 1MB total; 600KB keeps it well under
-                val currentBytes = rawW * rawH * 4
-
-                val (targetW, targetH) = if (currentBytes > maxBytes) {
-                    val factor = sqrt(maxBytes.toFloat() / currentBytes.toFloat())
-                    Pair(
-                        (rawW * factor).toInt().coerceIn(240, 480),
-                        (rawH * factor).toInt().coerceIn(160, 480)
-                    )
-                } else {
-                    Pair(
-                        rawW.coerceIn(240, 480),
-                        rawH.coerceIn(160, 480)
-                    )
-                }
+                val targetW = (widthDp * density).toInt().coerceAtLeast(300)
+                val targetH = (heightDp * density).toInt().coerceAtLeast(300)
 
                 val artwork = MediaArtworkGenerator.generateArtwork(
                     context = context,

@@ -54,7 +54,16 @@ object MediaArtworkGenerator {
         val statsY = topInset + 10f * baseDensity
         val sideInset = max(20f * baseDensity, width * 0.06f)
 
-        val deckName = card?.deckName?.ifEmpty { "Saku" } ?: "All Caught Up"
+        val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
+        val deckName = when {
+            !card?.deckName.isNullOrBlank() -> card!!.deckName
+            selectedDecks.size == 1 -> {
+                val singleId = selectedDecks.first()
+                com.saku.anki.AnkiDroidHelper(context).getDeckList().find { it.id == singleId }?.name ?: "All Caught Up"
+            }
+            selectedDecks.size > 1 -> "${selectedDecks.size} Decks"
+            else -> "All Caught Up"
+        }
         val deckTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#E2E8F0")
             textSize = 11.5f * sp
@@ -305,9 +314,8 @@ object MediaArtworkGenerator {
             imgDrawHeight = 0f
         }
 
-        val contentTop = statsY + 14f * baseDensity
-        // When showBottomControls is false (used by widget), leave room for the bottom floating buttons
-        val contentBottom = if (showBottomControls) (height - 30f * baseDensity) else (height - 52f * baseDensity)
+        val contentTop = statsY + 16f * baseDensity
+        val contentBottom = if (showBottomControls) (height - 30f * baseDensity) else (height - 16f * baseDensity)
         val availableH = max(60f * baseDensity, contentBottom - contentTop)
 
         var totalContentH = vocabH
@@ -317,17 +325,7 @@ object MediaArtworkGenerator {
         if (sentMeaningH > 0f) totalContentH += 6f * baseDensity + sentMeaningH
         if (imgDrawHeight > 0f) totalContentH += 8f * baseDensity + imgDrawHeight
 
-        val shouldDrawSentMeaning = sentMeaningH > 0f && (totalContentH <= availableH || availableH > 180f * baseDensity)
-        val shouldDrawImage = imageBitmap != null && imgDrawHeight > 0f && (totalContentH <= availableH || availableH > 220f * baseDensity)
-
-        var effectiveContentH = vocabH
-        if (meaningH > 0f) effectiveContentH += 6f * baseDensity + meaningH
-        effectiveContentH += dividerH
-        effectiveContentH += sentenceH
-        if (shouldDrawSentMeaning) effectiveContentH += 6f * baseDensity + sentMeaningH
-        if (shouldDrawImage) effectiveContentH += 8f * baseDensity + imgDrawHeight
-
-        val startY = contentTop + max(0f, (availableH - effectiveContentH) / 2f)
+        val startY = contentTop + max(0f, (availableH - totalContentH) / 2f)
         var curY = startY
 
         if (vocabRubyBmp != null) {
@@ -371,16 +369,16 @@ object MediaArtworkGenerator {
             curY += sentenceH
         }
 
-        if (shouldDrawSentMeaning) {
+        if (sentMeaningLayout != null) {
             curY += 6f * baseDensity
             canvas.save()
             canvas.translate(width * 0.08f, curY)
-            sentMeaningLayout?.draw(canvas)
+            sentMeaningLayout.draw(canvas)
             canvas.restore()
             curY += sentMeaningH
         }
 
-        if (shouldDrawImage && imageBitmap != null) {
+        if (imageBitmap != null && imgDrawHeight > 0f) {
             curY += 8f * baseDensity
             val imgLeft = (width - imgDrawWidth) / 2f
             val dstRect = RectF(imgLeft, curY, imgLeft + imgDrawWidth, curY + imgDrawHeight)

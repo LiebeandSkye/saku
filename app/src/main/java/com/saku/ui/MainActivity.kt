@@ -16,21 +16,40 @@ import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.max
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -66,9 +85,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -82,7 +98,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.draw.scale
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -256,17 +272,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    background = Color(0xFF0A0A0A),
-                    surface = Color(0xFF141414),
-                    surfaceVariant = Color(0xFF1E293B),
-                    primary = Color(0xFF38BDF8),
-                    secondary = Color(0xFF8AB4F8),
-                    onBackground = Color.White,
-                    onSurface = Color.White
-                )
-            ) {
+            SakuTheme {
                 MainContainer()
             }
         }
@@ -324,25 +330,27 @@ class MainActivity : ComponentActivity() {
         val coroutineScope = rememberCoroutineScope()
 
         Scaffold(
+            containerColor = SakuColors.Background,
             topBar = {
                 TopAppBar(
                     title = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 modifier = Modifier
-                                    .size(10.dp)
+                                    .size(9.dp)
                                     .clip(CircleShape)
                                     .background(
-                                        if (prefs.isServiceEnabled) Color(0xFF10B981)
-                                        else Color(0xFFEF4444)
+                                        if (prefs.isServiceEnabled) SakuColors.SagePrimary
+                                        else SakuColors.AccentRose
                                     )
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                if (currentTab == 0) "Saku • 咲く" else "Saku • 読書 (Reading)",
+                                if (currentTab == 0) "Saku • 咲く" else "Saku • 読書",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp,
-                                letterSpacing = 0.8.sp
+                                fontSize = 19.sp,
+                                letterSpacing = 0.6.sp,
+                                color = SakuColors.TextPrimary
                             )
                         }
                     },
@@ -350,9 +358,9 @@ class MainActivity : ComponentActivity() {
                         if (isRefreshing) {
                             CircularProgressIndicator(
                                 modifier = Modifier
-                                    .size(24.dp)
-                                    .padding(end = 8.dp),
-                                color = Color.White,
+                                    .size(20.dp)
+                                    .padding(end = 6.dp),
+                                color = SakuColors.SagePrimary,
                                 strokeWidth = 2.dp
                             )
                         }
@@ -364,66 +372,178 @@ class MainActivity : ComponentActivity() {
                                 isRefreshing = false
                             }
                         }) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = Color.White)
+                            Icon(
+                                Icons.Filled.Refresh,
+                                contentDescription = "Refresh",
+                                tint = SakuColors.TextSecondary
+                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color(0xFF0A0A0A),
-                        titleContentColor = Color.White,
-                        actionIconContentColor = Color.White
+                        containerColor = SakuColors.Background,
+                        titleContentColor = SakuColors.TextPrimary,
+                        actionIconContentColor = SakuColors.TextSecondary
                     )
                 )
             },
             bottomBar = {
-                NavigationBar(
-                    containerColor = Color(0xFF101010),
-                    tonalElevation = 8.dp
-                ) {
-                    NavigationBarItem(
-                        selected = currentTab == 0,
-                        onClick = { currentTab = 0 },
-                        icon = {
-                            Icon(Icons.Filled.Style, contentDescription = "Flashcards")
-                        },
-                        label = {
-                            Text("Flashcards", fontWeight = if (currentTab == 0) FontWeight.Bold else FontWeight.Normal)
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF38BDF8),
-                            selectedTextColor = Color(0xFF38BDF8),
-                            indicatorColor = Color(0xFF1E293B),
-                            unselectedIconColor = Color(0xFF888888),
-                            unselectedTextColor = Color(0xFF888888)
+                BubblyFloatingNav(
+                    currentTab = currentTab,
+                    onTabSelected = { currentTab = it }
+                )
+            }
+        ) { padding ->
+            AnimatedContent(
+                targetState = currentTab,
+                transitionSpec = {
+                    val direction = if (targetState > initialState) 1 else -1
+                    (slideInHorizontally(
+                        initialOffsetX = { fullWidth -> direction * (fullWidth * 0.45f).toInt() },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + scaleIn(
+                        initialScale = 0.90f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeIn(
+                        animationSpec = tween(160, easing = FastOutSlowInEasing)
+                    )).togetherWith(
+                        slideOutHorizontally(
+                            targetOffsetX = { fullWidth -> -direction * (fullWidth * 0.28f).toInt() },
+                            animationSpec = tween(140, easing = FastOutSlowInEasing)
+                        ) + scaleOut(
+                            targetScale = 0.95f,
+                            animationSpec = tween(140)
+                        ) + fadeOut(
+                            animationSpec = tween(110)
                         )
                     )
-                    NavigationBarItem(
-                        selected = currentTab == 1,
-                        onClick = { currentTab = 1 },
-                        icon = {
-                            Icon(Icons.Filled.AutoStories, contentDescription = "Reading")
-                        },
-                        label = {
-                            Text("Reading", fontWeight = if (currentTab == 1) FontWeight.Bold else FontWeight.Normal)
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color(0xFF38BDF8),
-                            selectedTextColor = Color(0xFF38BDF8),
-                            indicatorColor = Color(0xFF1E293B),
-                            unselectedIconColor = Color(0xFF888888),
-                            unselectedTextColor = Color(0xFF888888)
-                        )
+                },
+                label = "ScreenSwitchBubbly"
+            ) { tab ->
+                if (tab == 0) {
+                    ModernSettingsScreen(padding)
+                } else {
+                    ReadingScreen(
+                        padding = padding,
+                        prefs = prefs,
+                        hasAnkiPermission = hasPermissionState
                     )
                 }
             }
-        ) { padding ->
-            if (currentTab == 0) {
-                ModernSettingsScreen(padding)
-            } else {
-                ReadingScreen(
-                    padding = padding,
-                    prefs = prefs,
-                    hasAnkiPermission = hasPermissionState
-                )
+        }
+    }
+
+    @Composable
+    fun BubblyFloatingNav(
+        currentTab: Int,
+        onTabSelected: (Int) -> Unit
+    ) {
+        val tabs = listOf(
+            Pair("Cards", Icons.Filled.Style),
+            Pair("Reading", Icons.Filled.AutoStories)
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                shape = RoundedCornerShape(32.dp),
+                color = SakuColors.Surface.copy(alpha = 0.96f),
+                border = BorderStroke(1.dp, SakuColors.Border),
+                shadowElevation = 8.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+            ) {
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(5.dp)
+                ) {
+                    val tabWidth = maxWidth / tabs.size
+                    val indicatorOffset by animateDpAsState(
+                        targetValue = tabWidth * currentTab,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "BubblyNavIndicatorOffset"
+                    )
+
+                    // Bubbly sliding indicator pill
+                    Box(
+                        modifier = Modifier
+                            .offset(x = indicatorOffset)
+                            .width(tabWidth)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(SakuColors.SageContainer)
+                            .border(
+                                BorderStroke(1.dp, SakuColors.SageContainerBorder),
+                                RoundedCornerShape(26.dp)
+                            )
+                    )
+
+                    // Nav Tab items
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        tabs.forEachIndexed { index, (label, icon) ->
+                            val isSelected = currentTab == index
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val isPressed by interactionSource.collectIsPressedAsState()
+
+                            val scale by animateFloatAsState(
+                                targetValue = if (isPressed) 0.88f else if (isSelected) 1.03f else 1.0f,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                ),
+                                label = "BubblyTabScale"
+                            )
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(26.dp))
+                                    .clickable(
+                                        interactionSource = interactionSource,
+                                        indication = null
+                                    ) {
+                                        onTabSelected(index)
+                                    }
+                                    .scale(scale),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = label,
+                                        tint = if (isSelected) SakuColors.SageLight else SakuColors.TextMuted,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = label,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) SakuColors.TextPrimary else SakuColors.TextMuted
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -469,26 +589,36 @@ class MainActivity : ComponentActivity() {
             // 1. Connection Status (if not connected)
             if (!isAnkiInstalledState || !hasPermissionState) {
                 Card(
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161616)),
-                    border = BorderStroke(1.dp, Color(0xFF262626))
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+                    border = BorderStroke(1.dp, SakuColors.AccentAmber.copy(alpha = 0.35f))
                 ) {
                     Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "ANKIDROID CONNECTION",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF888888),
-                            letterSpacing = 1.2.sp
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = null,
+                                tint = SakuColors.AccentAmber,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "ANKIDROID SYNC",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SakuColors.AccentAmber,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         if (!isAnkiInstalledState) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFFFA94D))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text("AnkiDroid is not installed on this device", fontSize = 14.sp)
-                            }
+                            Text(
+                                "AnkiDroid is required to sync flashcards and algorithm progress.",
+                                fontSize = 13.5.sp,
+                                color = SakuColors.TextSecondary,
+                                lineHeight = 19.sp
+                            )
                             Spacer(modifier = Modifier.height(12.dp))
                             Button(
                                 onClick = {
@@ -501,22 +631,31 @@ class MainActivity : ComponentActivity() {
                                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=com.ichi2.anki")))
                                     }
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SakuColors.SagePrimary,
+                                    contentColor = SakuColors.OnSage
+                                )
                             ) {
-                                Text("Install AnkiDroid from Play Store")
+                                Text("Install AnkiDroid", fontWeight = FontWeight.SemiBold)
                             }
                         } else if (!hasPermissionState) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.Warning, contentDescription = null, tint = Color(0xFFFFA94D))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text("Permission required to read your cards", fontSize = 14.sp)
-                            }
+                            Text(
+                                "Grant read/write permission so Saku can display your scheduled reviews.",
+                                fontSize = 13.5.sp,
+                                color = SakuColors.TextSecondary,
+                                lineHeight = 19.sp
+                            )
                             Spacer(modifier = Modifier.height(12.dp))
                             Button(
                                 onClick = { checkAndRequestAnkiPermission() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SakuColors.SagePrimary,
+                                    contentColor = SakuColors.OnSage
+                                )
                             ) {
-                                Text("Connect to AnkiDroid (1-Tap)")
+                                Text("Connect AnkiDroid (1-Tap)", fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -662,14 +801,14 @@ class MainActivity : ComponentActivity() {
     fun ModernHeroCard(isEnabled: Boolean, onToggle: (Boolean) -> Unit) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                containerColor = SakuColors.Surface
             ),
             border = BorderStroke(
                 1.dp,
-                if (isEnabled) Color(0xFF38BDF8).copy(alpha = 0.4f)
-                else Color.White.copy(alpha = 0.1f)
+                if (isEnabled) SakuColors.SageContainerBorder
+                else SakuColors.Border
             )
         ) {
             Box(
@@ -678,16 +817,15 @@ class MainActivity : ComponentActivity() {
                     .background(
                         Brush.linearGradient(
                             colors = if (isEnabled) listOf(
-                                Color(0xFF0F172A),
-                                Color(0xFF1E293B),
-                                Color(0xFF0C4A6E).copy(alpha = 0.4f)
+                                SakuColors.SurfaceElevated,
+                                SakuColors.SageContainer.copy(alpha = 0.5f)
                             ) else listOf(
-                                Color(0xFF1E1E2E),
-                                Color(0xFF181825)
+                                SakuColors.Surface,
+                                SakuColors.SurfaceElevated.copy(alpha = 0.5f)
                             )
                         )
                     )
-                    .padding(20.dp)
+                    .padding(18.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -695,25 +833,28 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            if (isEnabled) "Lockscreen Card Active" else "Lockscreen Card Inactive",
+                            if (isEnabled) "Lock Screen Card Active" else "Lock Screen Card Paused",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = Color.White
+                            fontSize = 16.sp,
+                            color = SakuColors.TextPrimary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            if (isEnabled) "Review Japanese flashcards on Lock Screen & AOD"
-                            else "Turn on to display flashcards when your screen turns on",
-                            fontSize = 12.sp,
-                            color = Color(0xFF94A3B8)
+                            if (isEnabled) "Flashcards active on Lock Screen & AOD"
+                            else "Display flashcards when phone turns on",
+                            fontSize = 12.5.sp,
+                            color = SakuColors.TextSecondary
                         )
                     }
                     Switch(
                         checked = isEnabled,
                         onCheckedChange = onToggle,
                         colors = SwitchDefaults.colors(
-                            checkedTrackColor = Color(0xFF38BDF8),
-                            checkedThumbColor = Color.White
+                            checkedTrackColor = SakuColors.SagePrimary,
+                            checkedThumbColor = SakuColors.OnSage,
+                            uncheckedTrackColor = SakuColors.SurfaceVariant,
+                            uncheckedThumbColor = SakuColors.TextMuted,
+                            uncheckedBorderColor = SakuColors.Border
                         )
                     )
                 }
@@ -766,18 +907,18 @@ class MainActivity : ComponentActivity() {
             } catch (t: Throwable) {
                 t.printStackTrace()
                 Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888).apply {
-                    eraseColor(android.graphics.Color.parseColor("#0F172A"))
+                    eraseColor(android.graphics.Color.parseColor("#15171C"))
                 }
             }
         }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(22.dp),
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF0F172A).copy(alpha = 0.8f)
+                containerColor = SakuColors.Surface
             ),
-            border = BorderStroke(1.dp, Color(0xFF334155))
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -787,25 +928,25 @@ class MainActivity : ComponentActivity() {
                     Icon(
                         Icons.Filled.Visibility,
                         contentDescription = null,
-                        tint = Color(0xFF38BDF8),
+                        tint = SakuColors.SagePrimary,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        "Live Card & Widget Preview",
-                        fontSize = 13.sp,
+                        "Live Card Preview",
+                        fontSize = 13.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFFE2E8F0)
+                        color = SakuColors.TextPrimary
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     IconButton(
                         onClick = onRefresh,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             Icons.Filled.Refresh,
                             contentDescription = "Refresh",
-                            tint = Color(0xFF94A3B8),
+                            tint = SakuColors.TextSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -820,7 +961,7 @@ class MainActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .clip(RoundedCornerShape(16.dp))
-                        .border(BorderStroke(1.dp, Color(0xFF475569).copy(alpha = 0.5f)), RoundedCornerShape(16.dp))
+                        .border(BorderStroke(1.dp, SakuColors.BorderSubtle), RoundedCornerShape(16.dp))
                         .clickable { onToggleReveal() },
                     contentScale = ContentScale.Fit
                 )
@@ -834,48 +975,50 @@ class MainActivity : ComponentActivity() {
                     Button(
                         onClick = onAgain,
                         modifier = Modifier.weight(1f).height(38.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFEF5350).copy(alpha = 0.85f)
+                            containerColor = SakuColors.AccentRose.copy(alpha = 0.85f),
+                            contentColor = Color.White
                         )
                     ) {
-                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     Button(
                         onClick = onToggleReveal,
                         modifier = Modifier.weight(1.2f).height(38.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF38BDF8).copy(alpha = 0.85f)
+                            containerColor = SakuColors.SagePrimary,
+                            contentColor = SakuColors.OnSage
                         )
                     ) {
                         Text(
                             if (isRevealed) "Hide" else "Reveal",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            fontWeight = FontWeight.Bold
                         )
                     }
                     Button(
                         onClick = onGood,
                         modifier = Modifier.weight(1f).height(38.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF10B981).copy(alpha = 0.85f)
+                            containerColor = SakuColors.SageLight.copy(alpha = 0.85f),
+                            contentColor = SakuColors.OnSage
                         )
                     ) {
-                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = onOpenAnki,
                         modifier = Modifier.weight(0.9f).height(38.dp),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = Color(0xFF334155).copy(alpha = 0.5f)
+                            containerColor = SakuColors.SurfaceElevated
                         ),
-                        border = BorderStroke(1.dp, Color(0xFF64748B).copy(alpha = 0.5f))
+                        border = BorderStroke(1.dp, SakuColors.BorderHighlight)
                     ) {
-                        Text("Anki", fontSize = 12.sp, color = Color(0xFFE2E8F0))
+                        Text("Anki", fontSize = 12.sp, color = SakuColors.TextSecondary)
                     }
                 }
             }
@@ -891,24 +1034,24 @@ class MainActivity : ComponentActivity() {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Filled.AutoAwesome,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        tint = SakuColors.SagePrimary,
+                        modifier = Modifier.size(19.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         "Action on Answer Revealed",
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
+                        fontSize = 15.sp,
+                        color = SakuColors.TextPrimary
                     )
                 }
                 Spacer(modifier = Modifier.height(14.dp))
@@ -920,6 +1063,14 @@ class MainActivity : ComponentActivity() {
                             shape = SegmentedButtonDefaults.itemShape(
                                 index = index,
                                 count = options.size
+                            ),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = SakuColors.SageContainer,
+                                activeContentColor = SakuColors.SageLight,
+                                inactiveContainerColor = SakuColors.SurfaceElevated,
+                                inactiveContentColor = SakuColors.TextSecondary,
+                                activeBorderColor = SakuColors.SageContainerBorder,
+                                inactiveBorderColor = SakuColors.BorderSubtle
                             )
                         ) {
                             Text(labels[index], fontSize = 12.sp)
@@ -951,35 +1102,54 @@ class MainActivity : ComponentActivity() {
         onArtworkOpacityCommit: () -> Unit
     ) {
         val context = LocalContext.current
-        val options = listOf("anki_lock", "dark_blur", "sunset", "custom", "transparent")
-        val labels = listOf("Default", "Dark Blur", "Sunset", "Gallery", "Glass")
+        val options = listOf("anki_lock", "dark_blur", "sunset", "transparent", "custom")
+        val labels = listOf("Default", "Dark Blur", "Sunset", "Glass", "Gallery")
         val selectedIndex = options.indexOf(currentType).coerceAtLeast(0)
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Icon(
                         Icons.Filled.Image,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        tint = SakuColors.SagePrimary,
+                        modifier = Modifier.size(19.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        "Widget Background Studio",
+                        "Widget Background",
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
+                        fontSize = 15.sp,
+                        color = SakuColors.TextPrimary
                     )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = SakuColors.SageContainer,
+                        border = BorderStroke(1.dp, SakuColors.SageContainerBorder)
+                    ) {
+                        Text(
+                            labels[selectedIndex],
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SakuColors.SageLight,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                // Clean style presets row
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -990,12 +1160,12 @@ class MainActivity : ComponentActivity() {
                         Surface(
                             onClick = { onSelectType(type) },
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
-                            else Color(0xFF1E293B).copy(alpha = 0.6f),
+                            color = if (isSelected) SakuColors.SagePrimary.copy(alpha = 0.22f)
+                            else SakuColors.SurfaceElevated,
                             border = BorderStroke(
                                 1.dp,
-                                if (isSelected) MaterialTheme.colorScheme.primary
-                                else Color(0xFF475569).copy(alpha = 0.4f)
+                                if (isSelected) SakuColors.SagePrimary
+                                else SakuColors.BorderSubtle
                             ),
                             modifier = Modifier.height(36.dp)
                         ) {
@@ -1005,9 +1175,9 @@ class MainActivity : ComponentActivity() {
                             ) {
                                 Text(
                                     text = labels[index],
-                                    fontSize = 13.sp,
+                                    fontSize = 12.5.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) Color.White else Color(0xFFCBD5E1),
+                                    color = if (isSelected) SakuColors.SageLight else SakuColors.TextSecondary,
                                     maxLines = 1,
                                     softWrap = false
                                 )
@@ -1016,136 +1186,152 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Fine-tuning range sliders (compact, minimal, clean)
                 if (currentType != "transparent") {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    StudioSliderRow(
-                        icon = Icons.Filled.BlurOn,
-                        label = "Blur Radius: ${blurRadius.toInt()}px",
-                        value = blurRadius,
-                        valueRange = 5f..60f,
-                        steps = 10,
-                        onValueChange = { newRadius ->
-                            onBlurChange(((newRadius / 5f).roundToInt() * 5f).coerceIn(5f, 60f))
-                        },
-                        onValueChangeFinished = onBlurCommit
-                    )
-                    StudioSliderRow(
-                        icon = Icons.Filled.Opacity,
-                        label = "Dark Dimming Tint: ${(dimOpacity * 100).toInt()}%",
-                        value = dimOpacity,
-                        valueRange = 0.0f..0.9f,
-                        steps = 17,
-                        onValueChange = { newOpacity ->
-                            onOpacityChange(((newOpacity * 20f).roundToInt() / 20f).coerceIn(0f, 0.9f))
-                        },
-                        onValueChangeFinished = onOpacityCommit
-                    )
-                    StudioSliderRow(
-                        icon = Icons.Filled.AutoAwesome,
-                        label = "Artwork Opacity: ${(artworkOpacity * 100).toInt()}%",
-                        value = artworkOpacity,
-                        valueRange = 0.1f..1.0f,
-                        steps = 17,
-                        onValueChange = { newArtOpacity ->
-                            onArtworkOpacityChange(((newArtOpacity * 20f).roundToInt() / 20f).coerceIn(0.1f, 1.0f))
-                        },
-                        onValueChangeFinished = onArtworkOpacityCommit
-                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(SakuColors.SurfaceElevated.copy(alpha = 0.6f))
+                            .border(BorderStroke(1.dp, SakuColors.BorderSubtle), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CompactSliderRow(
+                            icon = Icons.Filled.BlurOn,
+                            label = "Blur Radius",
+                            valueDisplay = "${blurRadius.toInt()}px",
+                            value = blurRadius,
+                            valueRange = 5f..60f,
+                            onValueChange = { newRadius ->
+                                onBlurChange(((newRadius / 5f).roundToInt() * 5f).coerceIn(5f, 60f))
+                            },
+                            onValueChangeFinished = onBlurCommit
+                        )
+                        CompactSliderRow(
+                            icon = Icons.Filled.Opacity,
+                            label = "Dimming Tint",
+                            valueDisplay = "${(dimOpacity * 100).toInt()}%",
+                            value = dimOpacity,
+                            valueRange = 0.0f..0.9f,
+                            onValueChange = { newOpacity ->
+                                onOpacityChange(((newOpacity * 20f).roundToInt() / 20f).coerceIn(0f, 0.9f))
+                            },
+                            onValueChangeFinished = onOpacityCommit
+                        )
+                        CompactSliderRow(
+                            icon = Icons.Filled.AutoAwesome,
+                            label = "Artwork Opacity",
+                            valueDisplay = "${(artworkOpacity * 100).toInt()}%",
+                            value = artworkOpacity,
+                            valueRange = 0.1f..1.0f,
+                            onValueChange = { newArtOpacity ->
+                                onArtworkOpacityChange(((newArtOpacity * 20f).roundToInt() / 20f).coerceIn(0.1f, 1.0f))
+                            },
+                            onValueChangeFinished = onArtworkOpacityCommit
+                        )
+                    }
                 }
 
+                // Custom Gallery section
                 if (currentType == "custom") {
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    if (savedUris.isNotEmpty()) {
-                        Text(
-                            "Saved Gallery Wallpapers (${savedUris.size})",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF94A3B8)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Inline "+ Add" button tile
+                        item {
+                            Surface(
+                                onClick = onPickNewImage,
+                                shape = RoundedCornerShape(14.dp),
+                                color = SakuColors.SurfaceElevated,
+                                border = BorderStroke(1.dp, SakuColors.SagePrimary.copy(alpha = 0.4f)),
+                                modifier = Modifier.size(64.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Filled.AddPhotoAlternate,
+                                        contentDescription = "Add wallpaper",
+                                        tint = SakuColors.SagePrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "Add",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SakuColors.SageLight
+                                    )
+                                }
+                            }
+                        }
 
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(savedUris.toList()) { uriStr ->
-                                val isSelected = (uriStr == currentUri)
+                        items(savedUris.toList()) { uriStr ->
+                            val isSelected = (uriStr == currentUri)
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .border(
+                                        2.dp,
+                                        if (isSelected) SakuColors.SagePrimary
+                                        else SakuColors.BorderSubtle,
+                                        RoundedCornerShape(14.dp)
+                                    )
+                                    .clickable { onSelectSavedUri(uriStr) }
+                            ) {
+                                UriThumbnail(
+                                    context = context,
+                                    uriStr = uriStr,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+
                                 Box(
                                     modifier = Modifier
-                                        .size(68.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .border(
-                                            2.dp,
-                                            if (isSelected) MaterialTheme.colorScheme.primary
-                                            else Color.Transparent,
-                                            RoundedCornerShape(12.dp)
-                                        )
-                                        .clickable { onSelectSavedUri(uriStr) }
+                                        .align(Alignment.TopEnd)
+                                        .padding(3.dp)
+                                        .size(17.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xCC000000))
+                                        .clickable { onRemoveSavedUri(uriStr) },
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    UriThumbnail(
-                                        context = context,
-                                        uriStr = uriStr,
-                                        modifier = Modifier.fillMaxSize()
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Remove",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(11.dp)
                                     )
+                                }
 
+                                if (isSelected) {
                                     Box(
                                         modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(4.dp)
-                                            .size(18.dp)
+                                            .align(Alignment.BottomEnd)
+                                            .padding(3.dp)
+                                            .size(17.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xCC000000))
-                                            .clickable { onRemoveSavedUri(uriStr) },
+                                            .background(SakuColors.SagePrimary),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Filled.Close,
-                                            contentDescription = "Remove",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(12.dp)
+                                            Icons.Filled.Check,
+                                            contentDescription = null,
+                                            tint = SakuColors.OnSage,
+                                            modifier = Modifier.size(11.dp)
                                         )
-                                    }
-
-                                    if (isSelected) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .padding(4.dp)
-                                                .size(18.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.Check,
-                                                contentDescription = null,
-                                                tint = Color.White,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                        }
                                     }
                                 }
                             }
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
-
-                    Button(
-                        onClick = onPickNewImage,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(
-                            Icons.Filled.AddPhotoAlternate,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add Picture from Phone / Gallery")
                     }
                 }
             }
@@ -1160,24 +1346,24 @@ class MainActivity : ComponentActivity() {
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Filled.Style,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        tint = SakuColors.SagePrimary,
+                        modifier = Modifier.size(19.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         "Anki Decks",
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 15.sp
+                        fontSize = 15.sp,
+                        color = SakuColors.TextPrimary
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
@@ -1196,7 +1382,9 @@ class MainActivity : ComponentActivity() {
                             checked = deckIdStr in selectedIds,
                             onCheckedChange = { onDeckToggle(deckIdStr, it) },
                             colors = CheckboxDefaults.colors(
-                                checkedColor = MaterialTheme.colorScheme.primary
+                                checkedColor = SakuColors.SagePrimary,
+                                uncheckedColor = SakuColors.BorderHighlight,
+                                checkmarkColor = SakuColors.OnSage
                             )
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -1204,6 +1392,7 @@ class MainActivity : ComponentActivity() {
                             deck.name,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
+                            color = SakuColors.TextPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1211,29 +1400,29 @@ class MainActivity : ComponentActivity() {
                                 "${deck.newCount}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF8AB4F8)
+                                color = SakuColors.AccentSlateBlue
                             )
                             Text(
                                 " · ",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF94A3B8)
+                                color = SakuColors.TextMuted
                             )
                             Text(
                                 "${deck.learnCount}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFFF28B82)
+                                color = SakuColors.AccentRose
                             )
                             Text(
                                 " · ",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF94A3B8)
+                                color = SakuColors.TextMuted
                             )
                             Text(
                                 "${deck.reviewCount}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF81C995)
+                                color = SakuColors.AccentSage
                             )
                         }
                     }
@@ -1257,22 +1446,22 @@ class MainActivity : ComponentActivity() {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text(
-                    "Frequency & Snooze",
+                    "Sync & Snooze Frequency",
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp
+                    fontSize = 15.sp,
+                    color = SakuColors.TextPrimary
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    "Background Sync Interval",
+                    "Background Card Refresh",
                     fontSize = 12.sp,
-                    color = Color(0xFF94A3B8)
+                    color = SakuColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -1280,7 +1469,15 @@ class MainActivity : ComponentActivity() {
                         SegmentedButton(
                             selected = index == updateIdx,
                             onClick = { onUpdateSelect(min) },
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = SakuColors.SageContainer,
+                                activeContentColor = SakuColors.SageLight,
+                                inactiveContainerColor = SakuColors.SurfaceElevated,
+                                inactiveContentColor = SakuColors.TextSecondary,
+                                activeBorderColor = SakuColors.SageContainerBorder,
+                                inactiveBorderColor = SakuColors.BorderSubtle
+                            )
                         ) {
                             Text(labels[index], fontSize = 12.sp)
                         }
@@ -1288,9 +1485,9 @@ class MainActivity : ComponentActivity() {
                 }
                 Spacer(modifier = Modifier.height(14.dp))
                 Text(
-                    "Snooze Duration",
+                    "Snooze Interval",
                     fontSize = 12.sp,
-                    color = Color(0xFF94A3B8)
+                    color = SakuColors.TextSecondary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -1298,7 +1495,15 @@ class MainActivity : ComponentActivity() {
                         SegmentedButton(
                             selected = index == snoozeIdx,
                             onClick = { onSnoozeSelect(min) },
-                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
+                            shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = SakuColors.SageContainer,
+                                activeContentColor = SakuColors.SageLight,
+                                inactiveContainerColor = SakuColors.SurfaceElevated,
+                                inactiveContentColor = SakuColors.TextSecondary,
+                                activeBorderColor = SakuColors.SageContainerBorder,
+                                inactiveBorderColor = SakuColors.BorderSubtle
+                            )
                         ) {
                             Text(labels[index], fontSize = 12.sp)
                         }
@@ -1309,41 +1514,62 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun StudioSliderRow(
+    fun CompactSliderRow(
         icon: ImageVector,
         label: String,
+        valueDisplay: String,
         value: Float,
         valueRange: ClosedFloatingPointRange<Float>,
-        steps: Int = 0,
         onValueChange: (Float) -> Unit,
         onValueChangeFinished: (() -> Unit)? = null
     ) {
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = Color(0xFF94A3B8),
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                label,
-                fontSize = 12.sp,
-                color = Color(0xFF94A3B8)
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = SakuColors.SageLight,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SakuColors.TextSecondary
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = SakuColors.SurfaceVariant
+                ) {
+                    Text(
+                        valueDisplay,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SakuColors.SageLight,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            Slider(
+                value = value,
+                onValueChange = onValueChange,
+                onValueChangeFinished = onValueChangeFinished,
+                valueRange = valueRange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(28.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = SakuColors.SagePrimary,
+                    activeTrackColor = SakuColors.SagePrimary,
+                    inactiveTrackColor = SakuColors.Border
+                )
             )
         }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            onValueChangeFinished = onValueChangeFinished,
-            valueRange = valueRange,
-            steps = steps,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary
-            )
-        )
     }
 
     @Composable
@@ -1355,11 +1581,11 @@ class MainActivity : ComponentActivity() {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF161616)),
-            border = BorderStroke(1.dp, Color(0xFF262626))
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(18.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1369,37 +1595,42 @@ class MainActivity : ComponentActivity() {
                         Icon(
                             Icons.Filled.AutoAwesome,
                             contentDescription = null,
-                            tint = Color(0xFFA855F7),
-                            modifier = Modifier.size(20.dp)
+                            tint = SakuColors.AccentLavender,
+                            modifier = Modifier.size(19.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "GEMINI AI READING",
-                            fontSize = 12.sp,
+                            text = "GEMINI AI STORIES",
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF888888),
-                            letterSpacing = 1.2.sp
+                            color = SakuColors.TextSecondary,
+                            letterSpacing = 1.sp
                         )
                     }
                     Surface(
                         shape = RoundedCornerShape(8.dp),
-                        color = if (currentKey.isNotBlank()) Color(0xFF162520) else Color(0xFF2D1B1B)
+                        color = if (currentKey.isNotBlank()) SakuColors.SageContainer else SakuColors.AccentRoseContainer,
+                        border = BorderStroke(
+                            1.dp,
+                            if (currentKey.isNotBlank()) SakuColors.SageContainerBorder else SakuColors.AccentRose.copy(alpha = 0.4f)
+                        )
                     ) {
                         Text(
                             text = if (currentKey.isNotBlank()) "Connected" else "Not set",
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (currentKey.isNotBlank()) Color(0xFF10B981) else Color(0xFFEF4444),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (currentKey.isNotBlank()) SakuColors.SageLight else SakuColors.AccentRose,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
-                    text = "Configure API key and AI model used to craft Japanese reading stories from your studied and suspended Anki flashcards.",
+                    text = "AI-generated Japanese reading passages personalized from your due and studied Anki flashcards.",
                     fontSize = 13.sp,
-                    color = Color(0xFF94A3B8)
+                    color = SakuColors.TextSecondary,
+                    lineHeight = 18.sp
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -1409,15 +1640,15 @@ class MainActivity : ComponentActivity() {
                     text = "ACTIVE MODEL",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF888888),
+                    color = SakuColors.TextMuted,
                     letterSpacing = 1.sp
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
                     onClick = { showModelDialog = true },
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF1E1829),
-                    border = BorderStroke(1.dp, Color(0xFFA855F7).copy(alpha = 0.45f)),
+                    shape = RoundedCornerShape(14.dp),
+                    color = SakuColors.AccentLavenderContainer.copy(alpha = 0.6f),
+                    border = BorderStroke(1.dp, SakuColors.AccentLavender.copy(alpha = 0.35f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1431,35 +1662,36 @@ class MainActivity : ComponentActivity() {
                             Icon(
                                 Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                tint = Color(0xFFA855F7),
-                                modifier = Modifier.size(20.dp)
+                                tint = SakuColors.AccentLavender,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
                                     text = PreferencesManager.getModelDisplayName(currentModel),
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 14.sp,
-                                    color = Color.White
+                                    fontSize = 13.5.sp,
+                                    color = SakuColors.TextPrimary
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = currentModel,
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = Color(0xFFC084FC)
+                                    color = SakuColors.AccentLavender
                                 )
                             }
                         }
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFF3B1E5A)
+                            color = SakuColors.AccentLavenderContainer,
+                            border = BorderStroke(1.dp, SakuColors.AccentLavender.copy(alpha = 0.4f))
                         ) {
                             Text(
-                                text = "Switch",
+                                text = "Change",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFD8B4FE),
+                                color = SakuColors.AccentLavender,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
@@ -1474,29 +1706,31 @@ class MainActivity : ComponentActivity() {
                     Button(
                         onClick = { showDialog = true },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1E293B),
-                            contentColor = Color.White
+                            containerColor = SakuColors.SurfaceElevated,
+                            contentColor = SakuColors.TextPrimary
                         ),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, SakuColors.BorderSubtle),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp), tint = SakuColors.SageLight)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (currentKey.isNotBlank()) "Change API Key" else "Set API Key")
+                        Text(if (currentKey.isNotBlank()) "Change API Key" else "Set API Key", fontSize = 12.5.sp)
                     }
 
                     Button(
                         onClick = { showModelDialog = true },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF2E1F42),
-                            contentColor = Color(0xFFD8B4FE)
+                            containerColor = SakuColors.SurfaceElevated,
+                            contentColor = SakuColors.TextPrimary
                         ),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, SakuColors.BorderSubtle),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFA855F7))
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp), tint = SakuColors.AccentLavender)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Pick Model")
+                        Text("Pick Model", fontSize = 12.5.sp)
                     }
                 }
             }
@@ -1552,10 +1786,10 @@ fun UriThumbnail(context: Context, uriStr: String, modifier: Modifier = Modifier
         )
     } else {
         Box(
-            modifier = modifier.background(Color(0xFF334155)),
+            modifier = modifier.background(SakuColors.SurfaceElevated),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Filled.Image, contentDescription = null, tint = Color(0xFF94A3B8))
+            Icon(Icons.Filled.Image, contentDescription = null, tint = SakuColors.TextMuted)
         }
     }
 }

@@ -81,6 +81,10 @@ class PreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_INTERNET_DISCLOSURE, false)
         set(value) = prefs.edit().putBoolean(KEY_INTERNET_DISCLOSURE, value).apply()
 
+    var highlightVocabularyWords: Boolean
+        get() = prefs.getBoolean(KEY_HIGHLIGHT_VOCABULARY_WORDS, true)
+        set(value) = prefs.edit().putBoolean(KEY_HIGHLIGHT_VOCABULARY_WORDS, value).apply()
+
     val isSnoozed: Boolean
         get() = System.currentTimeMillis() < snoozeUntil
 
@@ -148,6 +152,7 @@ class PreferencesManager(context: Context) {
         private const val KEY_READING_JLPT_LEVEL = "reading_jlpt_level"
         private const val KEY_GEMINI_MODEL = "gemini_model"
         private const val KEY_INTERNET_DISCLOSURE = "internet_disclosure_accepted"
+        private const val KEY_HIGHLIGHT_VOCABULARY_WORDS = "highlight_vocabulary_words"
     }
 }
 

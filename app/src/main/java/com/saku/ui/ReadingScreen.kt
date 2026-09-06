@@ -162,7 +162,6 @@ fun ReadingScreen(
     var selectedWordDetail by remember { mutableStateOf<AnkiVocabularyItem?>(null) }
 
     // Translation Sheet
-    val translationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showTranslationSheet by remember { mutableStateOf(false) }
     var translateTargetText by remember { mutableStateOf("") }
 
@@ -1367,12 +1366,9 @@ fun ReadingScreen(
     if (showTranslationSheet && translateTargetText.isNotBlank()) {
         TranslationBottomSheet(
             sourceText = translateTargetText,
-            sheetState = translationSheetState,
             onDismiss = {
-                coroutineScope.launch {
-                    translationSheetState.hide()
-                    showTranslationSheet = false
-                }
+                showTranslationSheet = false
+                translateTargetText = ""
             },
             onNavigateToJisho = onNavigateToJisho
         )

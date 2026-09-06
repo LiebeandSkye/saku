@@ -652,7 +652,10 @@ class MainActivity : ComponentActivity() {
                         else -> JishoScreen(
                             padding = padding,
                             prefs = prefs,
-                            initialQuery = jishoTargetQuery
+                            initialQuery = jishoTargetQuery,
+                            onInitialQueryConsumed = {
+                                jishoTargetQuery = ""
+                            }
                         )
                     }
                 }
@@ -682,6 +685,9 @@ class MainActivity : ComponentActivity() {
                 ModernLiquidDock(
                     currentTab = currentTab,
                     onTabSelected = { newTab ->
+                        if (newTab == 2) {
+                            jishoTargetQuery = ""
+                        }
                         currentTab = newTab
                     }
                 )

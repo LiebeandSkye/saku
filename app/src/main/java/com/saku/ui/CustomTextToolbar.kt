@@ -1,10 +1,6 @@
 package com.saku.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,18 +8,10 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material3.Divider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
@@ -38,12 +26,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -58,7 +48,7 @@ import androidx.compose.ui.window.PopupProperties
 
 /**
  * Custom TextToolbar implementation to intercept Compose's text selection toolbar
- * and provide a floating OLED dark menu with Copy, Select All, and Translate.
+ * and provide a floating text-only OLED dark menu with [Copy | Translate].
  */
 class CustomTextToolbar(
     private val onShow: (Rect, (() -> Unit)?, (() -> Unit)?) -> Unit,
@@ -82,6 +72,30 @@ class CustomTextToolbar(
     override fun hide() {
         status = TextToolbarStatus.Hidden
         onHide()
+    }
+}
+
+/**
+ * Intercepting clipboard manager that catches the exact selected text in-memory
+ * when Compose's SelectionManager invokes copy, avoiding IPC delays or Android 10+
+ * background clipboard read restrictions.
+ */
+class InterceptingClipboardManager(
+    private val delegate: ClipboardManager
+) : ClipboardManager {
+    var capturedText: String = ""
+
+    override fun getText(): AnnotatedString? {
+        return delegate.getText()
+    }
+
+    override fun setText(annotatedString: AnnotatedString) {
+        capturedText = annotatedString.text
+        delegate.setText(annotatedString)
+    }
+
+    override fun hasText(): Boolean {
+        return delegate.hasText()
     }
 }
 
@@ -120,27 +134,31 @@ fun CustomSelectionContainer(
 ) {
     var menuRect by remember { mutableStateOf<Rect?>(null) }
     var onCopyAction by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var onSelectAllAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val customToolbar = remember {
         CustomTextToolbar(
-            onShow = { rect, onCopy, onSelectAll ->
+            onShow = { rect, onCopy, _ ->
                 menuRect = rect
                 onCopyAction = onCopy
-                onSelectAllAction = onSelectAll
             },
             onHide = {
                 menuRect = null
                 onCopyAction = null
-                onSelectAllAction = null
             }
         )
     }
 
-    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val systemClipboard = LocalClipboardManager.current
+    val interceptingClipboard = remember(systemClipboard) {
+        InterceptingClipboardManager(systemClipboard)
+    }
     val density = LocalDensity.current
 
-    CompositionLocalProvider(LocalTextToolbar provides customToolbar) {
+    CompositionLocalProvider(
+        LocalTextToolbar provides customToolbar,
+        LocalClipboardManager provides interceptingClipboard
+    ) {
         Box {
             content()
 
@@ -155,15 +173,17 @@ fun CustomSelectionContainer(
                             onCopyAction?.invoke()
                             customToolbar.hide()
                         },
-                        onSelectAll = {
-                            onSelectAllAction?.invoke()
-                        },
                         onTranslate = {
+                            interceptingClipboard.capturedText = ""
                             onCopyAction?.invoke()
-                            val selected = clipboardManager.getText()?.text ?: ""
+                            val selected = interceptingClipboard.capturedText.ifBlank {
+                                systemClipboard.getText()?.text ?: ""
+                            }
                             customToolbar.hide()
                             if (selected.isNotBlank()) {
                                 onTranslate(selected)
+                            } else {
+                                Toast.makeText(context, "No text selected", Toast.LENGTH_SHORT).show()
                             }
                         }
                     )
@@ -176,41 +196,29 @@ fun CustomSelectionContainer(
 @Composable
 private fun OledSelectionPill(
     onCopy: () -> Unit,
-    onSelectAll: () -> Unit,
     onTranslate: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
         color = Color(0xFF141416),
         border = BorderStroke(1.dp, Color(0xFF2C2C32)),
         shadowElevation = 10.dp,
-        modifier = Modifier.shadow(12.dp, RoundedCornerShape(24.dp))
+        modifier = Modifier.shadow(12.dp, RoundedCornerShape(20.dp))
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
-            ToolbarButton(
-                icon = Icons.Default.ContentCopy,
+            TextToolbarButton(
                 label = "Copy",
                 onClick = onCopy
             )
 
             ToolbarDivider()
 
-            ToolbarButton(
-                icon = Icons.Default.SelectAll,
-                label = "Select All",
-                onClick = onSelectAll
-            )
-
-            ToolbarDivider()
-
-            ToolbarButton(
-                icon = Icons.Default.Translate,
+            TextToolbarButton(
                 label = "Translate",
-                accentColor = Color(0xFF90D695),
                 onClick = onTranslate
             )
         }
@@ -218,34 +226,25 @@ private fun OledSelectionPill(
 }
 
 @Composable
-private fun ToolbarButton(
-    icon: ImageVector,
+private fun TextToolbarButton(
     label: String,
-    accentColor: Color = Color(0xFFEEEEEE),
     onClick: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    Box(
         modifier = Modifier
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(color = accentColor.copy(alpha = 0.3f), bounded = true),
+                indication = ripple(color = Color.White.copy(alpha = 0.25f), bounded = true),
                 onClick = onClick
             )
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = accentColor,
-            modifier = Modifier.size(15.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = label,
-            fontSize = 12.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = accentColor,
+            color = Color(0xFFEEEEEE),
             maxLines = 1
         )
     }

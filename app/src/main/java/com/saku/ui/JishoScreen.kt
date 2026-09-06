@@ -82,7 +82,8 @@ import kotlinx.coroutines.launch
 fun JishoScreen(
     padding: PaddingValues,
     prefs: PreferencesManager,
-    initialQuery: String = ""
+    initialQuery: String = "",
+    onInitialQueryConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
@@ -99,7 +100,8 @@ fun JishoScreen(
         }
     }
 
-    var query by remember { mutableStateOf(initialQuery) }
+    var query by remember { mutableStateOf("") }
+    var lastExecutedQuery by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<JishoWord>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -112,9 +114,14 @@ fun JishoScreen(
             results = emptyList()
             isLoading = false
             errorMessage = null
+            lastExecutedQuery = ""
+            return
+        }
+        if (trimmed == lastExecutedQuery && results.isNotEmpty()) {
             return
         }
 
+        lastExecutedQuery = trimmed
         isLoading = true
         errorMessage = null
 
@@ -142,15 +149,19 @@ fun JishoScreen(
             errorMessage = null
             return@LaunchedEffect
         }
+        if (query.trim() == lastExecutedQuery) {
+            return@LaunchedEffect
+        }
         delay(500)
         executeSearch(query)
     }
 
     // React to external initialQuery changes (e.g. from Reading tab lookup)
     LaunchedEffect(initialQuery) {
-        if (initialQuery.isNotBlank() && initialQuery != query) {
+        if (initialQuery.isNotBlank()) {
             query = initialQuery
             executeSearch(initialQuery)
+            onInitialQueryConsumed()
         }
     }
 

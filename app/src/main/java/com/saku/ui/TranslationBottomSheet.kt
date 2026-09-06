@@ -62,7 +62,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun TranslationBottomSheet(
     sourceText: String,
-    sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     onDismiss: () -> Unit,
     onNavigateToJisho: (String) -> Unit = {}
 ) {
@@ -71,6 +70,17 @@ fun TranslationBottomSheet(
     val scope = rememberCoroutineScope()
     val translatorService = remember { TranslatorService() }
     val ttsHelper = remember { JapaneseTtsHelper(context) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    fun dismissWithAnimation() {
+        scope.launch {
+            try {
+                sheetState.hide()
+            } finally {
+                onDismiss()
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -148,7 +158,7 @@ fun TranslationBottomSheet(
                     }
                 }
 
-                IconButton(onClick = onDismiss) {
+                IconButton(onClick = { dismissWithAnimation() }) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
@@ -313,8 +323,14 @@ fun TranslationBottomSheet(
             // Action Buttons: "Look up in Jisho"
             Button(
                 onClick = {
-                    onDismiss()
-                    onNavigateToJisho(sourceText)
+                    scope.launch {
+                        try {
+                            sheetState.hide()
+                        } finally {
+                            onDismiss()
+                            onNavigateToJisho(sourceText)
+                        }
+                    }
                 },
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(

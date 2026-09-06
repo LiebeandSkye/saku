@@ -21,12 +21,17 @@ enum class AppTheme(val id: String, val label: String) {
 }
 
 object SakuColors {
-    // Vibrant Green Accent - energetic, punchy Matcha Jade requested for high contrast & clarity
-    val VibrantMatcha = Color(0xFF52C47C)
-    val VibrantMatchaLight = Color(0xFF6EE7A0)
-    val VibrantMatchaContainer = Color(0xFF1B3824)
-    val VibrantMatchaBorder = Color(0xFF2E633D)
-    val OnVibrantMatcha = Color(0xFF091F11)
+    // Vibrant Green Accent - energetic, punchy Matcha Jade for high contrast & clarity
+    var VibrantMatcha by mutableStateOf(Color(0xFF52C47C))
+        private set
+    var VibrantMatchaLight by mutableStateOf(Color(0xFF6EE7A0))
+        private set
+    var VibrantMatchaContainer by mutableStateOf(Color(0xFF1B3824))
+        private set
+    var VibrantMatchaBorder by mutableStateOf(Color(0xFF2E633D))
+        private set
+    var OnVibrantMatcha by mutableStateOf(Color(0xFF091F11))
+        private set
 
     // Dynamic Reactive Colors (observe state in Compose)
     var currentTheme by mutableStateOf(AppTheme.DIM)
@@ -104,34 +109,39 @@ object SakuColors {
         currentTheme = theme
         when (theme) {
             AppTheme.LIGHT -> {
-                Background = Color(0xFFF6F8FA)
-                BackgroundSecondary = Color(0xFFEEF2F6)
+                Background = Color(0xFFF7F9F7)
+                BackgroundSecondary = Color(0xFFEFF3EF)
                 Surface = Color(0xFFFFFFFF)
-                SurfaceElevated = Color(0xFFF1F4F9)
-                SurfaceVariant = Color(0xFFE3E8EF)
-                Border = Color(0xFFD8DEE4)
-                BorderSubtle = Color(0xFFE4E9EE)
-                BorderHighlight = Color(0xFFB4BFCC)
-                BorderFocus = Color(0xFF2E7D32)
-                SagePrimary = Color(0xFF2E7D32)
-                SageLight = Color(0xFF43A047)
-                SageContainer = Color(0xFFE8F5E9)
-                SageContainerBorder = Color(0xFFC8E6C9)
+                SurfaceElevated = Color(0xFFF2F6F3)
+                SurfaceVariant = Color(0xFFE5EDE6)
+                Border = Color(0xFFD6E2D8)
+                BorderSubtle = Color(0xFFE4EDE5)
+                BorderHighlight = Color(0xFF88C090)
+                BorderFocus = Color(0xFF2D7D46)
+                SagePrimary = Color(0xFF2D7D46)
+                SageLight = Color(0xFF389656)
+                SageContainer = Color(0xFFE4F3E8)
+                SageContainerBorder = Color(0xFFBEE4C8)
                 OnSage = Color(0xFFFFFFFF)
-                AccentRose = Color(0xFFD32F2F)
-                AccentRoseContainer = Color(0xFFFFEBEE)
-                AccentAmber = Color(0xFFE65100)
-                AccentAmberContainer = Color(0xFFFFF3E0)
-                AccentSage = Color(0xFF2E7D32)
-                AccentSlateBlue = Color(0xFF1976D2)
-                AccentSlateBlueContainer = Color(0xFFE3F2FD)
-                AccentLavender = Color(0xFF7B1FA2)
-                AccentLavenderContainer = Color(0xFFF3E5F5)
-                TextPrimary = Color(0xFF1A1D23)
-                TextSecondary = Color(0xFF57606A)
-                TextMuted = Color(0xFF8C95A0)
-                TextTertiary = Color(0xFF8C95A0)
-                TextDisabled = Color(0xFFB1BAC4)
+                VibrantMatcha = Color(0xFF2D7D46)
+                VibrantMatchaLight = Color(0xFF389656)
+                VibrantMatchaContainer = Color(0xFFE4F3E8)
+                VibrantMatchaBorder = Color(0xFFBEE4C8)
+                OnVibrantMatcha = Color(0xFFFFFFFF)
+                AccentRose = Color(0xFFD93848)
+                AccentRoseContainer = Color(0xFFFFECEF)
+                AccentAmber = Color(0xFFD97706)
+                AccentAmberContainer = Color(0xFFFEF3C7)
+                AccentSage = Color(0xFF2D7D46)
+                AccentSlateBlue = Color(0xFF2563EB)
+                AccentSlateBlueContainer = Color(0xFFEFF6FF)
+                AccentLavender = Color(0xFF7C3AED)
+                AccentLavenderContainer = Color(0xFFF5F3FF)
+                TextPrimary = Color(0xFF141916)
+                TextSecondary = Color(0xFF475549)
+                TextMuted = Color(0xFF6B7B6E)
+                TextTertiary = Color(0xFF6B7B6E)
+                TextDisabled = Color(0xFF9EACA1)
             }
             AppTheme.DARK -> {
                 // Pitch dark / OLED Obsidian black
@@ -144,16 +154,21 @@ object SakuColors {
                 BorderSubtle = Color(0xFF1D2330)
                 BorderHighlight = Color(0xFF384359)
                 BorderFocus = Color(0xFF52C47C)
-                SagePrimary = VibrantMatcha
-                SageLight = VibrantMatchaLight
-                SageContainer = VibrantMatchaContainer
-                SageContainerBorder = VibrantMatchaBorder
-                OnSage = OnVibrantMatcha
+                SagePrimary = Color(0xFF52C47C)
+                SageLight = Color(0xFF6EE7A0)
+                SageContainer = Color(0xFF1B3824)
+                SageContainerBorder = Color(0xFF2E633D)
+                OnSage = Color(0xFF091F11)
+                VibrantMatcha = Color(0xFF52C47C)
+                VibrantMatchaLight = Color(0xFF6EE7A0)
+                VibrantMatchaContainer = Color(0xFF1B3824)
+                VibrantMatchaBorder = Color(0xFF2E633D)
+                OnVibrantMatcha = Color(0xFF091F11)
                 AccentRose = Color(0xFFE06C75)
                 AccentRoseContainer = Color(0xFF2D161A)
                 AccentAmber = Color(0xFFE5C07B)
                 AccentAmberContainer = Color(0xFF2B2213)
-                AccentSage = VibrantMatcha
+                AccentSage = Color(0xFF52C47C)
                 AccentSlateBlue = Color(0xFF61AFEF)
                 AccentSlateBlueContainer = Color(0xFF152233)
                 AccentLavender = Color(0xFFC678DD)
@@ -180,6 +195,11 @@ object SakuColors {
                 SageContainer = Color(0xFF233127)
                 SageContainerBorder = Color(0xFF374D3D)
                 OnSage = Color(0xFF0F1B12)
+                VibrantMatcha = Color(0xFF52C47C)
+                VibrantMatchaLight = Color(0xFF6EE7A0)
+                VibrantMatchaContainer = Color(0xFF233127)
+                VibrantMatchaBorder = Color(0xFF374D3D)
+                OnVibrantMatcha = Color(0xFF0F1B12)
                 AccentRose = Color(0xFFCF7B88)
                 AccentRoseContainer = Color(0xFF332024)
                 AccentAmber = Color(0xFFD9A668)

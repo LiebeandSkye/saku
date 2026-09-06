@@ -144,8 +144,7 @@ fun ThemeSwitcher(
                                 imageVector = option.icon,
                                 contentDescription = option.label,
                                 tint = if (isSelected) {
-                                    if (selectedTheme == AppTheme.LIGHT) Color(0xFF2E7D32)
-                                    else SakuColors.SagePrimary
+                                    SakuColors.SagePrimary
                                 } else {
                                     SakuColors.TextMuted
                                 },
@@ -157,11 +156,12 @@ fun ThemeSwitcher(
                                 fontSize = 13.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) {
-                                    if (selectedTheme == AppTheme.LIGHT) Color(0xFF1A1D23)
-                                    else SakuColors.TextPrimary
+                                    SakuColors.TextPrimary
                                 } else {
                                     SakuColors.TextSecondary
-                                }
+                                },
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }

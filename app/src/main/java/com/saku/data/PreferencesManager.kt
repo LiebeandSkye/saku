@@ -172,6 +172,31 @@ class PreferencesManager(
         private const val KEY_LAST_READ_STORY_ID = "last_read_story_id"
         private const val KEY_READING_BACKGROUND_IMAGE_URI = "reading_background_image_uri"
         private const val KEY_APP_THEME = "app_theme"
+        private const val KEY_RECENT_JISHO_SEARCHES = "recent_jisho_searches"
+    }
+
+    var recentJishoSearches: List<String>
+        get() {
+            val raw = prefs.getString(KEY_RECENT_JISHO_SEARCHES, "") ?: ""
+            if (raw.isBlank()) return emptyList()
+            return raw.split(";;;").filter { it.isNotBlank() }
+        }
+        set(value) {
+            val joined = value.take(15).joinToString(";;;")
+            prefs.edit().putString(KEY_RECENT_JISHO_SEARCHES, joined).apply()
+        }
+
+    fun addRecentJishoSearch(term: String) {
+        val trimmed = term.trim()
+        if (trimmed.isBlank()) return
+        val current = recentJishoSearches.toMutableList()
+        current.remove(trimmed)
+        current.add(0, trimmed)
+        recentJishoSearches = current.take(15)
+    }
+
+    fun clearRecentJishoSearches() {
+        recentJishoSearches = emptyList()
     }
 }
 

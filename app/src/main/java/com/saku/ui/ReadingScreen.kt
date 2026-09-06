@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -92,6 +93,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.saku.anki.ReadingVocabularyExtractor
@@ -113,7 +115,8 @@ fun ReadingScreen(
     prefs: PreferencesManager,
     hasAnkiPermission: Boolean,
     openHistoryTrigger: Int = 0,
-    onHistoryTriggerConsumed: () -> Unit = {}
+    onHistoryTriggerConsumed: () -> Unit = {},
+    onNavigateToJisho: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -157,6 +160,11 @@ fun ReadingScreen(
     // Word Detail Sheet
     val wordDetailSheetState = rememberModalBottomSheetState()
     var selectedWordDetail by remember { mutableStateOf<AnkiVocabularyItem?>(null) }
+
+    // Translation Sheet
+    val translationSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showTranslationSheet by remember { mutableStateOf(false) }
+    var translateTargetText by remember { mutableStateOf("") }
 
     // External trigger from top-bar paper icon
     LaunchedEffect(openHistoryTrigger) {
@@ -248,13 +256,14 @@ fun ReadingScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // JLPT Level Selector Dropdown Pill (Translucent Frosted White Chip)
+                    val isLight = SakuColors.currentTheme == AppTheme.LIGHT
+                    // JLPT Level Selector Dropdown Pill (Light mode optimized chip)
                     Box {
                         Surface(
                             onClick = { showJlptMenu = true },
                             shape = RoundedCornerShape(12.dp),
-                            color = Color.White.copy(alpha = 0.14f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                            color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.25f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -271,7 +280,9 @@ fun ReadingScreen(
                                     text = "Level: $selectedJlpt",
                                     fontWeight = FontWeight.SemiBold,
                                     color = SakuColors.TextPrimary,
-                                    fontSize = 14.sp
+                                    fontSize = 14.sp,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Icon(
@@ -353,19 +364,22 @@ fun ReadingScreen(
                                     text = if (apiKey.isNotBlank()) "Key Active" else "Setup Key",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = if (apiKey.isNotBlank()) SakuColors.SagePrimary else SakuColors.AccentRose
+                                    color = if (apiKey.isNotBlank()) SakuColors.SagePrimary else SakuColors.AccentRose,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
                     }
                 }
 
-                // Row 2: Active Model Pill (Frosted White Chip)
+                // Row 2: Active Model Pill (Light mode optimized chip)
+                val isLight = SakuColors.currentTheme == AppTheme.LIGHT
                 Surface(
                     onClick = { showModelDialog = true },
                     shape = RoundedCornerShape(12.dp),
-                    color = Color.White.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                    color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.25f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -375,7 +389,10 @@ fun ReadingScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
                             Icon(
                                 Icons.Filled.AutoAwesome,
                                 contentDescription = null,
@@ -387,15 +404,20 @@ fun ReadingScreen(
                                 text = "Model: ${PreferencesManager.getModelDisplayName(selectedModel)}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = SakuColors.TextPrimary
+                                color = SakuColors.TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
+                        Spacer(modifier = Modifier.width(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = "Switch",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = SakuColors.TextSecondary
+                                color = SakuColors.TextSecondary,
+                                maxLines = 1,
+                                softWrap = false
                             )
                             Icon(
                                 Icons.Filled.ArrowDropDown,
@@ -477,9 +499,10 @@ fun ReadingScreen(
                                 contentColor = SakuColors.OnSage
                             ),
                             shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Enter API Key", fontWeight = FontWeight.SemiBold)
+                            Text("Enter API Key", fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, maxLines = 1, softWrap = false)
                         }
                         OutlinedButton(
                             onClick = {
@@ -488,11 +511,13 @@ fun ReadingScreen(
                                 context.startActivity(intent)
                             },
                             shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(1.dp, SakuColors.Border)
+                            border = BorderStroke(1.dp, SakuColors.Border),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp), tint = SakuColors.TextPrimary)
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = SakuColors.TextPrimary)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Get Free Key", color = SakuColors.TextPrimary)
+                            Text("Get Free Key", color = SakuColors.TextPrimary, fontSize = 12.5.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -631,6 +656,8 @@ fun ReadingScreen(
                                         color = if (isSelected) {
                                             tintColor ?: SakuColors.SagePrimary
                                         } else SakuColors.TextSecondary,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                     )
                                 }
@@ -683,14 +710,18 @@ fun ReadingScreen(
                                                 text = item.displayWord,
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = if (item.isSuspended) SakuColors.AccentAmber else SakuColors.TextPrimary
+                                                color = if (item.isSuspended) SakuColors.AccentAmber else SakuColors.TextPrimary,
+                                                maxLines = 1,
+                                                softWrap = false
                                             )
                                             if (item.isSuspended) {
                                                 Spacer(modifier = Modifier.width(4.dp))
                                                 Text(
                                                     text = "sus",
                                                     fontSize = 9.sp,
-                                                    color = SakuColors.AccentAmber
+                                                    color = SakuColors.AccentAmber,
+                                                    maxLines = 1,
+                                                    softWrap = false
                                                 )
                                             }
                                         }
@@ -731,7 +762,7 @@ fun ReadingScreen(
             shape = RoundedCornerShape(20.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = SakuColors.SagePrimary.copy(alpha = 0.85f),
-                contentColor = Color(0xFF142417),
+                contentColor = SakuColors.OnSage,
                 disabledContainerColor = SakuColors.SagePrimary.copy(alpha = 0.40f)
             ),
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
@@ -740,28 +771,32 @@ fun ReadingScreen(
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
                     strokeWidth = 2.dp,
-                    color = Color(0xFF142417)
+                    color = SakuColors.OnSage
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = "Crafting $selectedJlpt Japanese Story...",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
-                    color = Color(0xFF142417)
+                    color = SakuColors.OnSage,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             } else {
                 Icon(
                     Icons.Filled.AutoAwesome,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = Color(0xFF142417)
+                    tint = SakuColors.OnSage
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = if (currentStory == null) "Generate $selectedJlpt Story" else "Generate Another Story",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
-                    color = Color(0xFF142417)
+                    color = SakuColors.OnSage,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -813,6 +848,8 @@ fun ReadingScreen(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF5A5243),
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }
@@ -834,48 +871,54 @@ fun ReadingScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Story Title in Japanese
-                    Text(
-                        text = story.title,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1E1E1E),
-                        lineHeight = 30.sp
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Pure Japanese Story Content with Text Selection and In-Text Highlights
-                    SelectionContainer {
-                        if (highlightWords && vocabSummary != null && vocabSummary!!.words.isNotEmpty()) {
-                            val annotatedContent = remember(story.content, vocabSummary?.words, highlightWords) {
-                                buildHighlightedStoryText(
-                                    content = story.content,
-                                    vocabWords = vocabSummary!!.words,
-                                    onWordTapped = { item ->
-                                        selectedWordDetail = item
-                                    }
-                                )
-                            }
-                            Text(
-                                text = annotatedContent,
-                                fontSize = 17.sp,
-                                color = Color(0xFF1E1E1E),
-                                lineHeight = 34.sp,
-                                letterSpacing = 0.5.sp
-                            )
-                        } else {
-                            Text(
-                                text = story.content,
-                                fontSize = 17.sp,
-                                color = Color(0xFF1E1E1E),
-                                lineHeight = 34.sp,
-                                letterSpacing = 0.5.sp
-                            )
+                    CustomSelectionContainer(
+                        onTranslate = { selectedText ->
+                            translateTargetText = selectedText
+                            showTranslationSheet = true
                         }
-                    }
+                    ) {
+                        SelectionContainer {
+                            Column {
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Story Title in Japanese
+                                Text(
+                                    text = story.title,
+                                    fontSize = 22.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E1E1E),
+                                    lineHeight = 30.sp
+                                )
+
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                // Pure Japanese Story Content with In-Text Highlights
+                                if (highlightWords && vocabSummary != null && vocabSummary!!.words.isNotEmpty()) {
+                                    val annotatedContent = remember(story.content, vocabSummary?.words, highlightWords) {
+                                        buildHighlightedStoryText(
+                                            content = story.content,
+                                            vocabWords = vocabSummary!!.words,
+                                            onWordTapped = { item ->
+                                                selectedWordDetail = item
+                                            }
+                                        )
+                                    }
+                                    Text(
+                                        text = annotatedContent,
+                                        fontSize = 17.sp,
+                                        color = Color(0xFF1E1E1E),
+                                        lineHeight = 34.sp,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                } else {
+                                    Text(
+                                        text = story.content,
+                                        fontSize = 17.sp,
+                                        color = Color(0xFF1E1E1E),
+                                        lineHeight = 34.sp,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                }
 
                     // Target Vocabulary Chips
                     if (story.targetWords.isNotEmpty()) {
@@ -931,7 +974,9 @@ fun ReadingScreen(
                                                     text = word,
                                                     fontSize = 12.sp,
                                                     fontWeight = if (isPresent) FontWeight.Bold else FontWeight.Normal,
-                                                    color = Color(0xFF2C2820)
+                                                    color = Color(0xFF2C2820),
+                                                    maxLines = 1,
+                                                    softWrap = false
                                                 )
                                                 if (isPresent) {
                                                     Spacer(modifier = Modifier.width(4.dp))
@@ -993,7 +1038,7 @@ fun ReadingScreen(
                                                 tint = Color(0xFF6C6453)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Reset", color = Color(0xFF6C6453), fontSize = 12.sp)
+                                            Text("Reset", color = Color(0xFF6C6453), fontSize = 12.sp, maxLines = 1, softWrap = false)
                                         }
                                     }
                                 }
@@ -1131,6 +1176,9 @@ fun ReadingScreen(
                             }
                         }
                     }
+                            }
+                        }
+                    }
                 }
             }
         } else if (!isGeneratingStory) {
@@ -1197,7 +1245,7 @@ fun ReadingScreen(
                                 savedStories = emptyList()
                             }
                         ) {
-                            Text("Clear All", color = SakuColors.AccentRose, fontSize = 13.sp)
+                            Text("Clear All", color = SakuColors.AccentRose, fontSize = 13.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -1253,6 +1301,8 @@ fun ReadingScreen(
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = SakuColors.SagePrimary,
+                                                    maxLines = 1,
+                                                    softWrap = false,
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                 )
                                             }
@@ -1260,7 +1310,9 @@ fun ReadingScreen(
                                             Text(
                                                 text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(item.createdAt)),
                                                 fontSize = 11.sp,
-                                                color = SakuColors.TextSecondary
+                                                color = SakuColors.TextSecondary,
+                                                maxLines = 1,
+                                                softWrap = false
                                             )
                                         }
                                         Spacer(modifier = Modifier.height(6.dp))
@@ -1306,7 +1358,23 @@ fun ReadingScreen(
                     wordDetailSheetState.hide()
                     selectedWordDetail = null
                 }
-            }
+            },
+            onNavigateToJisho = onNavigateToJisho
+        )
+    }
+
+    // Modal Bottom Sheet: Selection Translation
+    if (showTranslationSheet && translateTargetText.isNotBlank()) {
+        TranslationBottomSheet(
+            sourceText = translateTargetText,
+            sheetState = translationSheetState,
+            onDismiss = {
+                coroutineScope.launch {
+                    translationSheetState.hide()
+                    showTranslationSheet = false
+                }
+            },
+            onNavigateToJisho = onNavigateToJisho
         )
     }
 
@@ -1443,7 +1511,8 @@ private fun buildHighlightedStoryText(
 private fun WordDetailBottomSheet(
     item: AnkiVocabularyItem,
     sheetState: androidx.compose.material3.SheetState,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onNavigateToJisho: (String) -> Unit = {}
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1475,6 +1544,8 @@ private fun WordDetailBottomSheet(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (item.isSuspended) SakuColors.AccentAmber else SakuColors.SagePrimary,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                     )
                 }
@@ -1536,6 +1607,35 @@ private fun WordDetailBottomSheet(
                         )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Button(
+                onClick = {
+                    onDismiss()
+                    onNavigateToJisho(item.displayWord)
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SakuColors.SagePrimary,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Look up in Jisho",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
             Spacer(modifier = Modifier.height(28.dp))
@@ -1606,10 +1706,11 @@ fun ApiKeySetupDialog(
                         onClick = {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/app/apikey"))
                             context.startActivity(intent)
-                        }
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Get Free Key", fontSize = 12.sp, color = SakuColors.SagePrimary)
+                            Text("Get Free Key", fontSize = 12.sp, color = SakuColors.SagePrimary, maxLines = 1, softWrap = false)
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = SakuColors.SagePrimary, modifier = Modifier.size(14.dp))
                         }
@@ -1617,9 +1718,10 @@ fun ApiKeySetupDialog(
 
                     if (keyInput.isNotBlank()) {
                         TextButton(
-                            onClick = { keyInput = "" }
+                            onClick = { keyInput = "" },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text("Clear", fontSize = 12.sp, color = SakuColors.AccentRose)
+                            Text("Clear", fontSize = 12.sp, color = SakuColors.AccentRose, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -1632,9 +1734,10 @@ fun ApiKeySetupDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, SakuColors.Border),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) {
-                        Text("Cancel", color = SakuColors.TextSecondary)
+                        Text("Cancel", color = SakuColors.TextSecondary, maxLines = 1, softWrap = false)
                     }
 
                     Button(
@@ -1644,9 +1747,10 @@ fun ApiKeySetupDialog(
                             containerColor = SakuColors.SagePrimary,
                             contentColor = SakuColors.OnSage
                         ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) {
-                        Text("Save", fontWeight = FontWeight.Bold)
+                        Text("Save", fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                 }
             }
@@ -1701,9 +1805,10 @@ fun InternetAccessDisclosureDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, SakuColors.Border),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
                     ) {
-                        Text("Cancel", color = SakuColors.TextSecondary)
+                        Text("Cancel", color = SakuColors.TextSecondary, maxLines = 1, softWrap = false)
                     }
 
                     Button(
@@ -1713,9 +1818,10 @@ fun InternetAccessDisclosureDialog(
                             containerColor = SakuColors.SagePrimary,
                             contentColor = SakuColors.OnSage
                         ),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                     ) {
-                        Text("Allow & Continue", fontWeight = FontWeight.Bold)
+                        Text("Allow & Continue", fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                 }
             }

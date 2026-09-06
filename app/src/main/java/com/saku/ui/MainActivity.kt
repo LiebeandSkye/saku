@@ -68,6 +68,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AutoStories
@@ -81,6 +82,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
@@ -459,6 +461,7 @@ class MainActivity : ComponentActivity() {
     ) {
         var isRefreshing by remember { mutableStateOf(false) }
         var currentTab by remember { mutableIntStateOf(0) }
+        var jishoTargetQuery by remember { mutableStateOf("") }
         var openHistoryTrigger by remember { mutableIntStateOf(0) }
         var isDockVisible by remember { mutableStateOf(true) }
         val coroutineScope = rememberCoroutineScope()
@@ -540,16 +543,6 @@ class MainActivity : ComponentActivity() {
                     TopAppBar(
                         title = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(9.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (prefs.isServiceEnabled) SakuColors.SagePrimary
-                                            else SakuColors.AccentRose
-                                        )
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = "アンキ",
                                     fontSize = 18.sp,
@@ -564,31 +557,22 @@ class MainActivity : ComponentActivity() {
                                     color = SakuColors.TextSecondary,
                                     letterSpacing = 1.5.sp
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SakuColors.SageContainer)
-                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "v2.0",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SakuColors.SagePrimary,
-                                        letterSpacing = 0.5.sp
-                                    )
-                                }
                             }
-                            if (isRefreshing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .padding(end = 6.dp),
-                                    color = SakuColors.SagePrimary,
-                                    strokeWidth = 2.dp
+                        },
+                        actions = {
+                            // History (Book Icon) button: switches to Reading tab and opens reading history
+                            IconButton(onClick = {
+                                currentTab = 1
+                                openHistoryTrigger++
+                            }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.MenuBook,
+                                    contentDescription = "Reading History",
+                                    tint = SakuColors.TextSecondary
                                 )
                             }
+
+                            // Refresh button
                             IconButton(onClick = {
                                 coroutineScope.launch {
                                     isRefreshing = true
@@ -597,11 +581,19 @@ class MainActivity : ComponentActivity() {
                                     isRefreshing = false
                                 }
                             }) {
-                                Icon(
-                                    Icons.Filled.Refresh,
-                                    contentDescription = "Refresh",
-                                    tint = SakuColors.TextSecondary
-                                )
+                                if (isRefreshing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        color = SakuColors.SagePrimary,
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.Filled.Refresh,
+                                        contentDescription = "Refresh",
+                                        tint = SakuColors.TextSecondary
+                                    )
+                                }
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
@@ -644,15 +636,23 @@ class MainActivity : ComponentActivity() {
                     },
                     label = "ScreenSwitchBubbly"
                 ) { tab ->
-                    if (tab == 0) {
-                        ModernSettingsScreen(padding, currentAppTheme, onThemeChanged)
-                    } else {
-                        ReadingScreen(
+                    when (tab) {
+                        0 -> ModernSettingsScreen(padding, currentAppTheme, onThemeChanged)
+                        1 -> ReadingScreen(
                             padding = padding,
                             prefs = prefs,
                             hasAnkiPermission = hasPermissionState,
                             openHistoryTrigger = openHistoryTrigger,
-                            onHistoryTriggerConsumed = { openHistoryTrigger = 0 }
+                            onHistoryTriggerConsumed = { openHistoryTrigger = 0 },
+                            onNavigateToJisho = { word ->
+                                jishoTargetQuery = word
+                                currentTab = 2
+                            }
+                        )
+                        else -> JishoScreen(
+                            padding = padding,
+                            prefs = prefs,
+                            initialQuery = jishoTargetQuery
                         )
                     }
                 }
@@ -696,7 +696,8 @@ class MainActivity : ComponentActivity() {
     ) {
         val tabs = listOf(
             Pair("Cards", Icons.Filled.Style),
-            Pair("Reading", Icons.Filled.AutoStories)
+            Pair("Reading", Icons.Filled.AutoStories),
+            Pair("Jisho", Icons.Filled.Search)
         )
 
         Box(
@@ -705,13 +706,14 @@ class MainActivity : ComponentActivity() {
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
+            val isLight = SakuColors.currentTheme == AppTheme.LIGHT
             LiquidGlassBox(
                 shape = RoundedCornerShape(32.dp),
                 cornerRadius = 32.dp,
-                tintColor = Color.Transparent,
-                darkBaseAlpha = 0.94f,
-                backgroundColor = Color(0xFF13161E).copy(alpha = 0.94f),
-                specularAlpha = 0.35f,
+                tintColor = if (isLight) Color.White.copy(alpha = 0.85f) else Color.Transparent,
+                darkBaseAlpha = if (isLight) 0f else 0.94f,
+                backgroundColor = if (isLight) Color.White.copy(alpha = 0.96f) else Color(0xFF13161E).copy(alpha = 0.94f),
+                specularAlpha = if (isLight) 0.70f else 0.35f,
                 shadowElevation = 14.dp,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -732,7 +734,7 @@ class MainActivity : ComponentActivity() {
                         label = "BubblyNavIndicatorOffset"
                     )
 
-                    // Bubbly sliding indicator pill with vibrant matcha styling
+                    // Bubbly sliding indicator pill with theme-aware matcha styling
                     Box(
                         modifier = Modifier
                             .offset(x = indicatorOffset)
@@ -741,10 +743,10 @@ class MainActivity : ComponentActivity() {
                             .liquidGlass(
                                 shape = RoundedCornerShape(26.dp),
                                 cornerRadius = 26.dp,
-                                tintColor = SakuColors.VibrantMatcha.copy(alpha = 0.35f),
+                                tintColor = if (isLight) SakuColors.SagePrimary.copy(alpha = 0.15f) else SakuColors.VibrantMatcha.copy(alpha = 0.35f),
                                 darkBaseAlpha = 0f,
-                                backgroundColor = SakuColors.VibrantMatchaContainer.copy(alpha = 0.90f),
-                                specularAlpha = 0.60f,
+                                backgroundColor = if (isLight) SakuColors.SageContainer else SakuColors.VibrantMatchaContainer.copy(alpha = 0.90f),
+                                specularAlpha = if (isLight) 0.50f else 0.60f,
                                 shadowElevation = 4.dp
                             )
                     )
@@ -786,7 +788,11 @@ class MainActivity : ComponentActivity() {
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = label,
-                                        tint = if (isSelected) SakuColors.VibrantMatchaLight else SakuColors.TextSecondary,
+                                        tint = if (isSelected) {
+                                            if (isLight) SakuColors.SagePrimary else SakuColors.VibrantMatchaLight
+                                        } else {
+                                            SakuColors.TextSecondary
+                                        },
                                         modifier = Modifier.size(19.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -794,7 +800,13 @@ class MainActivity : ComponentActivity() {
                                         text = label,
                                         fontSize = 13.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                        color = if (isSelected) Color.White else SakuColors.TextSecondary
+                                        color = if (isSelected) {
+                                            if (isLight) SakuColors.SagePrimary else Color.White
+                                        } else {
+                                            SakuColors.TextSecondary
+                                        },
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
@@ -929,12 +941,13 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SakuColors.SagePrimary,
                                     contentColor = SakuColors.OnSage
                                 )
                             ) {
-                                Text("Install AnkiDroid", fontWeight = FontWeight.SemiBold)
+                                Text("Install AnkiDroid", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                             }
                         } else if (!hasPermissionState) {
                             Text(
@@ -947,12 +960,13 @@ class MainActivity : ComponentActivity() {
                             Button(
                                 onClick = { checkAndRequestAnkiPermission() },
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = SakuColors.SagePrimary,
                                     contentColor = SakuColors.OnSage
                                 )
                             ) {
-                                Text("Connect AnkiDroid (1-Tap)", fontWeight = FontWeight.SemiBold)
+                                Text("Connect AnkiDroid", fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                             }
                         }
                     }
@@ -1428,7 +1442,7 @@ class MainActivity : ComponentActivity() {
                         contentPadding = PaddingValues(horizontal = 4.dp),
                         enabled = centerCard != null
                     ) {
-                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                     Button(
                         onClick = onToggleReveal,
@@ -1448,7 +1462,9 @@ class MainActivity : ComponentActivity() {
                         Text(
                             if (isRevealed) "Hide" else "Reveal",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                     Button(
@@ -1466,7 +1482,7 @@ class MainActivity : ComponentActivity() {
                         contentPadding = PaddingValues(horizontal = 4.dp),
                         enabled = centerCard != null
                     ) {
-                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
                         onClick = onOpenAnki,
@@ -1481,7 +1497,7 @@ class MainActivity : ComponentActivity() {
                         border = BorderStroke(1.dp, SakuColors.BorderHighlight),
                         contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
-                        Text("Anki", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text("Anki", fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
                     }
                 }
             }
@@ -1496,21 +1512,44 @@ class MainActivity : ComponentActivity() {
         isRevealed: Boolean,
         modifier: Modifier = Modifier
     ) {
+        val isLight = SakuColors.currentTheme == AppTheme.LIGHT
         LiquidGlassBox(
             modifier = modifier
                 .fillMaxWidth()
                 .aspectRatio(0.78f),
             shape = RoundedCornerShape(24.dp),
             cornerRadius = 24.dp,
-            tintColor = Color.White.copy(alpha = 0.22f),
-            darkBaseAlpha = 0.50f,
-            specularAlpha = 0.65f,
-            borderAlpha = 0.55f,
+            tintColor = if (isLight) Color.White.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.22f),
+            darkBaseAlpha = if (isLight) 0f else 0.50f,
+            backgroundColor = if (isLight) SakuColors.SurfaceElevated else null,
+            specularAlpha = if (isLight) 0.70f else 0.65f,
+            borderAlpha = if (isLight) 0.40f else 0.55f,
             shadowElevation = 10.dp
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(
+                        if (isLight) {
+                            Modifier.background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFFFFFFFF).copy(alpha = 0.96f),
+                                        Color(0xFFF1F6F3).copy(alpha = 0.98f)
+                                    )
+                                )
+                            )
+                        } else {
+                            Modifier.background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color(0xFF333842).copy(alpha = 0.85f),
+                                        Color(0xFF22252C).copy(alpha = 0.92f)
+                                    )
+                                )
+                            )
+                        }
+                    )
                     .padding(horizontal = 18.dp, vertical = 20.dp)
             ) {
                 Column(
@@ -1536,7 +1575,9 @@ class MainActivity : ComponentActivity() {
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SakuColors.TextSecondary,
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         } else {
                             Text(
@@ -1544,14 +1585,18 @@ class MainActivity : ComponentActivity() {
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SakuColors.SagePrimary,
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "No cards due",
                                 fontSize = 12.sp,
                                 color = SakuColors.TextSecondary,
-                                textAlign = TextAlign.Center
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     } else {
@@ -1574,7 +1619,7 @@ class MainActivity : ComponentActivity() {
                             text = mainWord,
                             fontSize = if (mainWord.length > 5) 26.sp else if (mainWord.length > 3) 30.sp else 34.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = if (isLight) SakuColors.TextPrimary else Color.White,
                             textAlign = TextAlign.Center,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -1601,7 +1646,7 @@ class MainActivity : ComponentActivity() {
                             modifier = Modifier
                                 .fillMaxWidth(0.42f)
                                 .height(1.dp)
-                                .background(Color.White.copy(alpha = 0.18f))
+                                .background(if (isLight) SakuColors.SagePrimary.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.18f))
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -1612,7 +1657,7 @@ class MainActivity : ComponentActivity() {
                             Text(
                                 text = sentence,
                                 fontSize = 14.sp,
-                                color = Color.White,
+                                color = if (isLight) SakuColors.TextPrimary else Color.White,
                                 textAlign = TextAlign.Center,
                                 maxLines = 3,
                                 overflow = TextOverflow.Ellipsis,
@@ -1644,7 +1689,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun ModernClassicActionCard(currentAction: String, onSelect: (String) -> Unit) {
         val options = listOf("suspend", "open_anki", "undo", "open_app")
-        val labels = listOf("Suspend", "Open Anki", "Undo", "Open App")
+        val labels = listOf("Suspend", "Anki", "Undo", "App")
         val selectedIndex = options.indexOf(currentAction).coerceAtLeast(0)
 
         Card(
@@ -1688,7 +1733,7 @@ class MainActivity : ComponentActivity() {
                                 inactiveBorderColor = SakuColors.BorderSubtle
                             )
                         ) {
-                            Text(labels[index], fontSize = 12.sp)
+                            Text(labels[index], fontSize = 11.5.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -1718,7 +1763,7 @@ class MainActivity : ComponentActivity() {
     ) {
         val context = LocalContext.current
         val options = listOf("anki_lock", "dark_blur", "sunset", "transparent", "custom")
-        val labels = listOf("Default", "Dark Blur", "Sunset", "Glass", "Gallery")
+        val labels = listOf("Default", "Blur", "Sunset", "Glass", "Gallery")
         val selectedIndex = options.indexOf(currentType).coerceAtLeast(0)
 
         Card(
@@ -1757,6 +1802,8 @@ class MainActivity : ComponentActivity() {
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SakuColors.SageLight,
+                            maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
@@ -2094,7 +2141,7 @@ class MainActivity : ComponentActivity() {
                                 inactiveBorderColor = SakuColors.BorderSubtle
                             )
                         ) {
-                            Text(labels[index], fontSize = 12.sp)
+                            Text(labels[index], fontSize = 12.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -2120,7 +2167,7 @@ class MainActivity : ComponentActivity() {
                                 inactiveBorderColor = SakuColors.BorderSubtle
                             )
                         ) {
-                            Text(labels[index], fontSize = 12.sp)
+                            Text(labels[index], fontSize = 12.sp, maxLines = 1, softWrap = false)
                         }
                     }
                 }
@@ -2166,6 +2213,8 @@ class MainActivity : ComponentActivity() {
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = SakuColors.SageLight,
+                        maxLines = 1,
+                        softWrap = false,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
@@ -2235,6 +2284,8 @@ class MainActivity : ComponentActivity() {
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = if (currentKey.isNotBlank()) SakuColors.SageLight else SakuColors.AccentRose,
+                            maxLines = 1,
+                            softWrap = false,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
@@ -2273,7 +2324,10 @@ class MainActivity : ComponentActivity() {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
                             Icon(
                                 Icons.Filled.AutoAwesome,
                                 contentDescription = null,
@@ -2286,17 +2340,22 @@ class MainActivity : ComponentActivity() {
                                     text = PreferencesManager.getModelDisplayName(currentModel),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.5.sp,
-                                    color = SakuColors.TextPrimary
+                                    color = SakuColors.TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = currentModel,
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = SakuColors.AccentLavender
+                                    color = SakuColors.AccentLavender,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
+                        Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = SakuColors.AccentLavenderContainer,
@@ -2307,6 +2366,8 @@ class MainActivity : ComponentActivity() {
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = SakuColors.AccentLavender,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                             )
                         }
@@ -2324,13 +2385,14 @@ class MainActivity : ComponentActivity() {
                             containerColor = SakuColors.SurfaceElevated,
                             contentColor = SakuColors.TextPrimary
                         ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, SakuColors.BorderSubtle),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(16.dp), tint = SakuColors.SageLight)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (currentKey.isNotBlank()) "Change API Key" else "Set API Key", fontSize = 12.5.sp)
+                        Icon(Icons.Filled.Key, contentDescription = null, modifier = Modifier.size(15.dp), tint = SakuColors.SageLight)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (currentKey.isNotBlank()) "API Key" else "Set Key", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                     }
 
                     Button(
@@ -2339,13 +2401,14 @@ class MainActivity : ComponentActivity() {
                             containerColor = SakuColors.SurfaceElevated,
                             contentColor = SakuColors.TextPrimary
                         ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                         shape = RoundedCornerShape(12.dp),
                         border = BorderStroke(1.dp, SakuColors.BorderSubtle),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp), tint = SakuColors.AccentLavender)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Pick Model", fontSize = 12.5.sp)
+                        Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(15.dp), tint = SakuColors.AccentLavender)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Pick Model", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                     }
                 }
 
@@ -2366,8 +2429,8 @@ class MainActivity : ComponentActivity() {
 
                 Surface(
                     shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFF2A2F3B).copy(alpha = 0.55f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                    color = SakuColors.SurfaceElevated,
+                    border = BorderStroke(1.dp, SakuColors.BorderSubtle),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -2380,7 +2443,7 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier
                                     .size(width = 64.dp, height = 48.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                                    .border(1.dp, SakuColors.BorderSubtle, RoundedCornerShape(10.dp))
                             ) {
                                 if (isCustomBg) {
                                     val bitmap = remember(readingBgPath) {
@@ -2439,6 +2502,8 @@ class MainActivity : ComponentActivity() {
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = if (isCustomBg) SakuColors.SageLight else SakuColors.TextSecondary,
+                                            maxLines = 1,
+                                            softWrap = false,
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                         )
                                     }
@@ -2466,6 +2531,7 @@ class MainActivity : ComponentActivity() {
                                     containerColor = SakuColors.SagePrimary.copy(alpha = 0.25f),
                                     contentColor = SakuColors.SageLight
                                 ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 border = BorderStroke(1.dp, SakuColors.SagePrimary.copy(alpha = 0.40f)),
                                 modifier = Modifier.weight(1f)
@@ -2476,7 +2542,7 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Change Image", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Change Image", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                             }
 
                             if (isCustomBg) {
@@ -2500,6 +2566,7 @@ class MainActivity : ComponentActivity() {
                                         containerColor = SakuColors.SurfaceElevated,
                                         contentColor = SakuColors.TextSecondary
                                     ),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                     shape = RoundedCornerShape(10.dp),
                                     border = BorderStroke(1.dp, SakuColors.BorderSubtle)
                                 ) {
@@ -2509,7 +2576,7 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Reset", fontSize = 12.sp)
+                                    Text("Reset", fontSize = 12.sp, maxLines = 1, softWrap = false)
                                 }
                             }
                         }

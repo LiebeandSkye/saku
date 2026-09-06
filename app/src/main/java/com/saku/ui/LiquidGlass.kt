@@ -45,75 +45,80 @@ fun Modifier.liquidGlass(
     darkBaseAlpha: Float = 0.65f,
     specularAlpha: Float = 0.50f,
     borderAlpha: Float = 0.45f,
-    shadowElevation: Dp = 8.dp
-): Modifier = this
-    .shadow(
-        elevation = shadowElevation,
-        shape = shape,
-        ambientColor = Color.Black.copy(alpha = 0.35f),
-        spotColor = Color.Black.copy(alpha = 0.50f)
-    )
-    .clip(shape)
-    .background(
-        brush = Brush.verticalGradient(
-            colors = listOf(
-                tintColor.copy(alpha = (tintColor.alpha * 1.5f).coerceAtMost(0.35f)),
-                Color(0xFF1E222D).copy(alpha = darkBaseAlpha),
-                Color(0xFF13161E).copy(alpha = (darkBaseAlpha * 1.15f).coerceAtMost(0.92f))
-            )
-        )
-    )
-    .border(
-        width = 1.2.dp,
-        brush = Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = specularAlpha),
-                Color.White.copy(alpha = specularAlpha * 0.3f),
-                Color.White.copy(alpha = 0.04f),
-                Color.White.copy(alpha = specularAlpha * 0.7f)
-            ),
-            start = Offset.Zero,
-            end = Offset.Infinite
-        ),
-        shape = shape
-    )
-    .drawWithContent {
-        drawContent()
-
-        val cr = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
-
-        // 1. Dual Inset Specular Highlight (replicates inset 2px 2px 1px 0 rgba(255,255,255,0.5))
-        drawRoundRect(
-            brush = Brush.linearGradient(
-                0.0f to Color.White.copy(alpha = specularAlpha * 0.75f),
-                0.35f to Color.White.copy(alpha = specularAlpha * 0.20f),
-                0.70f to Color.Transparent,
-                1.0f to Color.White.copy(alpha = specularAlpha * 0.45f),
-                start = Offset(2f, 2f),
-                end = Offset(size.width - 2f, size.height - 2f)
-            ),
-            topLeft = Offset(1.5f, 1.5f),
-            size = Size(size.width - 3f, size.height - 3f),
-            cornerRadius = cr,
-            style = Stroke(width = 1.5f)
-        )
-
-        // 2. Curved top gloss reflection sheen (light catching the upper curved lens)
-        drawRoundRect(
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.16f),
-                    Color.White.copy(alpha = 0.04f),
-                    Color.Transparent
-                ),
-                startY = 0f,
-                endY = size.height * 0.38f
-            ),
-            topLeft = Offset.Zero,
-            size = Size(size.width, size.height * 0.38f),
-            cornerRadius = cr
-        )
+    shadowElevation: Dp = 8.dp,
+    backgroundColor: Color? = null,
+    hasTopGloss: Boolean = false
+): Modifier {
+    val finalBg = backgroundColor ?: if (darkBaseAlpha <= 0f) {
+        tintColor
+    } else {
+        Color(0xFF141720).copy(alpha = darkBaseAlpha)
     }
+
+    return this
+        .shadow(
+            elevation = shadowElevation,
+            shape = shape,
+            ambientColor = Color.Black.copy(alpha = 0.35f),
+            spotColor = Color.Black.copy(alpha = 0.50f)
+        )
+        .clip(shape)
+        .background(finalBg)
+        .border(
+            width = 1.dp,
+            brush = Brush.linearGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = specularAlpha),
+                    Color.White.copy(alpha = specularAlpha * 0.25f),
+                    Color.White.copy(alpha = 0.04f),
+                    Color.White.copy(alpha = specularAlpha * 0.5f)
+                ),
+                start = Offset.Zero,
+                end = Offset.Infinite
+            ),
+            shape = shape
+        )
+        .drawWithContent {
+            drawContent()
+
+            val cr = androidx.compose.ui.geometry.CornerRadius(cornerRadius.toPx(), cornerRadius.toPx())
+
+            // Delicate Inset Specular Highlight along rim
+            if (specularAlpha > 0f) {
+                drawRoundRect(
+                    brush = Brush.linearGradient(
+                        0.0f to Color.White.copy(alpha = specularAlpha * 0.40f),
+                        0.40f to Color.Transparent,
+                        1.0f to Color.White.copy(alpha = specularAlpha * 0.20f),
+                        start = Offset(2f, 2f),
+                        end = Offset(size.width - 2f, size.height - 2f)
+                    ),
+                    topLeft = Offset(1f, 1f),
+                    size = Size(size.width - 2f, size.height - 2f),
+                    cornerRadius = cr,
+                    style = Stroke(width = 1f)
+                )
+            }
+
+            // Optional subtle curved top gloss reflection sheen
+            if (hasTopGloss) {
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = 0.12f),
+                            Color.White.copy(alpha = 0.02f),
+                            Color.Transparent
+                        ),
+                        startY = 0f,
+                        endY = size.height * 0.35f
+                    ),
+                    topLeft = Offset.Zero,
+                    size = Size(size.width, size.height * 0.35f),
+                    cornerRadius = cr
+                )
+            }
+        }
+}
 
 /**
  * Standalone Liquid Glass Container.
@@ -128,6 +133,8 @@ fun LiquidGlassBox(
     specularAlpha: Float = 0.50f,
     borderAlpha: Float = 0.45f,
     shadowElevation: Dp = 8.dp,
+    backgroundColor: Color? = null,
+    hasTopGloss: Boolean = false,
     contentAlignment: Alignment = Alignment.TopStart,
     content: @Composable BoxScope.() -> Unit
 ) {
@@ -139,7 +146,9 @@ fun LiquidGlassBox(
             darkBaseAlpha = darkBaseAlpha,
             specularAlpha = specularAlpha,
             borderAlpha = borderAlpha,
-            shadowElevation = shadowElevation
+            shadowElevation = shadowElevation,
+            backgroundColor = backgroundColor,
+            hasTopGloss = hasTopGloss
         ),
         contentAlignment = contentAlignment,
         content = content

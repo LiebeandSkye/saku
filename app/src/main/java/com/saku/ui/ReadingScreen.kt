@@ -225,14 +225,17 @@ fun ReadingScreen(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Top Liquid Glass Container: JLPT Dropdown, Model & Key Settings, Highlight Toggle
+        // 1. Top Liquid Glass Container: Frosted see-through white glass showcasing backdrop artwork
         LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(26.dp),
             cornerRadius = 26.dp,
-            tintColor = Color.White.copy(alpha = 0.16f),
-            darkBaseAlpha = 0.55f,
-            specularAlpha = 0.55f
+            tintColor = Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0f,
+            backgroundColor = Color.White.copy(alpha = 0.10f),
+            specularAlpha = 0.40f,
+            borderAlpha = 0.30f,
+            shadowElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
@@ -245,13 +248,13 @@ fun ReadingScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // JLPT Level Selector Dropdown Pill
+                    // JLPT Level Selector Dropdown Pill (Translucent Frosted White Chip)
                     Box {
                         Surface(
                             onClick = { showJlptMenu = true },
                             shape = RoundedCornerShape(12.dp),
-                            color = Color(0xFF2A2F3B).copy(alpha = 0.70f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f))
+                            color = Color.White.copy(alpha = 0.14f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -357,12 +360,12 @@ fun ReadingScreen(
                     }
                 }
 
-                // Row 2: Active Model Pill
+                // Row 2: Active Model Pill (Frosted White Chip)
                 Surface(
                     onClick = { showModelDialog = true },
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF2A2F3B).copy(alpha = 0.70f),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    color = Color.White.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -496,14 +499,12 @@ fun ReadingScreen(
             }
         }
 
-        // 3. Flashcard Vocabulary Source Card (Matching Target UI)
-        LiquidGlassBox(
+        // 3. Flashcard Vocabulary Source Card (Clean Bento Card)
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            cornerRadius = 22.dp,
-            tintColor = Color.White.copy(alpha = 0.12f),
-            darkBaseAlpha = 0.70f,
-            specularAlpha = 0.45f
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(

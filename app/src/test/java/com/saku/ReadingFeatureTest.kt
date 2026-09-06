@@ -106,4 +106,40 @@ class ReadingFeatureTest {
         assertTrue(selected.any { it.isSuspended })
         assertTrue(selected.any { !it.isSuspended })
     }
+
+    @Test
+    fun testReadingBackgroundImagePreference() {
+        val fakePrefs = com.saku.util.FakeSharedPreferences()
+        val prefs = com.saku.data.PreferencesManager(fakePrefs)
+
+        org.junit.Assert.assertNull(prefs.readingBackgroundImageUri)
+
+        val testPath = "/data/user/0/com.saku/files/reading_backgrounds/test_bg.jpg"
+        prefs.readingBackgroundImageUri = testPath
+        assertEquals(testPath, prefs.readingBackgroundImageUri)
+
+        prefs.readingBackgroundImageUri = null
+        org.junit.Assert.assertNull(prefs.readingBackgroundImageUri)
+    }
+
+    @Test
+    fun testAppThemePreferences() {
+        val fakePrefs = com.saku.util.FakeSharedPreferences()
+        val prefs = com.saku.data.PreferencesManager(fakePrefs)
+
+        // Default should be "dim"
+        assertEquals("dim", prefs.appTheme)
+
+        // Switching themes
+        prefs.appTheme = "light"
+        assertEquals("light", prefs.appTheme)
+
+        prefs.appTheme = "dark"
+        assertEquals("dark", prefs.appTheme)
+
+        assertEquals(com.saku.ui.AppTheme.LIGHT, com.saku.ui.AppTheme.fromId("light"))
+        assertEquals(com.saku.ui.AppTheme.DARK, com.saku.ui.AppTheme.fromId("dark"))
+        assertEquals(com.saku.ui.AppTheme.DIM, com.saku.ui.AppTheme.fromId("dim"))
+        assertEquals(com.saku.ui.AppTheme.DIM, com.saku.ui.AppTheme.fromId("unknown"))
+    }
 }

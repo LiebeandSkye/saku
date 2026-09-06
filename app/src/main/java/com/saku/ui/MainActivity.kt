@@ -79,6 +79,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Opacity
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Visibility
@@ -174,6 +175,7 @@ class MainActivity : ComponentActivity() {
     private var blurRadiusState by mutableFloatStateOf(20f)
     private var dimOpacityState by mutableFloatStateOf(0.10f)
     private var artworkOpacityState by mutableFloatStateOf(0.5f)
+    private var readingBackgroundImageUriState by mutableStateOf<String?>(null)
 
     private val ankiPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -276,6 +278,88 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val readingImagePickerLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val savedPath = saveReadingImageToInternalStorage(uri)
+            if (savedPath != null) {
+                // Remove previous custom reading background file if different
+                prefs.readingBackgroundImageUri?.let { oldPath ->
+                    if (oldPath != savedPath) {
+                        try {
+                            val oldFile = File(oldPath)
+                            if (oldFile.exists() && oldFile.absolutePath.contains("reading_backgrounds")) {
+                                oldFile.delete()
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+                prefs.readingBackgroundImageUri = savedPath
+                readingBackgroundImageUriState = savedPath
+                Toast.makeText(this, "Reading background updated!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun saveReadingImageToInternalStorage(uri: Uri): String? {
+        return try {
+            val backgroundsDir = File(filesDir, "reading_backgrounds").apply { mkdirs() }
+            val destFile = File(backgroundsDir, "reading_bg_${System.currentTimeMillis()}.jpg")
+
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, options)
+            }
+
+            val maxDimension = 1920
+            var inSampleSize = 1
+            if (options.outWidth > maxDimension || options.outHeight > maxDimension) {
+                val halfWidth = options.outWidth / 2
+                val halfHeight = options.outHeight / 2
+                while ((halfWidth / inSampleSize) >= maxDimension && (halfHeight / inSampleSize) >= maxDimension) {
+                    inSampleSize *= 2
+                }
+            }
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                this.inSampleSize = inSampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+
+            val decodedBitmap = contentResolver.openInputStream(uri)?.use { stream ->
+                BitmapFactory.decodeStream(stream, null, decodeOptions)
+            } ?: return null
+
+            val finalBitmap = if (decodedBitmap.width > maxDimension || decodedBitmap.height > maxDimension) {
+                val ratio = maxDimension.toFloat() / max(decodedBitmap.width, decodedBitmap.height)
+                val targetW = (decodedBitmap.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (decodedBitmap.height * ratio).toInt().coerceAtLeast(1)
+                val scaled = Bitmap.createScaledBitmap(decodedBitmap, targetW, targetH, true)
+                if (scaled != decodedBitmap) {
+                    decodedBitmap.recycle()
+                }
+                scaled
+            } else {
+                decodedBitmap
+            }
+
+            FileOutputStream(destFile).use { out ->
+                finalBitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            }
+            finalBitmap.recycle()
+
+            destFile.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -288,6 +372,7 @@ class MainActivity : ComponentActivity() {
         blurRadiusState = prefs.blurRadius.toFloat()
         dimOpacityState = prefs.dimOpacity
         artworkOpacityState = prefs.artworkOpacity
+        readingBackgroundImageUriState = prefs.readingBackgroundImageUri
 
         requestInitialPermissions()
 
@@ -297,8 +382,15 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            SakuTheme {
-                MainContainer()
+            var currentAppTheme by remember { mutableStateOf(AppTheme.fromId(prefs.appTheme)) }
+            SakuTheme(theme = currentAppTheme) {
+                MainContainer(
+                    currentAppTheme = currentAppTheme,
+                    onThemeChanged = { newTheme ->
+                        currentAppTheme = newTheme
+                        prefs.appTheme = newTheme.id
+                    }
+                )
             }
         }
     }
@@ -321,6 +413,7 @@ class MainActivity : ComponentActivity() {
         blurRadiusState = prefs.blurRadius.toFloat()
         dimOpacityState = prefs.dimOpacity
         artworkOpacityState = prefs.artworkOpacity
+        readingBackgroundImageUriState = prefs.readingBackgroundImageUri
     }
 
     private fun syncCardSession(card: CardInfo?) {
@@ -360,7 +453,10 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    fun MainContainer() {
+    fun MainContainer(
+        currentAppTheme: AppTheme,
+        onThemeChanged: (AppTheme) -> Unit
+    ) {
         var isRefreshing by remember { mutableStateOf(false) }
         var currentTab by remember { mutableIntStateOf(0) }
         var openHistoryTrigger by remember { mutableIntStateOf(0) }
@@ -386,25 +482,52 @@ class MainActivity : ComponentActivity() {
                 .background(SakuColors.Background)
                 .nestedScroll(nestedScrollConnection)
         ) {
-            // Opened book backdrop anchored at top for the Reading tab
+            // Backdrop anchored at top for the Reading tab
             if (currentTab == 1) {
-                Image(
-                    painter = painterResource(id = com.saku.R.drawable.bg_reading_book),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(390.dp)
-                        .graphicsLayer { alpha = 0.42f }
-                )
+                val readingBgPath = readingBackgroundImageUriState
+                val readingCustomBitmap = remember(readingBgPath) {
+                    if (!readingBgPath.isNullOrBlank()) {
+                        try {
+                            val file = File(readingBgPath)
+                            if (file.exists()) {
+                                BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                            } else null
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else null
+                }
+
+                if (readingCustomBitmap != null) {
+                    Image(
+                        bitmap = readingCustomBitmap,
+                        contentDescription = "Reading backdrop",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(390.dp)
+                            .graphicsLayer { alpha = 0.42f }
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = com.saku.R.drawable.bg_reading_book),
+                        contentDescription = "Reading backdrop",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(390.dp)
+                            .graphicsLayer { alpha = 0.42f }
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(390.dp)
                         .background(
                             Brush.verticalGradient(
-                                0.0f to SakuColors.Background.copy(alpha = 0.15f),
-                                0.60f to SakuColors.Background.copy(alpha = 0.70f),
+                                0.0f to Color.Transparent,
+                                0.35f to SakuColors.Background.copy(alpha = 0.20f),
+                                0.70f to SakuColors.Background.copy(alpha = 0.85f),
                                 1.0f to SakuColors.Background
                             )
                         )
@@ -423,30 +546,37 @@ class MainActivity : ComponentActivity() {
                                         .clip(CircleShape)
                                         .background(
                                             if (prefs.isServiceEnabled) SakuColors.SagePrimary
-                                             else SakuColors.AccentRose
+                                            else SakuColors.AccentRose
                                         )
                                 )
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    if (currentTab == 0) "Saku • 咲く" else "Saku • 読書",
+                                    text = "アンキ",
+                                    fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 19.sp,
-                                    letterSpacing = 0.6.sp,
                                     color = SakuColors.TextPrimary
                                 )
-                            }
-                        },
-                        actions = {
-                            // Paper icon for Reading History on the Reading tab
-                            if (currentTab == 1) {
-                                IconButton(onClick = {
-                                    openHistoryTrigger++
-                                }) {
-                                    Icon(
-                                        Icons.Filled.Description,
-                                        contentDescription = "Reading History",
-                                        tint = SakuColors.TextPrimary,
-                                        modifier = Modifier.size(22.dp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "SAKU",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = SakuColors.TextSecondary,
+                                    letterSpacing = 1.5.sp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(SakuColors.SageContainer)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "v2.0",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SakuColors.SagePrimary,
+                                        letterSpacing = 0.5.sp
                                     )
                                 }
                             }
@@ -515,7 +645,7 @@ class MainActivity : ComponentActivity() {
                     label = "ScreenSwitchBubbly"
                 ) { tab ->
                     if (tab == 0) {
-                        ModernSettingsScreen(padding)
+                        ModernSettingsScreen(padding, currentAppTheme, onThemeChanged)
                     } else {
                         ReadingScreen(
                             padding = padding,
@@ -537,25 +667,30 @@ class MainActivity : ComponentActivity() {
                         dampingRatio = Spring.DampingRatioMediumBouncy,
                         stiffness = Spring.StiffnessMediumLow
                     )
-                ) + fadeIn(animationSpec = tween(180)),
+                ) + fadeIn(animationSpec = tween(200)),
                 exit = slideOutVertically(
                     targetOffsetY = { fullHeight -> fullHeight + 120 },
-                    animationSpec = tween(220, easing = FastOutLinearInEasing)
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
                 ) + fadeOut(animationSpec = tween(150)),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 12.dp)
             ) {
-                BubblyFloatingNav(
+                ModernLiquidDock(
                     currentTab = currentTab,
-                    onTabSelected = { currentTab = it }
+                    onTabSelected = { newTab ->
+                        currentTab = newTab
+                    }
                 )
             }
         }
     }
 
     @Composable
-    fun BubblyFloatingNav(
+    fun ModernLiquidDock(
         currentTab: Int,
         onTabSelected: (Int) -> Unit
     ) {
@@ -573,10 +708,11 @@ class MainActivity : ComponentActivity() {
             LiquidGlassBox(
                 shape = RoundedCornerShape(32.dp),
                 cornerRadius = 32.dp,
-                tintColor = Color.White.copy(alpha = 0.16f),
-                darkBaseAlpha = 0.60f,
-                specularAlpha = 0.60f,
-                shadowElevation = 12.dp,
+                tintColor = Color.Transparent,
+                darkBaseAlpha = 0.94f,
+                backgroundColor = Color(0xFF13161E).copy(alpha = 0.94f),
+                specularAlpha = 0.35f,
+                shadowElevation = 14.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp)
@@ -596,7 +732,7 @@ class MainActivity : ComponentActivity() {
                         label = "BubblyNavIndicatorOffset"
                     )
 
-                    // Bubbly sliding indicator pill with liquid glass sheen
+                    // Bubbly sliding indicator pill with vibrant matcha styling
                     Box(
                         modifier = Modifier
                             .offset(x = indicatorOffset)
@@ -605,9 +741,10 @@ class MainActivity : ComponentActivity() {
                             .liquidGlass(
                                 shape = RoundedCornerShape(26.dp),
                                 cornerRadius = 26.dp,
-                                tintColor = SakuColors.SagePrimary.copy(alpha = 0.40f),
-                                darkBaseAlpha = 0.45f,
-                                specularAlpha = 0.70f,
+                                tintColor = SakuColors.VibrantMatcha.copy(alpha = 0.35f),
+                                darkBaseAlpha = 0f,
+                                backgroundColor = SakuColors.VibrantMatchaContainer.copy(alpha = 0.90f),
+                                specularAlpha = 0.60f,
                                 shadowElevation = 4.dp
                             )
                     )
@@ -649,15 +786,15 @@ class MainActivity : ComponentActivity() {
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = label,
-                                        tint = if (isSelected) SakuColors.SageLight else SakuColors.TextMuted,
+                                        tint = if (isSelected) SakuColors.VibrantMatchaLight else SakuColors.TextSecondary,
                                         modifier = Modifier.size(19.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = label,
                                         fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isSelected) SakuColors.TextPrimary else SakuColors.TextMuted
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        color = if (isSelected) Color.White else SakuColors.TextSecondary
                                     )
                                 }
                             }
@@ -669,7 +806,11 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun ModernSettingsScreen(padding: PaddingValues) {
+    fun ModernSettingsScreen(
+        padding: PaddingValues,
+        currentAppTheme: AppTheme,
+        onThemeChanged: (AppTheme) -> Unit
+    ) {
         var isEnabled by remember { mutableStateOf(prefs.isServiceEnabled) }
         var classicRevealedAction by remember { mutableStateOf(prefs.classicRevealedAction) }
         val selectedDeckIds = remember { mutableStateListOf<String>() }
@@ -835,6 +976,42 @@ class MainActivity : ComponentActivity() {
                     SakuWidgetProvider.updateAllWidgets(this@MainActivity)
                 }
             )
+
+            // Appearance & Theme Switcher (Light / Dark / Dim)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+                border = BorderStroke(1.dp, SakuColors.Border)
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(
+                            Icons.Filled.Palette,
+                            contentDescription = null,
+                            tint = SakuColors.SagePrimary,
+                            modifier = Modifier.size(19.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            "Theme & Appearance",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                            color = SakuColors.TextPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+                    ThemeSwitcher(
+                        selectedTheme = currentAppTheme,
+                        onThemeSelected = { newTheme ->
+                            onThemeChanged(newTheme)
+                        }
+                    )
+                }
+            }
 
             // 3. Flashcard Deck Carousel
             DeckCarouselCard(
@@ -1021,14 +1198,16 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun ModernHeroCard(isEnabled: Boolean, onToggle: (Boolean) -> Unit) {
-        LiquidGlassBox(
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            cornerRadius = 24.dp,
-            tintColor = if (isEnabled) SakuColors.SagePrimary.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f),
-            darkBaseAlpha = 0.58f,
-            specularAlpha = 0.60f,
-            shadowElevation = 8.dp
+            colors = CardDefaults.cardColors(
+                containerColor = if (isEnabled) SakuColors.SurfaceElevated else SakuColors.Surface
+            ),
+            border = BorderStroke(
+                1.dp,
+                if (isEnabled) SakuColors.SagePrimary.copy(alpha = 0.40f) else SakuColors.Border
+            )
         ) {
             Box(
                 modifier = Modifier
@@ -1117,14 +1296,11 @@ class MainActivity : ComponentActivity() {
             deckCardsCache[currentCenterDeck.id] ?: if (currentCenterIndex == 0) activeCard else null
         } else null
 
-        LiquidGlassBox(
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            cornerRadius = 24.dp,
-            tintColor = Color.White.copy(alpha = 0.12f),
-            darkBaseAlpha = 0.65f,
-            specularAlpha = 0.50f,
-            shadowElevation = 8.dp
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(
                 modifier = Modifier
@@ -1230,72 +1406,82 @@ class MainActivity : ComponentActivity() {
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // === ACTION BUTTONS ===
+                // === ACTION BUTTONS (Clean, Normal Tactile Buttons) ===
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    LiquidGlassButton(
+                    Button(
                         onClick = onAgain,
                         modifier = Modifier
                             .weight(1f)
                             .height(40.dp),
                         shape = RoundedCornerShape(14.dp),
-                        cornerRadius = 14.dp,
-                        tintColor = SakuColors.AccentRose.copy(alpha = 0.40f),
-                        darkBaseAlpha = 0.55f,
-                        specularAlpha = 0.60f,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SakuColors.AccentRose,
+                            contentColor = Color.White,
+                            disabledContainerColor = SakuColors.AccentRose.copy(alpha = 0.35f),
+                            disabledContentColor = Color.White.copy(alpha = 0.45f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
                         enabled = centerCard != null
                     ) {
-                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    LiquidGlassButton(
+                    Button(
                         onClick = onToggleReveal,
                         modifier = Modifier
                             .weight(1.2f)
                             .height(40.dp),
                         shape = RoundedCornerShape(14.dp),
-                        cornerRadius = 14.dp,
-                        tintColor = SakuColors.SagePrimary.copy(alpha = 0.45f),
-                        darkBaseAlpha = 0.50f,
-                        specularAlpha = 0.70f,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SakuColors.VibrantMatcha,
+                            contentColor = Color.White,
+                            disabledContainerColor = SakuColors.VibrantMatcha.copy(alpha = 0.35f),
+                            disabledContentColor = Color.White.copy(alpha = 0.45f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
                         enabled = centerCard != null
                     ) {
                         Text(
                             if (isRevealed) "Hide" else "Reveal",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SakuColors.TextPrimary
+                            fontWeight = FontWeight.Bold
                         )
                     }
-                    LiquidGlassButton(
+                    Button(
                         onClick = onGood,
                         modifier = Modifier
                             .weight(1f)
                             .height(40.dp),
                         shape = RoundedCornerShape(14.dp),
-                        cornerRadius = 14.dp,
-                        tintColor = SakuColors.SageLight.copy(alpha = 0.35f),
-                        darkBaseAlpha = 0.55f,
-                        specularAlpha = 0.60f,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SakuColors.SagePrimary,
+                            contentColor = Color.White,
+                            disabledContainerColor = SakuColors.SagePrimary.copy(alpha = 0.35f),
+                            disabledContentColor = Color.White.copy(alpha = 0.45f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
                         enabled = centerCard != null
                     ) {
-                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
-                    LiquidGlassButton(
+                    OutlinedButton(
                         onClick = onOpenAnki,
                         modifier = Modifier
                             .weight(0.9f)
                             .height(40.dp),
                         shape = RoundedCornerShape(14.dp),
-                        cornerRadius = 14.dp,
-                        tintColor = Color.White.copy(alpha = 0.16f),
-                        darkBaseAlpha = 0.60f,
-                        specularAlpha = 0.50f
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = SakuColors.SurfaceElevated,
+                            contentColor = SakuColors.TextSecondary
+                        ),
+                        border = BorderStroke(1.dp, SakuColors.BorderHighlight),
+                        contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
-                        Text("Anki", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = SakuColors.TextSecondary)
+                        Text("Anki", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -1461,14 +1647,11 @@ class MainActivity : ComponentActivity() {
         val labels = listOf("Suspend", "Open Anki", "Undo", "Open App")
         val selectedIndex = options.indexOf(currentAction).coerceAtLeast(0)
 
-        LiquidGlassBox(
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            cornerRadius = 24.dp,
-            tintColor = Color.White.copy(alpha = 0.12f),
-            darkBaseAlpha = 0.65f,
-            specularAlpha = 0.45f,
-            shadowElevation = 6.dp
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1538,14 +1721,11 @@ class MainActivity : ComponentActivity() {
         val labels = listOf("Default", "Dark Blur", "Sunset", "Glass", "Gallery")
         val selectedIndex = options.indexOf(currentType).coerceAtLeast(0)
 
-        LiquidGlassBox(
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            cornerRadius = 24.dp,
-            tintColor = Color.White.copy(alpha = 0.12f),
-            darkBaseAlpha = 0.65f,
-            specularAlpha = 0.45f,
-            shadowElevation = 6.dp
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 // Header
@@ -1779,14 +1959,11 @@ class MainActivity : ComponentActivity() {
         selectedIds: List<String>,
         onDeckToggle: (String, Boolean) -> Unit
     ) {
-        LiquidGlassBox(
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            cornerRadius = 24.dp,
-            tintColor = Color.White.copy(alpha = 0.12f),
-            darkBaseAlpha = 0.65f,
-            specularAlpha = 0.45f,
-            shadowElevation = 6.dp
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1882,14 +2059,11 @@ class MainActivity : ComponentActivity() {
         val updateIdx = options.indexOf(updateMinutes).coerceAtLeast(0)
         val snoozeIdx = options.indexOf(snoozeMinutes).coerceAtLeast(0)
 
-        LiquidGlassBox(
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            cornerRadius = 24.dp,
-            tintColor = Color.White.copy(alpha = 0.12f),
-            darkBaseAlpha = 0.65f,
-            specularAlpha = 0.45f,
-            shadowElevation = 6.dp
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text(
@@ -2020,14 +2194,11 @@ class MainActivity : ComponentActivity() {
         var currentKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
         var currentModel by remember { mutableStateOf(prefs.geminiModel) }
 
-        LiquidGlassBox(
+        Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(24.dp),
-            cornerRadius = 24.dp,
-            tintColor = SakuColors.AccentLavender.copy(alpha = 0.14f),
-            darkBaseAlpha = 0.65f,
-            specularAlpha = 0.50f,
-            shadowElevation = 6.dp
+            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+            border = BorderStroke(1.dp, SakuColors.Border)
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(
@@ -2044,7 +2215,7 @@ class MainActivity : ComponentActivity() {
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "GEMINI AI STORIES",
+                            text = "GEMINI AI & READING",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SakuColors.TextSecondary,
@@ -2175,6 +2346,173 @@ class MainActivity : ComponentActivity() {
                         Icon(Icons.Filled.AutoAwesome, contentDescription = null, modifier = Modifier.size(16.dp), tint = SakuColors.AccentLavender)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Pick Model", fontSize = 12.5.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Reading Screen Backdrop Section
+                Text(
+                    text = "READING SCREEN BACKDROP",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SakuColors.TextMuted,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val readingBgPath = readingBackgroundImageUriState
+                val isCustomBg = !readingBgPath.isNullOrBlank() && File(readingBgPath).exists()
+
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF2A2F3B).copy(alpha = 0.55f),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // Thumbnail Preview
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 64.dp, height = 48.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                            ) {
+                                if (isCustomBg) {
+                                    val bitmap = remember(readingBgPath) {
+                                        try {
+                                            BitmapFactory.decodeFile(readingBgPath)?.asImageBitmap()
+                                        } catch (e: Exception) {
+                                            null
+                                        }
+                                    }
+                                    if (bitmap != null) {
+                                        Image(
+                                            bitmap = bitmap,
+                                            contentDescription = "Current reading background",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        Image(
+                                            painter = painterResource(id = com.saku.R.drawable.bg_reading_book),
+                                            contentDescription = "Default reading background",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                } else {
+                                    Image(
+                                        painter = painterResource(id = com.saku.R.drawable.bg_reading_book),
+                                        contentDescription = "Default reading background",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Top Background",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.5.sp,
+                                        color = SakuColors.TextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (isCustomBg) SakuColors.SageContainer else SakuColors.SurfaceElevated,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isCustomBg) SakuColors.SageContainerBorder else SakuColors.BorderSubtle
+                                        )
+                                    ) {
+                                        Text(
+                                            text = if (isCustomBg) "Gallery" else "Default",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isCustomBg) SakuColors.SageLight else SakuColors.TextSecondary,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (isCustomBg) "Custom image from your gallery" else "Default open book artwork",
+                                    fontSize = 11.5.sp,
+                                    color = SakuColors.TextSecondary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    readingImagePickerLauncher.launch("image/*")
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SakuColors.SagePrimary.copy(alpha = 0.25f),
+                                    contentColor = SakuColors.SageLight
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, SakuColors.SagePrimary.copy(alpha = 0.40f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Filled.AddPhotoAlternate,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Change Image", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
+
+                            if (isCustomBg) {
+                                OutlinedButton(
+                                    onClick = {
+                                        readingBgPath?.let { path ->
+                                            try {
+                                                val file = File(path)
+                                                if (file.exists() && file.absolutePath.contains("reading_backgrounds")) {
+                                                    file.delete()
+                                                }
+                                            } catch (e: Exception) {
+                                                e.printStackTrace()
+                                            }
+                                        }
+                                        prefs.readingBackgroundImageUri = null
+                                        readingBackgroundImageUriState = null
+                                        Toast.makeText(this@MainActivity, "Reverted to default background", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = SakuColors.SurfaceElevated,
+                                        contentColor = SakuColors.TextSecondary
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, SakuColors.BorderSubtle)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Reset", fontSize = 12.sp)
+                                }
+                            }
+                        }
                     }
                 }
             }

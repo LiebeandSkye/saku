@@ -3,11 +3,15 @@ package com.saku.data
 import android.content.Context
 import android.content.SharedPreferences
 
-class PreferencesManager(context: Context) {
+class PreferencesManager(
+    private val prefs: SharedPreferences
+) {
 
-    private val prefs: SharedPreferences = context.getSharedPreferences(
-        "saku_prefs",
-        Context.MODE_PRIVATE
+    constructor(context: Context) : this(
+        context.getSharedPreferences(
+            "saku_prefs",
+            Context.MODE_PRIVATE
+        )
     )
 
     var isServiceEnabled: Boolean
@@ -89,6 +93,14 @@ class PreferencesManager(context: Context) {
         get() = prefs.getString(KEY_LAST_READ_STORY_ID, null)
         set(value) = prefs.edit().putString(KEY_LAST_READ_STORY_ID, value).apply()
 
+    var readingBackgroundImageUri: String?
+        get() = prefs.getString(KEY_READING_BACKGROUND_IMAGE_URI, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_READING_BACKGROUND_IMAGE_URI, value?.trim()).apply()
+
+    var appTheme: String
+        get() = prefs.getString(KEY_APP_THEME, "dim") ?: "dim"
+        set(value) = prefs.edit().putString(KEY_APP_THEME, value).apply()
+
     val isSnoozed: Boolean
         get() = System.currentTimeMillis() < snoozeUntil
 
@@ -158,6 +170,8 @@ class PreferencesManager(context: Context) {
         private const val KEY_INTERNET_DISCLOSURE = "internet_disclosure_accepted"
         private const val KEY_HIGHLIGHT_VOCABULARY_WORDS = "highlight_vocabulary_words"
         private const val KEY_LAST_READ_STORY_ID = "last_read_story_id"
+        private const val KEY_READING_BACKGROUND_IMAGE_URI = "reading_background_image_uri"
+        private const val KEY_APP_THEME = "app_theme"
     }
 }
 

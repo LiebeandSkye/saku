@@ -112,7 +112,8 @@ fun ReadingScreen(
     padding: PaddingValues,
     prefs: PreferencesManager,
     hasAnkiPermission: Boolean,
-    openHistoryTrigger: Int = 0
+    openHistoryTrigger: Int = 0,
+    onHistoryTriggerConsumed: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -143,6 +144,9 @@ fun ReadingScreen(
 
     LaunchedEffect(currentStory?.id) {
         userAnswers.clear()
+        currentStory?.id?.let { id ->
+            prefs.lastReadStoryId = id
+        }
     }
 
     // History Sheet
@@ -159,15 +163,18 @@ fun ReadingScreen(
         if (openHistoryTrigger > 0) {
             savedStories = historyManager.getStories()
             showHistorySheet = true
+            onHistoryTriggerConsumed()
         }
     }
 
-    // Load initial story from history if available
+    // Load initial story from history if available - restore where left off
     LaunchedEffect(Unit) {
         val past = historyManager.getStories()
         savedStories = past
         if (past.isNotEmpty() && currentStory == null) {
-            currentStory = past.first()
+            val lastId = prefs.lastReadStoryId
+            val found = if (lastId != null) past.find { it.id == lastId } else null
+            currentStory = found ?: past.first()
         }
     }
 
@@ -219,33 +226,18 @@ fun ReadingScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // 1. Top Liquid Glass Container: JLPT Dropdown, Model & Key Settings, Highlight Toggle
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(26.dp))
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF282C38).copy(alpha = 0.52f),
-                            Color(0xFF1E212A).copy(alpha = 0.65f)
-                        )
-                    )
-                )
-                .border(
-                    width = 1.dp,
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = 0.35f),
-                            Color.White.copy(alpha = 0.12f),
-                            Color.White.copy(alpha = 0.04f)
-                        )
-                    ),
-                    shape = RoundedCornerShape(26.dp)
-                )
-                .padding(horizontal = 16.dp, vertical = 14.dp)
+        LiquidGlassBox(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(26.dp),
+            cornerRadius = 26.dp,
+            tintColor = Color.White.copy(alpha = 0.16f),
+            darkBaseAlpha = 0.55f,
+            specularAlpha = 0.55f
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
@@ -505,10 +497,13 @@ fun ReadingScreen(
         }
 
         // 3. Flashcard Vocabulary Source Card (Matching Target UI)
-        Card(
+        LiquidGlassBox(
+            modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1B1E26).copy(alpha = 0.85f)),
-            border = BorderStroke(1.dp, SakuColors.Border)
+            cornerRadius = 22.dp,
+            tintColor = Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0.70f,
+            specularAlpha = 0.45f
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
@@ -1166,6 +1161,8 @@ fun ReadingScreen(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(96.dp))
     }
 
     // Modal Bottom Sheet: Past Stories History

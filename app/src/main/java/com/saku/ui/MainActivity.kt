@@ -17,6 +17,8 @@ import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.max
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -28,8 +30,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -356,12 +364,27 @@ class MainActivity : ComponentActivity() {
         var isRefreshing by remember { mutableStateOf(false) }
         var currentTab by remember { mutableIntStateOf(0) }
         var openHistoryTrigger by remember { mutableIntStateOf(0) }
+        var isDockVisible by remember { mutableStateOf(true) }
         val coroutineScope = rememberCoroutineScope()
+
+        val nestedScrollConnection = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    if (available.y < -12f) {
+                        isDockVisible = false
+                    } else if (available.y > 12f) {
+                        isDockVisible = true
+                    }
+                    return Offset.Zero
+                }
+            }
+        }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(SakuColors.Background)
+                .nestedScroll(nestedScrollConnection)
         ) {
             // Opened book backdrop anchored at top for the Reading tab
             if (currentTab == 1) {
@@ -400,7 +423,7 @@ class MainActivity : ComponentActivity() {
                                         .clip(CircleShape)
                                         .background(
                                             if (prefs.isServiceEnabled) SakuColors.SagePrimary
-                                            else SakuColors.AccentRose
+                                             else SakuColors.AccentRose
                                         )
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
@@ -457,12 +480,6 @@ class MainActivity : ComponentActivity() {
                             actionIconContentColor = SakuColors.TextSecondary
                         )
                     )
-                },
-                bottomBar = {
-                    BubblyFloatingNav(
-                        currentTab = currentTab,
-                        onTabSelected = { currentTab = it }
-                    )
                 }
             ) { padding ->
                 AnimatedContent(
@@ -504,10 +521,35 @@ class MainActivity : ComponentActivity() {
                             padding = padding,
                             prefs = prefs,
                             hasAnkiPermission = hasPermissionState,
-                            openHistoryTrigger = openHistoryTrigger
+                            openHistoryTrigger = openHistoryTrigger,
+                            onHistoryTriggerConsumed = { openHistoryTrigger = 0 }
                         )
                     }
                 }
+            }
+
+            // Floating Bottom Dock Pill: statically floating, hides on scroll down, reappears on scroll up
+            AnimatedVisibility(
+                visible = isDockVisible,
+                enter = slideInVertically(
+                    initialOffsetY = { fullHeight -> fullHeight + 120 },
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ) + fadeIn(animationSpec = tween(180)),
+                exit = slideOutVertically(
+                    targetOffsetY = { fullHeight -> fullHeight + 120 },
+                    animationSpec = tween(220, easing = FastOutLinearInEasing)
+                ) + fadeOut(animationSpec = tween(150)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 12.dp)
+            ) {
+                BubblyFloatingNav(
+                    currentTab = currentTab,
+                    onTabSelected = { currentTab = it }
+                )
             }
         }
     }
@@ -528,11 +570,13 @@ class MainActivity : ComponentActivity() {
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
-            Surface(
+            LiquidGlassBox(
                 shape = RoundedCornerShape(32.dp),
-                color = SakuColors.Surface.copy(alpha = 0.96f),
-                border = BorderStroke(1.dp, SakuColors.Border),
-                shadowElevation = 8.dp,
+                cornerRadius = 32.dp,
+                tintColor = Color.White.copy(alpha = 0.16f),
+                darkBaseAlpha = 0.60f,
+                specularAlpha = 0.60f,
+                shadowElevation = 12.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp)
@@ -552,17 +596,19 @@ class MainActivity : ComponentActivity() {
                         label = "BubblyNavIndicatorOffset"
                     )
 
-                    // Bubbly sliding indicator pill
+                    // Bubbly sliding indicator pill with liquid glass sheen
                     Box(
                         modifier = Modifier
                             .offset(x = indicatorOffset)
                             .width(tabWidth)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(26.dp))
-                            .background(SakuColors.SageContainer)
-                            .border(
-                                BorderStroke(1.dp, SakuColors.SageContainerBorder),
-                                RoundedCornerShape(26.dp)
+                            .liquidGlass(
+                                shape = RoundedCornerShape(26.dp),
+                                cornerRadius = 26.dp,
+                                tintColor = SakuColors.SagePrimary.copy(alpha = 0.40f),
+                                darkBaseAlpha = 0.45f,
+                                specularAlpha = 0.70f,
+                                shadowElevation = 4.dp
                             )
                     )
 
@@ -969,38 +1015,24 @@ class MainActivity : ComponentActivity() {
             // 8. Gemini AI & Reading Settings
             ModernGeminiSettingsCard()
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(96.dp))
         }
     }
 
     @Composable
     fun ModernHeroCard(isEnabled: Boolean, onToggle: (Boolean) -> Unit) {
-        Card(
+        LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = SakuColors.Surface
-            ),
-            border = BorderStroke(
-                1.dp,
-                if (isEnabled) SakuColors.SageContainerBorder
-                else SakuColors.Border
-            )
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = if (isEnabled) SakuColors.SagePrimary.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0.58f,
+            specularAlpha = 0.60f,
+            shadowElevation = 8.dp
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            colors = if (isEnabled) listOf(
-                                SakuColors.SurfaceElevated,
-                                SakuColors.SageContainer.copy(alpha = 0.5f)
-                            ) else listOf(
-                                SakuColors.Surface,
-                                SakuColors.SurfaceElevated.copy(alpha = 0.5f)
-                            )
-                        )
-                    )
                     .padding(18.dp)
             ) {
                 Row(
@@ -1085,13 +1117,14 @@ class MainActivity : ComponentActivity() {
             deckCardsCache[currentCenterDeck.id] ?: if (currentCenterIndex == 0) activeCard else null
         } else null
 
-        Card(
+        LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = SakuColors.Surface
-            ),
-            border = BorderStroke(1.dp, SakuColors.Border)
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0.65f,
+            specularAlpha = 0.50f,
+            shadowElevation = 8.dp
         ) {
             Column(
                 modifier = Modifier
@@ -1140,6 +1173,24 @@ class MainActivity : ComponentActivity() {
                         .fillMaxWidth()
                         .clipToBounds()
                 ) {
+                    // Ambient colorful glow behind the cards to give liquid glass rich refraction
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .fillMaxWidth(0.90f)
+                            .height(290.dp)
+                            .clip(RoundedCornerShape(30.dp))
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        SakuColors.SagePrimary.copy(alpha = 0.22f),
+                                        SakuColors.AccentSlateBlue.copy(alpha = 0.12f),
+                                        Color.Transparent
+                                    )
+                                )
+                            )
+                    )
+
                     HorizontalPager(
                         state = pagerState,
                         contentPadding = PaddingValues(horizontal = 48.dp),
@@ -1186,70 +1237,65 @@ class MainActivity : ComponentActivity() {
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(
+                    LiquidGlassButton(
                         onClick = onAgain,
                         modifier = Modifier
                             .weight(1f)
-                            .height(38.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SakuColors.AccentRose.copy(alpha = 0.85f),
-                            contentColor = Color.White,
-                            disabledContainerColor = SakuColors.AccentRose.copy(alpha = 0.3f),
-                            disabledContentColor = Color.White.copy(alpha = 0.4f)
-                        ),
+                            .height(40.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        cornerRadius = 14.dp,
+                        tintColor = SakuColors.AccentRose.copy(alpha = 0.40f),
+                        darkBaseAlpha = 0.55f,
+                        specularAlpha = 0.60f,
                         enabled = centerCard != null
                     ) {
-                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
-                    Button(
+                    LiquidGlassButton(
                         onClick = onToggleReveal,
                         modifier = Modifier
                             .weight(1.2f)
-                            .height(38.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SakuColors.SagePrimary,
-                            contentColor = SakuColors.OnSage,
-                            disabledContainerColor = SakuColors.SagePrimary.copy(alpha = 0.3f),
-                            disabledContentColor = SakuColors.OnSage.copy(alpha = 0.4f)
-                        ),
+                            .height(40.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        cornerRadius = 14.dp,
+                        tintColor = SakuColors.SagePrimary.copy(alpha = 0.45f),
+                        darkBaseAlpha = 0.50f,
+                        specularAlpha = 0.70f,
                         enabled = centerCard != null
                     ) {
                         Text(
                             if (isRevealed) "Hide" else "Reveal",
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = SakuColors.TextPrimary
                         )
                     }
-                    Button(
+                    LiquidGlassButton(
                         onClick = onGood,
                         modifier = Modifier
                             .weight(1f)
-                            .height(38.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SakuColors.SageLight.copy(alpha = 0.85f),
-                            contentColor = SakuColors.OnSage,
-                            disabledContainerColor = SakuColors.SageLight.copy(alpha = 0.3f),
-                            disabledContentColor = SakuColors.OnSage.copy(alpha = 0.4f)
-                        ),
+                            .height(40.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        cornerRadius = 14.dp,
+                        tintColor = SakuColors.SageLight.copy(alpha = 0.35f),
+                        darkBaseAlpha = 0.55f,
+                        specularAlpha = 0.60f,
                         enabled = centerCard != null
                     ) {
-                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
-                    OutlinedButton(
+                    LiquidGlassButton(
                         onClick = onOpenAnki,
                         modifier = Modifier
                             .weight(0.9f)
-                            .height(38.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = SakuColors.SurfaceElevated
-                        ),
-                        border = BorderStroke(1.dp, SakuColors.BorderHighlight)
+                            .height(40.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        cornerRadius = 14.dp,
+                        tintColor = Color.White.copy(alpha = 0.16f),
+                        darkBaseAlpha = 0.60f,
+                        specularAlpha = 0.50f
                     ) {
-                        Text("Anki", fontSize = 12.sp, color = SakuColors.TextSecondary)
+                        Text("Anki", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = SakuColors.TextSecondary)
                     }
                 }
             }
@@ -1264,25 +1310,21 @@ class MainActivity : ComponentActivity() {
         isRevealed: Boolean,
         modifier: Modifier = Modifier
     ) {
-        Surface(
+        LiquidGlassBox(
             modifier = modifier
                 .fillMaxWidth()
                 .aspectRatio(0.78f),
-            shape = RoundedCornerShape(20.dp),
-            color = Color.Transparent,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f))
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = Color.White.copy(alpha = 0.22f),
+            darkBaseAlpha = 0.50f,
+            specularAlpha = 0.65f,
+            borderAlpha = 0.55f,
+            shadowElevation = 10.dp
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF333842).copy(alpha = 0.85f),
-                                Color(0xFF22252C).copy(alpha = 0.92f)
-                            )
-                        )
-                    )
                     .padding(horizontal = 18.dp, vertical = 20.dp)
             ) {
                 Column(
@@ -1419,11 +1461,14 @@ class MainActivity : ComponentActivity() {
         val labels = listOf("Suspend", "Open Anki", "Undo", "Open App")
         val selectedIndex = options.indexOf(currentAction).coerceAtLeast(0)
 
-        Card(
+        LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
-            border = BorderStroke(1.dp, SakuColors.Border)
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0.65f,
+            specularAlpha = 0.45f,
+            shadowElevation = 6.dp
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1493,11 +1538,14 @@ class MainActivity : ComponentActivity() {
         val labels = listOf("Default", "Dark Blur", "Sunset", "Glass", "Gallery")
         val selectedIndex = options.indexOf(currentType).coerceAtLeast(0)
 
-        Card(
+        LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
-            border = BorderStroke(1.dp, SakuColors.Border)
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0.65f,
+            specularAlpha = 0.45f,
+            shadowElevation = 6.dp
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 // Header
@@ -1731,11 +1779,14 @@ class MainActivity : ComponentActivity() {
         selectedIds: List<String>,
         onDeckToggle: (String, Boolean) -> Unit
     ) {
-        Card(
+        LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
-            border = BorderStroke(1.dp, SakuColors.Border)
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0.65f,
+            specularAlpha = 0.45f,
+            shadowElevation = 6.dp
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1831,11 +1882,14 @@ class MainActivity : ComponentActivity() {
         val updateIdx = options.indexOf(updateMinutes).coerceAtLeast(0)
         val snoozeIdx = options.indexOf(snoozeMinutes).coerceAtLeast(0)
 
-        Card(
+        LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
-            border = BorderStroke(1.dp, SakuColors.Border)
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = Color.White.copy(alpha = 0.12f),
+            darkBaseAlpha = 0.65f,
+            specularAlpha = 0.45f,
+            shadowElevation = 6.dp
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Text(
@@ -1966,11 +2020,14 @@ class MainActivity : ComponentActivity() {
         var currentKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
         var currentModel by remember { mutableStateOf(prefs.geminiModel) }
 
-        Card(
+        LiquidGlassBox(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
-            border = BorderStroke(1.dp, SakuColors.Border)
+            shape = RoundedCornerShape(24.dp),
+            cornerRadius = 24.dp,
+            tintColor = SakuColors.AccentLavender.copy(alpha = 0.14f),
+            darkBaseAlpha = 0.65f,
+            specularAlpha = 0.50f,
+            shadowElevation = 6.dp
         ) {
             Column(modifier = Modifier.padding(18.dp)) {
                 Row(

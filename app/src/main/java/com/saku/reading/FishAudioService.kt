@@ -16,7 +16,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-class ElevenLabsAudioService(private val context: Context) {
+class FishAudioService(private val context: Context) {
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
@@ -31,12 +31,12 @@ class ElevenLabsAudioService(private val context: Context) {
     private var onCompletionCallback: (() -> Unit)? = null
 
     /**
-     * Queries ElevenLabs API to fetch the name of the voice associated with [voiceId].
-     * Useful for validating that the voice exists and the API key is active.
+     * Queries Fish Audio API to fetch the title/name of the voice model associated with [voiceId].
+     * Validates that the voice exists and the API key is active.
      */
     suspend fun fetchVoiceName(apiKey: String, voiceId: String): Result<String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
-            return@withContext Result.failure(IllegalArgumentException("ElevenLabs API key is required"))
+            return@withContext Result.failure(IllegalArgumentException("Fish Audio API key is required"))
         }
         val cleanVoiceId = PreferencesManager.extractVoiceId(voiceId)
         if (cleanVoiceId.isBlank()) {
@@ -44,8 +44,8 @@ class ElevenLabsAudioService(private val context: Context) {
         }
 
         val request = Request.Builder()
-            .url("https://api.elevenlabs.io/v1/voices/$cleanVoiceId")
-            .header("xi-api-key", apiKey)
+            .url("https://api.fish.audio/model/$cleanVoiceId")
+            .header("Authorization", "Bearer ${apiKey.trim()}")
             .get()
             .build()
 
@@ -58,10 +58,12 @@ class ElevenLabsAudioService(private val context: Context) {
                 }
 
                 val json = JSONObject(bodyStr)
-                val name = json.optString("name", "Custom Voice")
-                val category = json.optString("category", "")
-                val displayName = if (category.isNotBlank()) "$name ($category)" else name
-                Result.success(displayName)
+                val title = json.optString("title", "").ifBlank {
+                    json.optString("name", "Custom Voice")
+                }
+                val author = json.optJSONObject("author")?.optString("nickname", "") ?: ""
+                val displayName = if (author.isNotBlank()) "$title (by $author)" else title
+                Result.success(displayName.ifBlank { "Voice Model ($cleanVoiceId)" })
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -74,11 +76,12 @@ class ElevenLabsAudioService(private val context: Context) {
     suspend fun synthesizeStoryAudio(
         apiKey: String,
         voiceId: String,
+        model: String = PreferencesManager.DEFAULT_FISH_AUDIO_MODEL,
         storyId: String,
         text: String
     ): Result<File> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
-            return@withContext Result.failure(IllegalArgumentException("ElevenLabs API key is required"))
+            return@withContext Result.failure(IllegalArgumentException("Fish Audio API key is required"))
         }
         val cleanVoiceId = PreferencesManager.extractVoiceId(voiceId)
         if (cleanVoiceId.isBlank()) {
@@ -93,20 +96,19 @@ class ElevenLabsAudioService(private val context: Context) {
             return@withContext Result.success(audioFile)
         }
 
+        val cleanModel = model.ifBlank { PreferencesManager.DEFAULT_FISH_AUDIO_MODEL }
+
         val requestJson = JSONObject().apply {
             put("text", text)
-            put("model_id", PreferencesManager.DEFAULT_ELEVENLABS_MODEL_ID)
-            val voiceSettings = JSONObject().apply {
-                put("stability", 0.5)
-                put("similarity_boost", 0.75)
-            }
-            put("voice_settings", voiceSettings)
+            put("reference_id", cleanVoiceId)
+            put("format", "mp3")
         }
 
         val requestBody = requestJson.toString().toRequestBody(jsonMediaType)
         val request = Request.Builder()
-            .url("https://api.elevenlabs.io/v1/text-to-speech/$cleanVoiceId")
-            .header("xi-api-key", apiKey)
+            .url("https://api.fish.audio/v1/tts")
+            .header("Authorization", "Bearer ${apiKey.trim()}")
+            .header("model", cleanModel)
             .header("Accept", "audio/mpeg")
             .post(requestBody)
             .build()
@@ -119,7 +121,7 @@ class ElevenLabsAudioService(private val context: Context) {
                     return@withContext Result.failure(IOException(errorMsg))
                 }
 
-                val body = response.body ?: return@withContext Result.failure(IOException("Empty response body"))
+                val body = response.body ?: return@withContext Result.failure(IOException("Empty response body from Fish Audio"))
                 val dir = getAudioDir(context)
                 if (!dir.exists()) {
                     dir.mkdirs()
@@ -230,15 +232,16 @@ class ElevenLabsAudioService(private val context: Context) {
     private fun parseErrorMessage(body: String, code: Int): String {
         return try {
             val json = JSONObject(body)
-            val detail = json.optJSONObject("detail")
-            val message = detail?.optString("message") ?: json.optString("message")
+            val message = json.optString("message").ifBlank {
+                json.optJSONObject("detail")?.optString("message") ?: json.optString("detail")
+            }
             if (message.isNotBlank()) {
                 message
             } else {
-                "ElevenLabs API Error (HTTP $code)"
+                "Fish Audio API Error (HTTP $code)"
             }
         } catch (ignored: Exception) {
-            if (body.isNotBlank()) body.take(150) else "ElevenLabs request failed (HTTP $code)"
+            if (body.isNotBlank()) body.take(150) else "Fish Audio request failed (HTTP $code)"
         }
     }
 

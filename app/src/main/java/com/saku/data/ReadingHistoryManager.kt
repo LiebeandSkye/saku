@@ -2,7 +2,7 @@ package com.saku.data
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.saku.reading.ElevenLabsAudioService
+import com.saku.reading.FishAudioService
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -81,12 +81,12 @@ class ReadingHistoryManager(private val context: Context) {
     fun deleteStory(id: String) {
         val updated = getStories().filterNot { it.id == id }
         saveList(updated)
-        ElevenLabsAudioService.deleteAudioForStory(context, id)
+        FishAudioService.deleteAudioForStory(context, id)
     }
 
     fun clearAll() {
         prefs.edit().remove(KEY_STORIES).apply()
-        ElevenLabsAudioService.clearAllAudio(context)
+        FishAudioService.clearAllAudio(context)
     }
 
     private fun saveList(list: List<GeneratedStory>) {

@@ -3,6 +3,7 @@ package com.saku.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -54,26 +55,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.saku.data.PreferencesManager
-import com.saku.reading.ElevenLabsAudioService
+import com.saku.reading.FishAudioService
 import kotlinx.coroutines.launch
 
 @Composable
-fun ElevenLabsDialog(
+fun FishAudioDialog(
     currentApiKey: String?,
     currentVoiceId: String,
     currentVoiceName: String?,
-    onSave: (apiKey: String, voiceId: String, voiceName: String?) -> Unit,
+    currentModel: String,
+    onSave: (apiKey: String, voiceId: String, voiceName: String?, model: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val audioService = remember { ElevenLabsAudioService(context) }
+    val audioService = remember { FishAudioService(context) }
 
     var apiKeyInput by remember { mutableStateOf(currentApiKey ?: "") }
     var showApiKey by remember { mutableStateOf(false) }
 
+    var selectedModel by remember {
+        mutableStateOf(if (currentModel.isNotBlank()) currentModel else PreferencesManager.DEFAULT_FISH_AUDIO_MODEL)
+    }
+
     var voiceInput by remember {
-        mutableStateOf(if (currentVoiceId.isNotBlank()) currentVoiceId else PreferencesManager.DEFAULT_ELEVENLABS_VOICE_ID)
+        mutableStateOf(if (currentVoiceId.isNotBlank()) currentVoiceId else PreferencesManager.DEFAULT_FISH_AUDIO_VOICE_ID)
     }
 
     var fetchedVoiceName by remember { mutableStateOf(currentVoiceName) }
@@ -97,7 +103,7 @@ fun ElevenLabsDialog(
             Column(
                 modifier = Modifier
                     .padding(20.dp)
-                    .heightIn(max = 600.dp)
+                    .heightIn(max = 620.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -111,7 +117,7 @@ fun ElevenLabsDialog(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "ElevenLabs Narration",
+                        text = "Fish Audio Narration",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp,
                         color = SakuColors.TextPrimary
@@ -119,7 +125,7 @@ fun ElevenLabsDialog(
                 }
 
                 Text(
-                    text = "Configure ElevenLabs natural voice narration to read your Japanese immersion stories aloud.",
+                    text = "Configure Fish Audio natural voice narration. Works with free API keys and lets you use any custom or community voice model.",
                     fontSize = 13.sp,
                     color = SakuColors.TextSecondary,
                     lineHeight = 18.sp
@@ -140,7 +146,7 @@ fun ElevenLabsDialog(
                         apiKeyInput = it
                         fetchStatusMessage = null
                     },
-                    placeholder = { Text("sk_...", color = SakuColors.TextTertiary) },
+                    placeholder = { Text("Paste Fish Audio API key", color = SakuColors.TextTertiary) },
                     singleLine = true,
                     visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
@@ -170,13 +176,13 @@ fun ElevenLabsDialog(
                 ) {
                     TextButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://elevenlabs.io/app/settings/api-keys"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://fish.audio/go-api"))
                             context.startActivity(intent)
                         },
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Get ElevenLabs Key", fontSize = 12.sp, color = SakuColors.SagePrimary, maxLines = 1, softWrap = false)
+                            Text("Get Free API Key", fontSize = 12.sp, color = SakuColors.SagePrimary, maxLines = 1, softWrap = false)
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = SakuColors.SagePrimary, modifier = Modifier.size(13.dp))
                         }
@@ -188,6 +194,55 @@ fun ElevenLabsDialog(
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                         ) {
                             Text("Clear", fontSize = 12.sp, color = SakuColors.AccentRose, maxLines = 1, softWrap = false)
+                        }
+                    }
+                }
+
+                // Model Selection Section
+                Text(
+                    text = "TTS MODEL ENGINE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = SakuColors.TextTertiary,
+                    letterSpacing = 0.8.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PreferencesManager.AVAILABLE_FISH_AUDIO_MODELS.forEach { modelOption ->
+                        val isSelected = selectedModel.equals(modelOption.id, ignoreCase = true)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) SakuColors.SageContainer else SakuColors.SurfaceElevated,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) SakuColors.SagePrimary else SakuColors.Border
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { selectedModel = modelOption.id }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = modelOption.name,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) SakuColors.SagePrimary else SakuColors.TextPrimary,
+                                    maxLines = 1
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = modelOption.tag,
+                                    fontSize = 10.sp,
+                                    color = if (isSelected) SakuColors.SagePrimary.copy(alpha = 0.8f) else SakuColors.TextTertiary,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
@@ -209,7 +264,7 @@ fun ElevenLabsDialog(
                         voiceInput = it
                         fetchStatusMessage = null
                     },
-                    placeholder = { Text(PreferencesManager.DEFAULT_ELEVENLABS_VOICE_ID, color = SakuColors.TextTertiary) },
+                    placeholder = { Text(PreferencesManager.DEFAULT_FISH_AUDIO_VOICE_ID, color = SakuColors.TextTertiary) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = SakuColors.TextPrimary,
@@ -222,7 +277,7 @@ fun ElevenLabsDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Voice Actions & Info
+                // Voice Quick Actions Row: Browse Voices, View Voice Online, Reset Default
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -230,15 +285,29 @@ fun ElevenLabsDialog(
                 ) {
                     TextButton(
                         onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://fish.audio"))
+                            context.startActivity(intent)
+                        },
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Browse Voices", fontSize = 12.sp, color = SakuColors.SagePrimary, maxLines = 1, softWrap = false)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = SakuColors.SagePrimary, modifier = Modifier.size(13.dp))
+                        }
+                    }
+
+                    TextButton(
+                        onClick = {
                             val id = cleanExtractedVoiceId()
-                            val voiceUrl = "https://elevenlabs.io/voices/$id"
+                            val voiceUrl = "https://fish.audio/m/$id"
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(voiceUrl))
                             context.startActivity(intent)
                         },
                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("View Voice Online", fontSize = 12.sp, color = SakuColors.AccentLavender, maxLines = 1, softWrap = false)
+                            Text("View Online", fontSize = 12.sp, color = SakuColors.AccentLavender, maxLines = 1, softWrap = false)
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, tint = SakuColors.AccentLavender, modifier = Modifier.size(13.dp))
                         }
@@ -246,7 +315,7 @@ fun ElevenLabsDialog(
 
                     TextButton(
                         onClick = {
-                            voiceInput = PreferencesManager.DEFAULT_ELEVENLABS_VOICE_ID
+                            voiceInput = PreferencesManager.DEFAULT_FISH_AUDIO_VOICE_ID
                             fetchedVoiceName = null
                             fetchStatusMessage = null
                         },
@@ -267,7 +336,7 @@ fun ElevenLabsDialog(
                             return@OutlinedButton
                         }
                         if (vId.isBlank()) {
-                            fetchStatusMessage = "Please enter a Voice ID"
+                            fetchStatusMessage = "Please enter a Voice ID or URL"
                             fetchStatusIsError = true
                             return@OutlinedButton
                         }
@@ -300,7 +369,7 @@ fun ElevenLabsDialog(
                             color = SakuColors.VibrantMatcha
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Verifying with ElevenLabs...", fontSize = 12.sp, color = SakuColors.TextSecondary)
+                        Text("Verifying with Fish Audio...", fontSize = 12.sp, color = SakuColors.TextSecondary)
                     } else {
                         Icon(
                             Icons.Filled.Refresh,
@@ -365,7 +434,7 @@ fun ElevenLabsDialog(
                     Button(
                         onClick = {
                             val cleanId = cleanExtractedVoiceId()
-                            onSave(apiKeyInput.trim(), cleanId, fetchedVoiceName)
+                            onSave(apiKeyInput.trim(), cleanId, fetchedVoiceName, selectedModel)
                         },
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(

@@ -180,6 +180,7 @@ class MainActivity : ComponentActivity() {
     private var dimOpacityState by mutableFloatStateOf(0.10f)
     private var artworkOpacityState by mutableFloatStateOf(0.5f)
     private var readingBackgroundImageUriState by mutableStateOf<String?>(null)
+    private var isShootingStarsEnabledState by mutableStateOf(true)
 
     private val ankiPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -377,6 +378,7 @@ class MainActivity : ComponentActivity() {
         dimOpacityState = prefs.dimOpacity
         artworkOpacityState = prefs.artworkOpacity
         readingBackgroundImageUriState = prefs.readingBackgroundImageUri
+        isShootingStarsEnabledState = prefs.isShootingStarsEnabled
 
         requestInitialPermissions()
 
@@ -387,14 +389,28 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var currentAppTheme by remember { mutableStateOf(AppTheme.fromId(prefs.appTheme)) }
+            var showIntro by remember { mutableStateOf(true) }
+
             SakuTheme(theme = currentAppTheme) {
-                MainContainer(
-                    currentAppTheme = currentAppTheme,
-                    onThemeChanged = { newTheme ->
-                        currentAppTheme = newTheme
-                        prefs.appTheme = newTheme.id
+                Box(modifier = Modifier.fillMaxSize()) {
+                    MainContainer(
+                        currentAppTheme = currentAppTheme,
+                        onThemeChanged = { newTheme ->
+                            currentAppTheme = newTheme
+                            prefs.appTheme = newTheme.id
+                        }
+                    )
+
+                    AnimatedVisibility(
+                        visible = showIntro,
+                        enter = fadeIn(),
+                        exit = fadeOut(animationSpec = tween(280))
+                    ) {
+                        SakuCosmicIntro(
+                            onDismiss = { showIntro = false }
+                        )
                     }
-                )
+                }
             }
         }
     }
@@ -418,6 +434,7 @@ class MainActivity : ComponentActivity() {
         dimOpacityState = prefs.dimOpacity
         artworkOpacityState = prefs.artworkOpacity
         readingBackgroundImageUriState = prefs.readingBackgroundImageUri
+        isShootingStarsEnabledState = prefs.isShootingStarsEnabled
     }
 
     private fun syncCardSession(card: CardInfo?) {
@@ -662,7 +679,18 @@ class MainActivity : ComponentActivity() {
                     beyondViewportPageCount = 1
                 ) { page ->
                     when (page) {
-                        0 -> ModernSettingsScreen(padding, currentAppTheme, onThemeChanged)
+                        0 -> {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                if (isShootingStarsEnabledState) {
+                                    CardsShootingStarsBackground(
+                                        theme = currentAppTheme,
+                                        isActive = pagerState.currentPage == 0 && !pagerState.isScrollInProgress,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                                ModernSettingsScreen(padding, currentAppTheme, onThemeChanged)
+                            }
+                        }
                         1 -> ReadingScreen(
                             padding = padding,
                             prefs = prefs,
@@ -1059,6 +1087,86 @@ class MainActivity : ComponentActivity() {
                             onThemeChanged(newTheme)
                         }
                     )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Shooting Stars Background Toggle for Cards tab
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = SakuColors.SurfaceElevated,
+                        border = BorderStroke(1.dp, SakuColors.BorderSubtle),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isShootingStarsEnabledState) SakuColors.VibrantMatchaContainer else SakuColors.Surface,
+                                border = BorderStroke(1.dp, if (isShootingStarsEnabledState) SakuColors.VibrantMatchaBorder else SakuColors.BorderSubtle),
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = if (isShootingStarsEnabledState) SakuColors.VibrantMatcha else SakuColors.TextSecondary,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Shooting Stars Background",
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
+                                        color = SakuColors.TextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (isShootingStarsEnabledState) SakuColors.SageContainer else SakuColors.Surface,
+                                        border = BorderStroke(1.dp, if (isShootingStarsEnabledState) SakuColors.SageContainerBorder else SakuColors.BorderSubtle)
+                                    ) {
+                                        Text(
+                                            text = if (isShootingStarsEnabledState) "On" else "Off",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (isShootingStarsEnabledState) SakuColors.SageLight else SakuColors.TextSecondary,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Ambient starfield with shooting stars on Cards tab",
+                                    fontSize = 11.sp,
+                                    color = SakuColors.TextSecondary
+                                )
+                            }
+
+                            Switch(
+                                checked = isShootingStarsEnabledState,
+                                onCheckedChange = { enabled ->
+                                    isShootingStarsEnabledState = enabled
+                                    prefs.isShootingStarsEnabled = enabled
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = SakuColors.VibrantMatcha,
+                                    uncheckedThumbColor = SakuColors.TextSecondary,
+                                    uncheckedTrackColor = SakuColors.Surface
+                                )
+                            )
+                        }
+                    }
                 }
             }
 
@@ -2611,7 +2719,7 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Reset", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                     Text("Reset", fontSize = 12.sp, maxLines = 1, softWrap = false)
                                 }
                             }
                         }

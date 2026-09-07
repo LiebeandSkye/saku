@@ -106,7 +106,7 @@ import com.saku.data.GeneratedStory
 import com.saku.data.PreferencesManager
 import com.saku.data.ReadingHistoryManager
 import com.saku.data.ReadingVocabularySummary
-import com.saku.reading.ElevenLabsAudioService
+import com.saku.reading.FishAudioService
 import com.saku.reading.GeminiStoryService
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -128,7 +128,7 @@ fun ReadingScreen(
     val historyManager = remember { ReadingHistoryManager(context) }
     val storyService = remember { GeminiStoryService() }
     val vocabExtractor = remember { ReadingVocabularyExtractor(context) }
-    val audioService = remember { ElevenLabsAudioService(context) }
+    val audioService = remember { FishAudioService(context) }
 
     // State
     var apiKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
@@ -139,11 +139,12 @@ fun ReadingScreen(
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
 
-    // ElevenLabs State
-    var showElevenLabsDialog by remember { mutableStateOf(false) }
-    var elevenLabsApiKey by remember { mutableStateOf(prefs.elevenLabsApiKey ?: "") }
-    var elevenLabsVoiceId by remember { mutableStateOf(prefs.elevenLabsVoiceId) }
-    var elevenLabsVoiceName by remember { mutableStateOf(prefs.elevenLabsVoiceName) }
+    // Fish Audio State
+    var showFishAudioDialog by remember { mutableStateOf(false) }
+    var fishAudioApiKey by remember { mutableStateOf(prefs.fishAudioApiKey ?: "") }
+    var fishAudioVoiceId by remember { mutableStateOf(prefs.fishAudioVoiceId) }
+    var fishAudioVoiceName by remember { mutableStateOf(prefs.fishAudioVoiceName) }
+    var fishAudioModel by remember { mutableStateOf(prefs.fishAudioModel) }
     var isNarrating by remember { mutableStateOf(false) }
     var isSynthesizingAudio by remember { mutableStateOf(false) }
     var currentlyPlayingStoryId by remember { mutableStateOf<String?>(null) }
@@ -454,9 +455,9 @@ fun ReadingScreen(
                     }
                 }
 
-                // Row 2b: ElevenLabs Voice Narration Pill
+                // Row 2b: Fish Audio Voice Narration Pill
                 Surface(
-                    onClick = { showElevenLabsDialog = true },
+                    onClick = { showFishAudioDialog = true },
                     shape = RoundedCornerShape(12.dp),
                     color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.14f),
                     border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.25f)),
@@ -480,10 +481,10 @@ fun ReadingScreen(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            val voiceLabel = elevenLabsVoiceName?.takeIf { it.isNotBlank() }
-                                ?: if (elevenLabsVoiceId.isNotBlank()) "Voice: ${elevenLabsVoiceId.take(12)}..." else "ElevenLabs Voice"
+                            val voiceLabel = fishAudioVoiceName?.takeIf { it.isNotBlank() }
+                                ?: if (fishAudioVoiceId.isNotBlank()) "Voice: ${fishAudioVoiceId.take(12)}..." else "Fish Audio Voice"
                             Text(
-                                text = "ElevenLabs: $voiceLabel",
+                                text = "Fish Audio: $voiceLabel",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = SakuColors.TextPrimary,
@@ -494,10 +495,10 @@ fun ReadingScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = if (elevenLabsApiKey.isNotBlank()) "Key Active" else "Setup Key",
+                                text = if (fishAudioApiKey.isNotBlank()) "Key Active" else "Setup Key",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = if (elevenLabsApiKey.isNotBlank()) SakuColors.SagePrimary else SakuColors.AccentRose,
+                                color = if (fishAudioApiKey.isNotBlank()) SakuColors.SagePrimary else SakuColors.AccentRose,
                                 maxLines = 1,
                                 softWrap = false
                             )
@@ -948,9 +949,9 @@ fun ReadingScreen(
                                         isNarrating = false
                                         currentlyPlayingStoryId = null
                                     } else {
-                                        if (elevenLabsApiKey.isBlank()) {
-                                            showElevenLabsDialog = true
-                                            Toast.makeText(context, "Please configure your ElevenLabs API key", Toast.LENGTH_SHORT).show()
+                                        if (fishAudioApiKey.isBlank()) {
+                                            showFishAudioDialog = true
+                                            Toast.makeText(context, "Please configure your Fish Audio API key", Toast.LENGTH_SHORT).show()
                                             return@IconButton
                                         }
 
@@ -962,8 +963,9 @@ fun ReadingScreen(
                                         coroutineScope.launch {
                                             val narrationText = "${story.title}。\n\n${story.content}"
                                             val result = audioService.synthesizeStoryAudio(
-                                                apiKey = elevenLabsApiKey,
-                                                voiceId = elevenLabsVoiceId,
+                                                apiKey = fishAudioApiKey,
+                                                voiceId = fishAudioVoiceId,
+                                                model = fishAudioModel,
                                                 storyId = story.id,
                                                 text = narrationText
                                             )
@@ -1565,23 +1567,26 @@ fun ReadingScreen(
         )
     }
 
-    // ElevenLabs Voice & API Key Dialog
-    if (showElevenLabsDialog) {
-        ElevenLabsDialog(
-            currentApiKey = elevenLabsApiKey,
-            currentVoiceId = elevenLabsVoiceId,
-            currentVoiceName = elevenLabsVoiceName,
-            onSave = { newKey, newVoiceId, newVoiceName ->
-                elevenLabsApiKey = newKey
-                prefs.elevenLabsApiKey = newKey
-                elevenLabsVoiceId = newVoiceId
-                prefs.elevenLabsVoiceId = newVoiceId
-                elevenLabsVoiceName = newVoiceName
-                prefs.elevenLabsVoiceName = newVoiceName
-                showElevenLabsDialog = false
-                Toast.makeText(context, "ElevenLabs configuration saved!", Toast.LENGTH_SHORT).show()
+    // Fish Audio Voice & API Key Dialog
+    if (showFishAudioDialog) {
+        FishAudioDialog(
+            currentApiKey = fishAudioApiKey,
+            currentVoiceId = fishAudioVoiceId,
+            currentVoiceName = fishAudioVoiceName,
+            currentModel = fishAudioModel,
+            onSave = { newKey, newVoiceId, newVoiceName, newModel ->
+                fishAudioApiKey = newKey
+                prefs.fishAudioApiKey = newKey
+                fishAudioVoiceId = newVoiceId
+                prefs.fishAudioVoiceId = newVoiceId
+                fishAudioVoiceName = newVoiceName
+                prefs.fishAudioVoiceName = newVoiceName
+                fishAudioModel = newModel
+                prefs.fishAudioModel = newModel
+                showFishAudioDialog = false
+                Toast.makeText(context, "Fish Audio configuration saved!", Toast.LENGTH_SHORT).show()
             },
-            onDismiss = { showElevenLabsDialog = false }
+            onDismiss = { showFishAudioDialog = false }
         )
     }
 

@@ -47,7 +47,10 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -70,6 +73,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -102,6 +106,7 @@ import com.saku.data.GeneratedStory
 import com.saku.data.PreferencesManager
 import com.saku.data.ReadingHistoryManager
 import com.saku.data.ReadingVocabularySummary
+import com.saku.reading.ElevenLabsAudioService
 import com.saku.reading.GeminiStoryService
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -123,6 +128,7 @@ fun ReadingScreen(
     val historyManager = remember { ReadingHistoryManager(context) }
     val storyService = remember { GeminiStoryService() }
     val vocabExtractor = remember { ReadingVocabularyExtractor(context) }
+    val audioService = remember { ElevenLabsAudioService(context) }
 
     // State
     var apiKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
@@ -132,6 +138,21 @@ fun ReadingScreen(
     var showJlptMenu by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
+
+    // ElevenLabs State
+    var showElevenLabsDialog by remember { mutableStateOf(false) }
+    var elevenLabsApiKey by remember { mutableStateOf(prefs.elevenLabsApiKey ?: "") }
+    var elevenLabsVoiceId by remember { mutableStateOf(prefs.elevenLabsVoiceId) }
+    var elevenLabsVoiceName by remember { mutableStateOf(prefs.elevenLabsVoiceName) }
+    var isNarrating by remember { mutableStateOf(false) }
+    var isSynthesizingAudio by remember { mutableStateOf(false) }
+    var currentlyPlayingStoryId by remember { mutableStateOf<String?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            audioService.stopAudio()
+        }
+    }
 
     var vocabSummary by remember { mutableStateOf<ReadingVocabularySummary?>(null) }
     var isLoadingVocab by remember { mutableStateOf(false) }
@@ -147,13 +168,18 @@ fun ReadingScreen(
 
     LaunchedEffect(currentStory?.id) {
         userAnswers.clear()
+        if (currentlyPlayingStoryId != null && currentlyPlayingStoryId != currentStory?.id) {
+            audioService.stopAudio()
+            isNarrating = false
+            currentlyPlayingStoryId = null
+        }
         currentStory?.id?.let { id ->
             prefs.lastReadStoryId = id
         }
     }
 
     // History Sheet
-    val historySheetState = rememberModalBottomSheetState()
+    val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showHistorySheet by remember { mutableStateOf(false) }
     var savedStories by remember { mutableStateOf(historyManager.getStories()) }
 
@@ -415,6 +441,63 @@ fun ReadingScreen(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = SakuColors.TextSecondary,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                            Icon(
+                                Icons.Filled.ArrowDropDown,
+                                contentDescription = null,
+                                tint = SakuColors.TextSecondary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Row 2b: ElevenLabs Voice Narration Pill
+                Surface(
+                    onClick = { showElevenLabsDialog = true },
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            Icon(
+                                Icons.Filled.GraphicEq,
+                                contentDescription = null,
+                                tint = SakuColors.VibrantMatcha,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            val voiceLabel = elevenLabsVoiceName?.takeIf { it.isNotBlank() }
+                                ?: if (elevenLabsVoiceId.isNotBlank()) "Voice: ${elevenLabsVoiceId.take(12)}..." else "ElevenLabs Voice"
+                            Text(
+                                text = "ElevenLabs: $voiceLabel",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SakuColors.TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (elevenLabsApiKey.isNotBlank()) "Key Active" else "Setup Key",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (elevenLabsApiKey.isNotBlank()) SakuColors.SagePrimary else SakuColors.AccentRose,
                                 maxLines = 1,
                                 softWrap = false
                             )
@@ -853,20 +936,100 @@ fun ReadingScreen(
                             )
                         }
 
-                        IconButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Japanese Story", "${story.title}\n\n${story.content}")
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Story copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isCurrentStoryPlaying = isNarrating && currentlyPlayingStoryId == story.id
+                            val isCurrentStorySynthesizing = isSynthesizingAudio && currentlyPlayingStoryId == story.id
+
+                            // Speaker Narration Button
+                            IconButton(
+                                onClick = {
+                                    if (isCurrentStoryPlaying) {
+                                        audioService.stopAudio()
+                                        isNarrating = false
+                                        currentlyPlayingStoryId = null
+                                    } else {
+                                        if (elevenLabsApiKey.isBlank()) {
+                                            showElevenLabsDialog = true
+                                            Toast.makeText(context, "Please configure your ElevenLabs API key", Toast.LENGTH_SHORT).show()
+                                            return@IconButton
+                                        }
+
+                                        audioService.stopAudio()
+                                        isNarrating = false
+                                        isSynthesizingAudio = true
+                                        currentlyPlayingStoryId = story.id
+
+                                        coroutineScope.launch {
+                                            val narrationText = "${story.title}。\n\n${story.content}"
+                                            val result = audioService.synthesizeStoryAudio(
+                                                apiKey = elevenLabsApiKey,
+                                                voiceId = elevenLabsVoiceId,
+                                                storyId = story.id,
+                                                text = narrationText
+                                            )
+                                            isSynthesizingAudio = false
+                                            result.onSuccess { audioFile ->
+                                                isNarrating = true
+                                                audioService.playAudio(
+                                                    file = audioFile,
+                                                    onPlaybackStateChanged = { playing ->
+                                                        isNarrating = playing
+                                                        if (!playing && currentlyPlayingStoryId == story.id) {
+                                                            currentlyPlayingStoryId = null
+                                                        }
+                                                    },
+                                                    onCompletion = {
+                                                        isNarrating = false
+                                                        currentlyPlayingStoryId = null
+                                                    }
+                                                )
+                                            }.onFailure { error ->
+                                                isNarrating = false
+                                                currentlyPlayingStoryId = null
+                                                Toast.makeText(context, "Narration error: ${error.message ?: "Failed to generate audio"}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
+                                }
+                            ) {
+                                if (isCurrentStorySynthesizing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = Color(0xFF6C6453)
+                                    )
+                                } else if (isCurrentStoryPlaying) {
+                                    Icon(
+                                        Icons.Filled.Stop,
+                                        contentDescription = "Stop Narration",
+                                        tint = SakuColors.AccentRose,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.VolumeUp,
+                                        contentDescription = "Narrate Story",
+                                        tint = Color(0xFF6C6453),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
-                        ) {
-                            Icon(
-                                Icons.Filled.ContentCopy,
-                                contentDescription = "Copy Story",
-                                tint = Color(0xFF6C6453),
-                                modifier = Modifier.size(20.dp)
-                            )
+
+                            IconButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = ClipData.newPlainText("Japanese Story", "${story.title}\n\n${story.content}")
+                                    clipboard.setPrimaryClip(clip)
+                                    Toast.makeText(context, "Story copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Filled.ContentCopy,
+                                    contentDescription = "Copy Story",
+                                    tint = Color(0xFF6C6453),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
 
@@ -1264,7 +1427,7 @@ fun ReadingScreen(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(400.dp),
+                            .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(savedStories, key = { it.id }) { item ->
@@ -1399,6 +1562,26 @@ fun ReadingScreen(
                 Toast.makeText(context, "Gemini model set to $newModel", Toast.LENGTH_SHORT).show()
             },
             onDismiss = { showModelDialog = false }
+        )
+    }
+
+    // ElevenLabs Voice & API Key Dialog
+    if (showElevenLabsDialog) {
+        ElevenLabsDialog(
+            currentApiKey = elevenLabsApiKey,
+            currentVoiceId = elevenLabsVoiceId,
+            currentVoiceName = elevenLabsVoiceName,
+            onSave = { newKey, newVoiceId, newVoiceName ->
+                elevenLabsApiKey = newKey
+                prefs.elevenLabsApiKey = newKey
+                elevenLabsVoiceId = newVoiceId
+                prefs.elevenLabsVoiceId = newVoiceId
+                elevenLabsVoiceName = newVoiceName
+                prefs.elevenLabsVoiceName = newVoiceName
+                showElevenLabsDialog = false
+                Toast.makeText(context, "ElevenLabs configuration saved!", Toast.LENGTH_SHORT).show()
+            },
+            onDismiss = { showElevenLabsDialog = false }
         )
     }
 

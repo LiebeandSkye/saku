@@ -84,6 +84,8 @@ class InterceptingClipboardManager(
     private val delegate: ClipboardManager
 ) : ClipboardManager {
     var capturedText: String = ""
+    /** When true, setText only captures in-memory without touching the system clipboard. */
+    var captureOnly: Boolean = false
 
     override fun getText(): AnnotatedString? {
         return delegate.getText()
@@ -91,7 +93,9 @@ class InterceptingClipboardManager(
 
     override fun setText(annotatedString: AnnotatedString) {
         capturedText = annotatedString.text
-        delegate.setText(annotatedString)
+        if (!captureOnly) {
+            delegate.setText(annotatedString)
+        }
     }
 
     override fun hasText(): Boolean {
@@ -175,7 +179,9 @@ fun CustomSelectionContainer(
                         },
                         onTranslate = {
                             interceptingClipboard.capturedText = ""
+                            interceptingClipboard.captureOnly = true
                             onCopyAction?.invoke()
+                            interceptingClipboard.captureOnly = false
                             val selected = interceptingClipboard.capturedText.ifBlank {
                                 systemClipboard.getText()?.text ?: ""
                             }

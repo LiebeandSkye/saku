@@ -11,12 +11,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
@@ -121,14 +125,18 @@ fun TranslationBottomSheet(
         containerColor = SakuColors.Surface,
         contentColor = SakuColors.TextPrimary
     ) {
+        // Outer column: fixed header, scrollable middle, fixed bottom button
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 14.dp)
+                .fillMaxHeight(0.85f)
+                .padding(horizontal = 24.dp)
         ) {
-            // Header: Translation Badge + Close Button
+            // ── Fixed Header: Translation Badge + Close Button ──
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 14.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -167,160 +175,167 @@ fun TranslationBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Main Japanese Text Row (Word / Phrase + Audio + Copy)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            // ── Scrollable Middle Content ──
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(vertical = 8.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = sourceText,
-                        fontSize = if (sourceText.length > 20) 22.sp else 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SakuColors.TextPrimary,
-                        lineHeight = if (sourceText.length > 20) 30.sp else 36.sp
-                    )
-
-                    val romaji = result?.romaji ?: ""
-                    if (romaji.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                // Japanese Source Text + Audio + Copy
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = romaji,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = SakuColors.SagePrimary
-                        )
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { ttsHelper.speak(sourceText) },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                            contentDescription = "Pronounce",
-                            tint = SakuColors.TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            clipboardManager.setText(AnnotatedString(sourceText))
-                            Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy text",
-                            tint = SakuColors.TextSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Translation Content Card
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = SakuColors.SurfaceElevated,
-                border = BorderStroke(1.dp, SakuColors.Border),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "ENGLISH TRANSLATION",
-                            fontSize = 11.sp,
+                            text = sourceText,
+                            fontSize = if (sourceText.length > 20) 22.sp else 28.sp,
                             fontWeight = FontWeight.Bold,
-                            color = SakuColors.TextTertiary,
-                            letterSpacing = 0.8.sp
+                            color = SakuColors.TextPrimary,
+                            lineHeight = if (sourceText.length > 20) 30.sp else 36.sp
                         )
 
-                        if (!isLoading && result != null && result!!.translatedText.isNotBlank()) {
-                            IconButton(
-                                onClick = {
-                                    clipboardManager.setText(AnnotatedString(result!!.translatedText))
-                                    Toast.makeText(context, "Translation copied", Toast.LENGTH_SHORT).show()
-                                },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy Translation",
-                                    tint = SakuColors.TextTertiary,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    if (isLoading) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 12.dp)
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
+                        val romaji = result?.romaji ?: ""
+                        if (romaji.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = romaji,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
                                 color = SakuColors.SagePrimary
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Translating...",
-                                fontSize = 14.sp,
-                                color = SakuColors.TextSecondary
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { ttsHelper.speak(sourceText) },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                contentDescription = "Pronounce",
+                                tint = SakuColors.TextSecondary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                    } else if (errorMsg != null) {
-                        Column {
-                            Text(
-                                text = errorMsg ?: "Translation failed",
-                                fontSize = 14.sp,
-                                color = SakuColors.AccentAmber
+                        IconButton(
+                            onClick = {
+                                clipboardManager.setText(AnnotatedString(sourceText))
+                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = "Copy text",
+                                tint = SakuColors.TextSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = { doTranslate() },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = SakuColors.SagePrimary)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Retry")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Translation Content Card
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = SakuColors.SurfaceElevated,
+                    border = BorderStroke(1.dp, SakuColors.Border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "ENGLISH TRANSLATION",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SakuColors.TextTertiary,
+                                letterSpacing = 0.8.sp
+                            )
+
+                            if (!isLoading && result != null && result!!.translatedText.isNotBlank()) {
+                                IconButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(result!!.translatedText))
+                                        Toast.makeText(context, "Translation copied", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copy Translation",
+                                        tint = SakuColors.TextTertiary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
                             }
                         }
-                    } else {
-                        Text(
-                            text = result?.translatedText ?: "No translation available",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Normal,
-                            color = SakuColors.TextPrimary,
-                            lineHeight = 24.sp
-                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        if (isLoading) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 12.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = SakuColors.SagePrimary
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = "Translating...",
+                                    fontSize = 14.sp,
+                                    color = SakuColors.TextSecondary
+                                )
+                            }
+                        } else if (errorMsg != null) {
+                            Column {
+                                Text(
+                                    text = errorMsg ?: "Translation failed",
+                                    fontSize = 14.sp,
+                                    color = SakuColors.AccentAmber
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedButton(
+                                    onClick = { doTranslate() },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SakuColors.SagePrimary)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Retry")
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = result?.translatedText ?: "No translation available",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Normal,
+                                color = SakuColors.TextPrimary,
+                                lineHeight = 24.sp
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            // ── Fixed Bottom: "Look up in Jisho" Button ──
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Buttons: "Look up in Jisho"
             Button(
                 onClick = {
                     scope.launch {

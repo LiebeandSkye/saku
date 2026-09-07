@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
@@ -123,6 +124,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -460,11 +462,53 @@ class MainActivity : ComponentActivity() {
         onThemeChanged: (AppTheme) -> Unit
     ) {
         var isRefreshing by remember { mutableStateOf(false) }
-        var currentTab by remember { mutableIntStateOf(0) }
+        val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
         var jishoTargetQuery by remember { mutableStateOf("") }
         var openHistoryTrigger by remember { mutableIntStateOf(0) }
         var isDockVisible by remember { mutableStateOf(true) }
         val coroutineScope = rememberCoroutineScope()
+        val context = LocalContext.current
+
+        // Tab history stack to retrace tab navigation
+        val tabHistory = remember { mutableStateListOf<Int>() }
+        var previousSettledPage by remember { mutableIntStateOf(0) }
+        var isNavigatingBack by remember { mutableStateOf(false) }
+        var lastBackPressTime by remember { mutableLongStateOf(0L) }
+
+        // Keep tab navigation history updated
+        LaunchedEffect(pagerState.settledPage) {
+            val current = pagerState.settledPage
+            isDockVisible = true
+            if (!isNavigatingBack && current != previousSettledPage) {
+                if (tabHistory.isNotEmpty() && tabHistory.last() == current) {
+                    tabHistory.removeAt(tabHistory.lastIndex)
+                } else {
+                    tabHistory.removeAll { it == current }
+                    tabHistory.add(previousSettledPage)
+                }
+            }
+            previousSettledPage = current
+            isNavigatingBack = false
+        }
+
+        // Handle Android return / back button
+        BackHandler {
+            if (tabHistory.isNotEmpty()) {
+                val targetPage = tabHistory.removeAt(tabHistory.lastIndex)
+                isNavigatingBack = true
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(targetPage)
+                }
+            } else {
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastBackPressTime < 2000L) {
+                    (context as? ComponentActivity)?.finish()
+                } else {
+                    lastBackPressTime = currentTime
+                    Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
 
         val nestedScrollConnection = remember {
             object : NestedScrollConnection {
@@ -485,30 +529,38 @@ class MainActivity : ComponentActivity() {
                 .background(SakuColors.Background)
                 .nestedScroll(nestedScrollConnection)
         ) {
-            // Backdrop anchored at top for the Reading tab
-            if (currentTab == 1) {
-                val readingBgPath = readingBackgroundImageUriState
-                val readingCustomBitmap = remember(readingBgPath) {
-                    if (!readingBgPath.isNullOrBlank()) {
-                        try {
-                            val file = File(readingBgPath)
-                            if (file.exists()) {
-                                BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
-                            } else null
-                        } catch (e: Exception) {
-                            null
-                        }
-                    } else null
-                }
+            // Backdrop anchored at top for the Reading tab (page 1), sliding smoothly with tab swipe
+            val readingBgPath = readingBackgroundImageUriState
+            val readingCustomBitmap = remember(readingBgPath) {
+                if (!readingBgPath.isNullOrBlank()) {
+                    try {
+                        val file = File(readingBgPath)
+                        if (file.exists()) {
+                            BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+                        } else null
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else null
+            }
 
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(390.dp)
+                    .graphicsLayer {
+                        val pageOffset = (pagerState.currentPage - 1) + pagerState.currentPageOffsetFraction
+                        translationX = -pageOffset * size.width
+                        alpha = if (pageOffset.absoluteValue > 1.05f) 0f else 1f
+                    }
+            ) {
                 if (readingCustomBitmap != null) {
                     Image(
                         bitmap = readingCustomBitmap,
                         contentDescription = "Reading backdrop",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(390.dp)
+                            .fillMaxSize()
                             .graphicsLayer { alpha = 0.42f }
                     )
                 } else {
@@ -517,15 +569,13 @@ class MainActivity : ComponentActivity() {
                         contentDescription = "Reading backdrop",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(390.dp)
+                            .fillMaxSize()
                             .graphicsLayer { alpha = 0.42f }
                     )
                 }
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(390.dp)
+                        .fillMaxSize()
                         .background(
                             Brush.verticalGradient(
                                 0.0f to Color.Transparent,
@@ -562,7 +612,9 @@ class MainActivity : ComponentActivity() {
                         actions = {
                             // History (Book Icon) button: switches to Reading tab and opens reading history
                             IconButton(onClick = {
-                                currentTab = 1
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(1)
+                                }
                                 openHistoryTrigger++
                             }) {
                                 Icon(
@@ -597,46 +649,19 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = if (currentTab == 1) Color.Transparent else SakuColors.Background,
+                            containerColor = Color.Transparent,
                             titleContentColor = SakuColors.TextPrimary,
                             actionIconContentColor = SakuColors.TextSecondary
                         )
                     )
                 }
             ) { padding ->
-                AnimatedContent(
-                    targetState = currentTab,
-                    transitionSpec = {
-                        val direction = if (targetState > initialState) 1 else -1
-                        (slideInHorizontally(
-                            initialOffsetX = { fullWidth -> direction * (fullWidth * 0.45f).toInt() },
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            )
-                        ) + scaleIn(
-                            initialScale = 0.90f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            )
-                        ) + fadeIn(
-                            animationSpec = tween(160, easing = FastOutSlowInEasing)
-                        )).togetherWith(
-                            slideOutHorizontally(
-                                targetOffsetX = { fullWidth -> -direction * (fullWidth * 0.28f).toInt() },
-                                animationSpec = tween(140, easing = FastOutSlowInEasing)
-                            ) + scaleOut(
-                                targetScale = 0.95f,
-                                animationSpec = tween(140)
-                            ) + fadeOut(
-                                animationSpec = tween(110)
-                            )
-                        )
-                    },
-                    label = "ScreenSwitchBubbly"
-                ) { tab ->
-                    when (tab) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1
+                ) { page ->
+                    when (page) {
                         0 -> ModernSettingsScreen(padding, currentAppTheme, onThemeChanged)
                         1 -> ReadingScreen(
                             padding = padding,
@@ -646,7 +671,9 @@ class MainActivity : ComponentActivity() {
                             onHistoryTriggerConsumed = { openHistoryTrigger = 0 },
                             onNavigateToJisho = { word ->
                                 jishoTargetQuery = word
-                                currentTab = 2
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(2)
+                                }
                             }
                         )
                         else -> JishoScreen(
@@ -683,12 +710,14 @@ class MainActivity : ComponentActivity() {
                     .padding(bottom = 12.dp)
             ) {
                 ModernLiquidDock(
-                    currentTab = currentTab,
+                    currentTab = pagerState.currentPage,
                     onTabSelected = { newTab ->
                         if (newTab == 2) {
                             jishoTargetQuery = ""
                         }
-                        currentTab = newTab
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(newTab)
+                        }
                     }
                 )
             }

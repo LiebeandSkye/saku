@@ -97,6 +97,21 @@ class PreferencesManager(
         get() = prefs.getString(KEY_READING_BACKGROUND_IMAGE_URI, null)?.takeIf { it.isNotBlank() }
         set(value) = prefs.edit().putString(KEY_READING_BACKGROUND_IMAGE_URI, value?.trim()).apply()
 
+    var elevenLabsApiKey: String?
+        get() = prefs.getString(KEY_ELEVENLABS_API_KEY, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_ELEVENLABS_API_KEY, value?.trim()).apply()
+
+    var elevenLabsVoiceId: String
+        get() {
+            val saved = prefs.getString(KEY_ELEVENLABS_VOICE_ID, null)
+            return if (saved.isNullOrBlank()) DEFAULT_ELEVENLABS_VOICE_ID else extractVoiceId(saved)
+        }
+        set(value) = prefs.edit().putString(KEY_ELEVENLABS_VOICE_ID, extractVoiceId(value).trim()).apply()
+
+    var elevenLabsVoiceName: String?
+        get() = prefs.getString(KEY_ELEVENLABS_VOICE_NAME, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_ELEVENLABS_VOICE_NAME, value?.trim()).apply()
+
     var appTheme: String
         get() = prefs.getString(KEY_APP_THEME, "dim") ?: "dim"
         set(value) = prefs.edit().putString(KEY_APP_THEME, value).apply()
@@ -169,6 +184,33 @@ class PreferencesManager(
         private const val KEY_GEMINI_MODEL = "gemini_model"
         private const val KEY_INTERNET_DISCLOSURE = "internet_disclosure_accepted"
         private const val KEY_HIGHLIGHT_VOCABULARY_WORDS = "highlight_vocabulary_words"
+        const val DEFAULT_ELEVENLABS_VOICE_ID = "JTlYtJrcTzPC71hMLOxo"
+        const val DEFAULT_ELEVENLABS_VOICE_URL = "https://elevenlabs.io/voices/JTlYtJrcTzPC71hMLOxo"
+        const val DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2"
+
+        fun extractVoiceId(input: String): String {
+            val trimmed = input.trim()
+            if (trimmed.isBlank()) return DEFAULT_ELEVENLABS_VOICE_ID
+            // Match pattern like /voices/{voice_id}
+            val voicePattern = Regex("""/voices/([a-zA-Z0-9_-]+)""")
+            val match = voicePattern.find(trimmed)
+            if (match != null) {
+                return match.groupValues[1]
+            }
+            // If full URL, take last segment without query/fragment
+            if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                val cleanUrl = trimmed.substringBefore('?').substringBefore('#').trimEnd('/')
+                val lastSegment = cleanUrl.substringAfterLast('/')
+                if (lastSegment.isNotBlank()) {
+                    return lastSegment
+                }
+            }
+            return trimmed
+        }
+
+        private const val KEY_ELEVENLABS_API_KEY = "elevenlabs_api_key"
+        private const val KEY_ELEVENLABS_VOICE_ID = "elevenlabs_voice_id"
+        private const val KEY_ELEVENLABS_VOICE_NAME = "elevenlabs_voice_name"
         private const val KEY_LAST_READ_STORY_ID = "last_read_story_id"
         private const val KEY_READING_BACKGROUND_IMAGE_URI = "reading_background_image_uri"
         private const val KEY_APP_THEME = "app_theme"

@@ -2,10 +2,11 @@ package com.saku.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.saku.reading.ElevenLabsAudioService
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ReadingHistoryManager(context: Context) {
+class ReadingHistoryManager(private val context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(
         PREFS_NAME,
@@ -80,10 +81,12 @@ class ReadingHistoryManager(context: Context) {
     fun deleteStory(id: String) {
         val updated = getStories().filterNot { it.id == id }
         saveList(updated)
+        ElevenLabsAudioService.deleteAudioForStory(context, id)
     }
 
     fun clearAll() {
         prefs.edit().remove(KEY_STORIES).apply()
+        ElevenLabsAudioService.clearAllAudio(context)
     }
 
     private fun saveList(list: List<GeneratedStory>) {

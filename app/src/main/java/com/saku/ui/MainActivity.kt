@@ -439,13 +439,7 @@ class MainActivity : ComponentActivity() {
 
     private fun syncCardSession(card: CardInfo?) {
         if (card == null) return
-        try {
-            val field = CardSessionManager::class.java.getDeclaredField("currentCard")
-            field.isAccessible = true
-            field.set(null, card)
-        } catch (t: Throwable) {
-            t.printStackTrace()
-        }
+        CardSessionManager.setActiveCard(card, notify = false)
     }
 
     private fun requestInitialPermissions() {
@@ -935,12 +929,13 @@ class MainActivity : ComponentActivity() {
         }
 
         val deckCardsCache = remember { mutableStateMapOf<Long, CardInfo?>() }
+        val revealedDeckMap = remember { mutableStateMapOf<Long, Boolean>() }
         var currentCenteredDeckId by remember { mutableStateOf(selectedDecksList.firstOrNull()?.id ?: -1L) }
 
         LaunchedEffect(selectedDecksList) {
             withContext(Dispatchers.IO) {
                 for (deck in selectedDecksList) {
-                    if (deck.id > 0 && !deckCardsCache.containsKey(deck.id)) {
+                    if (deck.id > 0) {
                         val card = ankiHelper.getNextDueCard(setOf(deck.id))
                         withContext(Dispatchers.Main) {
                             deckCardsCache[deck.id] = card
@@ -1124,7 +1119,7 @@ class MainActivity : ComponentActivity() {
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "Shooting Stars Background",
+                                        text = "Shooting Stars",
                                         fontWeight = FontWeight.SemiBold,
                                         fontSize = 13.sp,
                                         color = SakuColors.TextPrimary
@@ -1146,7 +1141,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Ambient starfield with shooting stars on Cards tab",
+                                    text = "",
                                     fontSize = 11.sp,
                                     color = SakuColors.TextSecondary
                                 )
@@ -1175,12 +1170,21 @@ class MainActivity : ComponentActivity() {
                 decks = selectedDecksList,
                 activeCard = activeCard,
                 stats = stats,
-                isRevealed = isRevealed,
+                revealedDeckMap = revealedDeckMap,
                 deckCardsCache = deckCardsCache,
-                onToggleReveal = { CardSessionManager.toggleReveal(this@MainActivity) },
+                onToggleReveal = { deckId ->
+                    val currentRevealed = revealedDeckMap[deckId] ?: false
+                    revealedDeckMap[deckId] = !currentRevealed
+                    if (!currentRevealed) {
+                        CardSessionManager.reveal(this@MainActivity)
+                    } else {
+                        CardSessionManager.hide(this@MainActivity)
+                    }
+                },
                 onRefresh = {
                     CardSessionManager.refresh(this@MainActivity)
                     deckCardsCache.clear()
+                    revealedDeckMap.clear()
                     coroutineScope.launch(Dispatchers.IO) {
                         for (deck in selectedDecksList) {
                             if (deck.id > 0) {
@@ -1192,49 +1196,46 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 },
-                onAgain = {
-                    val deckId = currentCenteredDeckId
-                    val oldCard = deckCardsCache[deckId] ?: activeCard
-                    if (oldCard != null && deckId > 0) {
-                        syncCardSession(oldCard)
-                        CardSessionManager.gradeCard(this@MainActivity, 1) {
-                            Thread {
-                                val nextCard = ankiHelper.getNextDueCard(setOf(deckId), excludeNoteId = oldCard.noteId)
-                                runOnUiThread {
-                                    deckCardsCache[deckId] = nextCard
-                                    if (nextCard != null) {
-                                        syncCardSession(nextCard)
-                                    }
-                                }
-                            }.start()
+                onAgain = { deckId, oldCard ->
+                    syncCardSession(oldCard)
+                    revealedDeckMap[deckId] = false
+                    CardSessionManager.gradeCard(
+                        this@MainActivity,
+                        ease = 1,
+                        specificCard = oldCard,
+                        targetDeckId = deckId
+                    ) { nextCard ->
+                        runOnUiThread {
+                            deckCardsCache[deckId] = nextCard
+                            if (nextCard != null) {
+                                syncCardSession(nextCard)
+                            }
                         }
                     }
                 },
-                onGood = {
-                    val deckId = currentCenteredDeckId
-                    val oldCard = deckCardsCache[deckId] ?: activeCard
-                    if (oldCard != null && deckId > 0) {
-                        syncCardSession(oldCard)
-                        CardSessionManager.gradeCard(this@MainActivity, 3) {
-                            Thread {
-                                val nextCard = ankiHelper.getNextDueCard(setOf(deckId), excludeNoteId = oldCard.noteId)
-                                runOnUiThread {
-                                    deckCardsCache[deckId] = nextCard
-                                    if (nextCard != null) {
-                                        syncCardSession(nextCard)
-                                    }
-                                }
-                            }.start()
+                onGood = { deckId, oldCard ->
+                    syncCardSession(oldCard)
+                    revealedDeckMap[deckId] = false
+                    CardSessionManager.gradeCard(
+                        this@MainActivity,
+                        ease = 3,
+                        specificCard = oldCard,
+                        targetDeckId = deckId
+                    ) { nextCard ->
+                        runOnUiThread {
+                            deckCardsCache[deckId] = nextCard
+                            if (nextCard != null) {
+                                syncCardSession(nextCard)
+                            }
                         }
                     }
                 },
-                onOpenAnki = {
-                    val launchIntent = ankiHelper.getAnkiLaunchIntent()
+                onOpenAnki = { deckId ->
+                    val launchIntent = ankiHelper.getAnkiLaunchIntent(deckId)
                     startActivity(launchIntent)
                 },
                 onDeckChanged = { deckId ->
                     currentCenteredDeckId = deckId
-                    CardSessionManager.hide(this@MainActivity)
                     if (deckId > 0) {
                         if (!deckCardsCache.containsKey(deckId)) {
                             coroutineScope.launch(Dispatchers.IO) {
@@ -1321,10 +1322,23 @@ class MainActivity : ComponentActivity() {
             // 6. Deck Selection Card
             if (decksState.isNotEmpty()) {
                 ModernDeckSelectorCard(decksState, selectedDeckIds) { deckId, checked ->
+                    val dIdLong = deckId.toLongOrNull()
                     if (checked) {
                         selectedDeckIds.add(deckId)
+                        if (dIdLong != null && dIdLong > 0) {
+                            coroutineScope.launch(Dispatchers.IO) {
+                                val card = ankiHelper.getNextDueCard(setOf(dIdLong))
+                                withContext(Dispatchers.Main) {
+                                    deckCardsCache[dIdLong] = card
+                                }
+                            }
+                        }
                     } else {
                         selectedDeckIds.remove(deckId)
+                        if (dIdLong != null) {
+                            deckCardsCache.remove(dIdLong)
+                            revealedDeckMap.remove(dIdLong)
+                        }
                     }
                     prefs.selectedDeckIds = selectedDeckIds.toSet()
                     CardSessionManager.refresh(this@MainActivity)
@@ -1412,13 +1426,13 @@ class MainActivity : ComponentActivity() {
         decks: List<DeckInfo>,
         activeCard: CardInfo?,
         stats: Triple<Int, Int, Int>,
-        isRevealed: Boolean,
+        revealedDeckMap: SnapshotStateMap<Long, Boolean>,
         deckCardsCache: SnapshotStateMap<Long, CardInfo?>,
-        onToggleReveal: () -> Unit,
+        onToggleReveal: (Long) -> Unit,
         onRefresh: () -> Unit,
-        onAgain: () -> Unit,
-        onGood: () -> Unit,
-        onOpenAnki: () -> Unit,
+        onAgain: (Long, CardInfo) -> Unit,
+        onGood: (Long, CardInfo) -> Unit,
+        onOpenAnki: (Long?) -> Unit,
         onDeckChanged: (Long) -> Unit
     ) {
         val actualPageCount = decks.size.coerceAtLeast(1)
@@ -1431,12 +1445,16 @@ class MainActivity : ComponentActivity() {
 
         val decksKey = remember(decks) { decks.map { it.id } }
         LaunchedEffect(decksKey) {
-            if (pagerState.currentPage >= virtualPageCount) {
-                pagerState.scrollToPage(initialPage)
+            if (decks.isNotEmpty()) {
+                val targetPage = (virtualPageCount / 2) - ((virtualPageCount / 2) % actualPageCount)
+                try {
+                    pagerState.scrollToPage(targetPage)
+                } catch (e: Exception) {
+                }
             }
         }
 
-        LaunchedEffect(pagerState) {
+        LaunchedEffect(pagerState, decksKey) {
             snapshotFlow { pagerState.currentPage }
                 .collect { page ->
                     val actualIndex = page % actualPageCount
@@ -1452,6 +1470,19 @@ class MainActivity : ComponentActivity() {
         val centerCard = if (currentCenterDeck != null) {
             deckCardsCache[currentCenterDeck.id] ?: if (currentCenterIndex == 0) activeCard else null
         } else null
+        val isCenterRevealed = currentCenterDeck?.let { revealedDeckMap[it.id] } ?: false
+
+        LaunchedEffect(currentCenterDeck?.id) {
+            val dId = currentCenterDeck?.id ?: return@LaunchedEffect
+            if (dId > 0 && !deckCardsCache.containsKey(dId)) {
+                withContext(Dispatchers.IO) {
+                    val card = ankiHelper.getNextDueCard(setOf(dId))
+                    withContext(Dispatchers.Main) {
+                        deckCardsCache[dId] = card
+                    }
+                }
+            }
+        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1534,6 +1565,7 @@ class MainActivity : ComponentActivity() {
                         val deck = decks[actualIndex]
                         val cardForDeck = deckCardsCache[deck.id] ?: if (actualIndex == 0) activeCard else null
                         val isCenterPage = pagerState.currentPage == page
+                        val isDeckRevealed = (revealedDeckMap[deck.id] == true) && isCenterPage
 
                         val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
                         val scale = lerp(0.85f, 1f, 1f - pageOffset.coerceIn(0f, 1f))
@@ -1543,7 +1575,7 @@ class MainActivity : ComponentActivity() {
                             deckName = deck.name,
                             deckId = deck.id,
                             card = cardForDeck,
-                            isRevealed = isRevealed && isCenterPage,
+                            isRevealed = isDeckRevealed,
                             modifier = Modifier
                                 .graphicsLayer {
                                     scaleX = scale
@@ -1555,7 +1587,7 @@ class MainActivity : ComponentActivity() {
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
                                 ) {
-                                    onToggleReveal()
+                                    onToggleReveal(deck.id)
                                 }
                         )
                     }
@@ -1571,7 +1603,11 @@ class MainActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = onAgain,
+                        onClick = {
+                            if (currentCenterDeck != null && centerCard != null) {
+                                onAgain(currentCenterDeck.id, centerCard)
+                            }
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .height(40.dp),
@@ -1588,7 +1624,11 @@ class MainActivity : ComponentActivity() {
                         Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                     Button(
-                        onClick = onToggleReveal,
+                        onClick = {
+                            if (currentCenterDeck != null) {
+                                onToggleReveal(currentCenterDeck.id)
+                            }
+                        },
                         modifier = Modifier
                             .weight(1.2f)
                             .height(40.dp),
@@ -1603,7 +1643,7 @@ class MainActivity : ComponentActivity() {
                         enabled = centerCard != null
                     ) {
                         Text(
-                            if (isRevealed) "Hide" else "Reveal",
+                            if (isCenterRevealed) "Hide" else "Reveal",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
@@ -1611,7 +1651,11 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     Button(
-                        onClick = onGood,
+                        onClick = {
+                            if (currentCenterDeck != null && centerCard != null) {
+                                onGood(currentCenterDeck.id, centerCard)
+                            }
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .height(40.dp),
@@ -1628,7 +1672,9 @@ class MainActivity : ComponentActivity() {
                         Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                     OutlinedButton(
-                        onClick = onOpenAnki,
+                        onClick = {
+                            onOpenAnki(currentCenterDeck?.id)
+                        },
                         modifier = Modifier
                             .weight(0.9f)
                             .height(40.dp),

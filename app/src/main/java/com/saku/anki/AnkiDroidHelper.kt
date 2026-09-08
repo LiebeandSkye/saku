@@ -120,13 +120,30 @@ class AnkiDroidHelper(private val context: Context) {
         return decks
     }
 
-    fun getAnkiLaunchIntent(): Intent {
+    fun getAnkiLaunchIntent(deckId: Long? = null): Intent {
         val pkg = getInstalledPackage()
+        if (deckId != null && deckId > 0) {
+            val reviewerIntent = Intent(Intent.ACTION_VIEW).apply {
+                setClassName(pkg, "com.ichi2.anki.Reviewer")
+                putExtra("deckId", deckId)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            }
+            if (reviewerIntent.resolveActivity(context.packageManager) != null) {
+                return reviewerIntent
+            }
+        }
+
         return context.packageManager.getLaunchIntentForPackage(pkg)?.apply {
+            if (deckId != null && deckId > 0) {
+                putExtra("deckId", deckId)
+            }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         } ?: Intent(Intent.ACTION_MAIN).apply {
             setPackage(pkg)
             addCategory(Intent.CATEGORY_LAUNCHER)
+            if (deckId != null && deckId > 0) {
+                putExtra("deckId", deckId)
+            }
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         }
     }

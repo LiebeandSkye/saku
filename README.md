@@ -4,7 +4,8 @@
 ### Minimal Spaced Repetition Japanese Flashcard Widget for Android
 
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?style=flat&logo=android&logoColor=white)](https://android.com)
-[![Latest Release](https://img.shields.io/github/v/release/LiebeandSkye/saku?style=flat&color=FF69B4&logo=github)](https://github.com/LiebeandSkye/saku/releases)
+[![Latest Release](https://img.shields.io/badge/Release-v2.5.0-FF69B4?style=flat&logo=github)](https://github.com/LiebeandSkye/saku/releases/tag/v2.5.0)
+[![APK Size](https://img.shields.io/badge/APK%20Size-~20%20MB-52C47C?style=flat&logo=android)](https://github.com/LiebeandSkye/saku/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%20%26%20Glance-4285F4?style=flat&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Anki Integration](https://img.shields.io/badge/Anki-AnkiDroid%20API%20(FSRS%20%26%20SM--2)-0080FF?style=flat&logo=anki&logoColor=white)](https://github.com/ankidroid/Anki-Android)
@@ -32,23 +33,35 @@
 
 * **🔒 Zero Login / 100% On-Device & Private**: No usernames, passwords, or cloud relay servers. Uses Android's native inter-process `ContentProvider` API (`com.ichi2.anki.api`) with a **1-tap permission prompt**.
 * **🧠 Preserves Your Algorithm (FSRS & SM-2)**: Reviews made on the widget are submitted directly into AnkiDroid. Your intervals, stability, retention factors, and AnkiWeb cloud sync stay 100% accurate and intact.
-* **📱 Lock Screen & Always-On Display (AOD)**: Optimized for **OxygenOS (OnePlus)** and modern Android devices. Pinned high-contrast card right under the lock screen clock without needing to unlock your phone.
+* **📱 Lock Screen & Always-On Display (AOD)**: Optimized for **OxygenOS (OnePlus)**, Samsung OneUI, Google Pixel, and modern Android devices. Pinned high-contrast card right under the lock screen clock without needing to unlock your phone.
 * **⚡ Interactive Home Screen Widget**: Built with **Jetpack Glance** (Compose for AppWidgets). Flip cards, advance cards, or submit ratings (*Again*, *Hard*, *Good*, *Easy*) directly from your home screen.
 * **📖 AI Reading Generator (Gemini Flash)**: Generates customized Japanese graded reading passages tailored directly from your due or studied Anki vocabulary, with instant vocabulary tapping, furigana toggle, English translation, and reading history.
-* **🔋 Ultra Lightweight & Offline**:
-  * APK size: **~6 MB**
+* **🗣️ Natural Japanese Voice Synthesis (Fish Audio & System TTS)**: High-fidelity neural voice playback for reading stories and vocabulary words powered by Fish Audio, alongside reliable on-device Android Text-to-Speech fallback.
+* **📚 Offline Jisho Dictionary & Quick Translation**: Tap-to-define lookup for Kanji and vocabulary, JLPT levels, definitions, readings, and a slide-up translation sheet with custom text selection toolbar.
+* **✨ Liquid Glass Aesthetic & Interactive Effects**: Modern glassmorphic theme styling, custom wallpaper backgrounds, multi-theme support (Dark, Dim, Light, OLED), and ambient shooting stars effects.
+* **🔋 Ultra Lightweight & Offline Capable**:
+  * APK size: **~20 MB** (fully bundled with offline Jisho dictionary lookup & rich vector assets)
   * Memory: **< 25 MB RAM** (drops to 0 when idle)
   * Battery: **< 0.1% / day** (zero background polling loops)
-  * **100% Offline**: Works in airplane mode or subway with zero internet required.
+  * **100% Offline Capable**: Core flashcards, widget reviews, and dictionary lookups work anywhere with zero internet required.
+
+---
+
+## ✨ What's New in v2.5.0
+
+* **🔗 Flexible Studied Words Toggle in AI Reader**: Switch between restricting reading passages to your studied Anki flashcard vocabulary or generating unconstrained, creative Japanese graded stories for your target JLPT level.
+* **🎯 Deck-Targeted Anki Launch**: Opening AnkiDroid from deck cards or the reviewer opens directly into the targeted deck.
+* **🌐 Refreshed Web Showcase Portal**: Cleaned up and redesigned modern landing portal with responsive light/dark themes and direct APK download.
+* **⚡ Review Session Improvements**: Enhanced card session management for smoother card rating and deck transitions.
 
 ---
 
 ## 📥 Download & Install
 
-### Option 1: Download Pre-built APK (Direct Download)
-1. Go to the [**Releases**](https://github.com/LiebeandSkye/saku/releases) page.
-2. Download **`Saku.apk`** directly onto your phone.
-3. Tap the downloaded file and select **Install** *(if prompted by Google Play Protect, tap "More details" $\rightarrow$ "Install anyway")*.
+### Option 1: Official Showcase Website & Direct APK
+* Visit the dedicated [**Saku Web Portal**](website/) (or run `npm run dev` in `website/`) to preview features and download the APK directly.
+* Download **`Saku.apk`** (~20 MB) directly from the repository or from the [**GitHub Releases (v2.5.0)**](https://github.com/LiebeandSkye/saku/releases) page.
+* Tap the downloaded file and select **Install** *(if prompted by Google Play Protect, tap "More details" $\rightarrow$ "Install anyway")*.
 
 ### Option 2: 5-Second First-Time Setup
 1. Open **Saku** on your phone.
@@ -66,12 +79,14 @@ graph TD
     subgraph UI_Surfaces["Android UI Surfaces"]
         HS["Home Screen Widget (Jetpack Glance)"]
         LS["Lock Screen & AOD Card (RemoteViews)"]
-        App["Configuration App (Jetpack Compose)"]
+        App["Configuration & Study App (Jetpack Compose)"]
     end
 
     subgraph Saku_Core["Saku App Core"]
         Engine["Card Presenter & Preferences"]
         Parser["Japanese Field & Furigana Parser"]
+        Reader["AI Graded Reader & History"]
+        Jisho["Offline Jisho Dictionary & TTS Engine"]
     end
 
     subgraph Anki_Layer["Local Anki Layer (On-Device)"]
@@ -82,6 +97,8 @@ graph TD
     HS <--> Engine
     LS <--> Engine
     App <--> Engine
+    App <--> Reader
+    App <--> Jisho
     Engine <--> Parser
     Engine <--> AnkiClient
     AnkiClient <==>|com.ichi2.anki.flashcards IPC| AnkiDroid
@@ -136,6 +153,13 @@ chmod +x gradlew
 The compiled APK will be generated at:
 `app/build/outputs/apk/debug/app-debug.apk`
 
+### 3. Run Showcase Web Portal (Optional)
+```bash
+cd website
+npm install
+npm run dev
+```
+
 ---
 
 ## 📖 Supported Anki Decks & Note Formats
@@ -154,7 +178,7 @@ Saku includes a smart Japanese field and furigana parser (`JapaneseFieldParser.k
 ## 🔐 Permissions & Privacy
 
 Saku is built with extreme privacy in mind. Your flashcard reviews remain completely on your local device:
-* `android.permission.INTERNET`: Used exclusively when the optional **AI Reading Generator** is invoked to call the Google Gemini API using your personal API key. Flashcard reviews and Anki database operations remain 100% offline.
+* `android.permission.INTERNET`: Used exclusively when optional online features are invoked (AI Reading Generator via Google Gemini Flash API, Fish Audio neural TTS, and quick translation). Flashcard reviews, widget updates, and Anki database operations remain 100% offline.
 * `com.ichi2.anki.permission.READ_WRITE_DATABASE`: Used solely to read due cards and record review answers with AnkiDroid locally on your phone.
 * `android.permission.POST_NOTIFICATIONS`: Required on Android 13+ to display the minimal card on your Lock Screen and Always-On Display.
 * `android.permission.FOREGROUND_SERVICE`: Keeps the Lock Screen card pinned cleanly without being killed by Android battery optimizations.

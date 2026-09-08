@@ -1,97 +1,71 @@
 import React, { useState } from 'react';
-import { FAQS } from '../data/faq';
 import { ChevronDown } from 'lucide-react';
 
 export const FaqSection: React.FC = () => {
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const [openId, setOpenId] = useState<string | null>('fsrs-preservation');
+  const [openId, setOpenId] = useState<number | null>(null);
 
-  const categories = ['All', 'Algorithm & Sync', 'Privacy & Security', 'Android & Lock Screen', 'Decks & Furigana'];
-
-  const filteredFaqs = selectedCategory === 'All'
-    ? FAQS
-    : FAQS.filter(f => f.category === selectedCategory);
-
-  const toggleAccordion = (id: string) => {
-    setOpenId(openId === id ? null : id);
-  };
+  const faqs = [
+    {
+      q: 'Does Saku affect my Anki scheduling or FSRS stats?',
+      a: 'No. Saku connects to AnkiDroid via the official Android API. Card reviews and grading are processed natively by AnkiDroid, preserving your exact FSRS or SM-2 parameters.',
+    },
+    {
+      q: 'Does Saku require an AnkiWeb login or internet connection?',
+      a: 'Zero login and zero internet needed. Saku reads directly from your local AnkiDroid database on your device through Android inter-process communication.',
+    },
+    {
+      q: 'How does it impact battery life?',
+      a: 'Negligible (under 0.1% daily). Saku does not run battery-draining background loops; widgets and lock screen notifications update only when your screen turns on.',
+    },
+    {
+      q: 'What Android versions and skins are supported?',
+      a: 'Saku runs on Android 8.0 and above. It has been tested and confirmed on Google Pixel, Samsung OneUI, OnePlus OxygenOS, and Xiaomi HyperOS.',
+    },
+  ];
 
   return (
-    <section id="faq" className="py-24 relative">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        {/* Section Header */}
-        <div className="text-center mb-16 space-y-3">
-          <p className="font-serif text-sm text-saku-matcha tracking-widest uppercase font-semibold">
-            Essential Questions Answered
-          </p>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Everything You Need to Know
+    <section id="faq" className="py-16 md:py-24 border-t border-slate-200 dark:border-[#2F3440]">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-10 space-y-2">
+          <h2 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-[#E8EAF0] tracking-tight">
+            Frequently Asked Questions
           </h2>
-          <p className="text-saku-text-secondary text-base">
-            Technical clarity on privacy, FSRS math stability, Android permissions, and deck compatibility.
+          <p className="text-slate-600 dark:text-[#9AA1AD] text-sm sm:text-base">
+            Essential details about privacy, scheduling, and device compatibility.
           </p>
-
-          {/* Category Filter Pills */}
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-4">
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                  selectedCategory === cat
-                    ? 'bg-saku-matcha text-[#091F11] shadow-sm'
-                    : 'bg-[#1F222A] text-saku-text-secondary hover:text-white border border-saku-border'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {/* Accordion List */}
-        <div className="space-y-4">
-          {filteredFaqs.map((faq) => {
-            const isOpen = openId === faq.id;
+        <div className="space-y-3">
+          {faqs.map((faq, idx) => {
+            const isOpen = openId === idx;
             return (
               <div
-                key={faq.id}
-                className={`rounded-2xl border transition-all ${
-                  isOpen ? 'bg-[#1F222A] border-saku-matcha/40 shadow-lg' : 'bg-[#15171C] border-saku-border hover:border-saku-border-highlight'
-                }`}
+                key={idx}
+                className="rounded-2xl bg-slate-50 dark:bg-[#1F222A] border border-slate-200 dark:border-[#2F3440] overflow-hidden"
               >
                 <button
-                  onClick={() => toggleAccordion(faq.id)}
-                  className="w-full text-left p-5 sm:p-6 flex items-center justify-between gap-4 cursor-pointer"
-                  aria-expanded={isOpen}
+                  onClick={() => setOpenId(isOpen ? null : idx)}
+                  className="w-full text-left p-5 sm:p-6 flex items-center justify-between gap-4 cursor-pointer select-none"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono font-bold text-saku-matcha px-2 py-0.5 rounded bg-saku-matcha/10 border border-saku-matcha/20 shrink-0">
-                      {faq.category.split('&')[0].trim()}
-                    </span>
-                    <h3 className="text-base font-bold text-white tracking-tight">
-                      {faq.question}
-                    </h3>
-                  </div>
-
-                  <div className={`w-7 h-7 rounded-full bg-[#2C313D] flex items-center justify-center text-saku-text-secondary shrink-0 transition-transform duration-200 ${
-                    isOpen ? 'rotate-180 text-white' : ''
-                  }`}>
-                    <ChevronDown className="w-4 h-4" />
-                  </div>
+                  <span className="font-bold text-sm sm:text-base text-slate-900 dark:text-[#E8EAF0]">
+                    {faq.q}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-500 dark:text-[#9AA1AD] shrink-0 transition-transform duration-200 ${
+                      isOpen ? 'rotate-180 text-emerald-600 dark:text-[#52C47C]' : ''
+                    }`}
+                  />
                 </button>
 
                 {isOpen && (
-                  <div className="px-5 pb-6 sm:px-6 text-sm text-saku-text-secondary leading-relaxed border-t border-saku-border/60 pt-4 animate-fadeIn">
-                    <p>{faq.answer}</p>
+                  <div className="px-5 pb-5 sm:px-6 sm:pb-6 text-xs sm:text-sm text-slate-600 dark:text-[#9AA1AD] leading-relaxed border-t border-slate-200 dark:border-[#2F3440] pt-4">
+                    {faq.a}
                   </div>
                 )}
               </div>
             );
           })}
         </div>
-
       </div>
     </section>
   );

@@ -142,4 +142,41 @@ class ReadingFeatureTest {
         assertEquals(com.saku.ui.AppTheme.DIM, com.saku.ui.AppTheme.fromId("dim"))
         assertEquals(com.saku.ui.AppTheme.DIM, com.saku.ui.AppTheme.fromId("unknown"))
     }
+
+    @Test
+    fun testConnectStudiedWordsPreference() {
+        val fakePrefs = com.saku.util.FakeSharedPreferences()
+        val prefs = com.saku.data.PreferencesManager(fakePrefs)
+
+        // Default should be true (connected)
+        assertTrue(prefs.connectStudiedWords)
+
+        // Toggle off (disconnected)
+        prefs.connectStudiedWords = false
+        org.junit.Assert.assertFalse(prefs.connectStudiedWords)
+
+        // Toggle back on
+        prefs.connectStudiedWords = true
+        assertTrue(prefs.connectStudiedWords)
+    }
+
+    @Test
+    fun testBuildJlptStoryPromptWithConnectedWords() {
+        val service = com.saku.reading.GeminiStoryService()
+        val prompt = service.buildJlptStoryPrompt("N5", "犬 (いぬ) [dog], 猫 (ねこ) [cat]")
+
+        assertTrue(prompt.contains("[Target Vocabulary from Learner's Flashcards to Naturally Integrate]"))
+        assertTrue(prompt.contains("犬 (いぬ) [dog], 猫 (ねこ) [cat]"))
+        assertTrue(prompt.contains("Actively prioritize and weave target vocabulary words"))
+    }
+
+    @Test
+    fun testBuildJlptStoryPromptUnrestrictedWithoutConnectedWords() {
+        val service = com.saku.reading.GeminiStoryService()
+        val prompt = service.buildJlptStoryPrompt("N5", "")
+
+        assertTrue(prompt.contains("No specific flashcard vocabulary constraints"))
+        assertTrue(prompt.contains("without restriction"))
+        org.junit.Assert.assertFalse(prompt.contains("Learner's Flashcards"))
+    }
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Smartphone, CheckCircle2, ExternalLink } from 'lucide-react';
+import { X, QrCode, ExternalLink } from 'lucide-react';
 
 interface QrModalProps {
   isOpen: boolean;
@@ -9,19 +9,21 @@ interface QrModalProps {
 export const QrModal: React.FC<QrModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  // Direct APK download link or GitHub releases link for mobile scanner
-  const downloadUrl = "https://github.com/LiebeandSkye/saku/releases";
+  const downloadUrl = 'https://github.com/LiebeandSkye/saku/releases';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div 
-        className="relative w-full max-w-sm glass-card rounded-3xl p-6 sm:p-8 border border-saku-border shadow-2xl space-y-5"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-sm bg-white dark:bg-[#1F222A] rounded-3xl p-6 sm:p-7 border border-slate-200 dark:border-[#2F3440] shadow-2xl space-y-5"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-1.5 rounded-xl bg-[#1F222A] text-saku-text-muted hover:text-white border border-saku-border transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-2 rounded-xl bg-slate-100 dark:bg-[#15171C] text-slate-500 hover:text-slate-900 dark:hover:text-[#E8EAF0] border border-slate-200 dark:border-[#2F3440] transition-colors cursor-pointer"
           aria-label="Close modal"
         >
           <X className="w-4 h-4" />
@@ -29,38 +31,28 @@ export const QrModal: React.FC<QrModalProps> = ({ isOpen, onClose }) => {
 
         {/* Modal Header */}
         <div className="text-center space-y-1">
-          <div className="w-12 h-12 rounded-2xl bg-saku-matcha/10 border border-saku-matcha/30 flex items-center justify-center text-saku-matcha mx-auto mb-3">
-            <Smartphone className="w-6 h-6" />
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-[#15171C] border border-emerald-200 dark:border-[#2F3440] flex items-center justify-center text-emerald-600 dark:text-[#52C47C] mx-auto mb-2">
+            <QrCode className="w-5 h-5" />
           </div>
-          <h3 className="text-xl font-bold text-white tracking-tight">Scan with Phone Camera</h3>
-          <p className="text-xs text-saku-text-muted">
-            Point your Android camera to download Saku.apk directly onto your phone.
+          <h3 className="text-lg font-bold text-slate-900 dark:text-[#E8EAF0]">
+            Scan with Phone Camera
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-[#9AA1AD]">
+            Download Saku.apk directly onto your Android device.
           </p>
         </div>
 
-        {/* QR Code Container (High Contrast White Card for reliable scanning) */}
-        <div className="bg-white p-6 rounded-2xl flex flex-col items-center justify-center shadow-inner">
-          <img 
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(downloadUrl)}`} 
-            alt="Scan to Download Saku" 
-            className="w-44 h-44 object-contain"
+        {/* QR Code */}
+        <div className="bg-white p-5 rounded-2xl flex flex-col items-center justify-center border border-slate-200">
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(downloadUrl)}`}
+            alt="Scan to Download Saku"
+            className="w-40 h-40 object-contain"
             loading="lazy"
           />
-          <span className="text-[11px] font-mono text-gray-700 font-semibold mt-2">
-            saku • direct mobile download
+          <span className="text-[11px] font-mono text-slate-600 font-semibold mt-2">
+            GitHub Verified Release
           </span>
-        </div>
-
-        {/* Info bullets */}
-        <div className="space-y-2 text-xs text-saku-text-secondary">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-3.5 h-3.5 text-saku-matcha shrink-0" />
-            <span>Universal Android 8.0+ Release</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-3.5 h-3.5 text-saku-matcha shrink-0" />
-            <span>Direct GitHub verified binary</span>
-          </div>
         </div>
 
         {/* Action Link */}
@@ -68,9 +60,9 @@ export const QrModal: React.FC<QrModalProps> = ({ isOpen, onClose }) => {
           href={downloadUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-full py-2.5 rounded-xl bg-saku-matcha hover:bg-saku-matcha-light text-[#091F11] font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+          className="w-full py-2.5 rounded-xl bg-[#52C47C] hover:bg-[#43A869] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
         >
-          <span>Open Download URL</span>
+          <span>Open Download Link</span>
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>

@@ -44,8 +44,10 @@ class GeminiStoryService {
             (studiedPool.shuffled().take(18) + suspendedPool.shuffled().take(10)).distinctBy { it.displayWord }
         } else if (studiedPool.isNotEmpty()) {
             studiedPool.shuffled().take(25).distinctBy { it.displayWord }
-        } else {
+        } else if (suspendedPool.isNotEmpty()) {
             suspendedPool.shuffled().take(25).distinctBy { it.displayWord }
+        } else {
+            emptyList()
         }
 
         val wordPromptList = if (selectedWords.isNotEmpty()) {
@@ -56,7 +58,7 @@ class GeminiStoryService {
                 "$word$reading$meaning"
             }
         } else {
-            "Use natural vocabulary appropriate for JLPT $jlptLevel."
+            ""
         }
 
         val prompt = buildJlptStoryPrompt(jlptLevel, wordPromptList)
@@ -228,7 +230,7 @@ class GeminiStoryService {
         return clean.trim()
     }
 
-    private fun buildJlptStoryPrompt(jlptLevel: String, wordPromptList: String): String {
+    internal fun buildJlptStoryPrompt(jlptLevel: String, wordPromptList: String): String {
         val levelRules = when (jlptLevel) {
             "N5" -> "Strictly JLPT N5: Use elementary ~です/~ます forms, simple sentence conjunctions (そして, でも, だから), and basic particles (は, が, を, に, で, へ, と, も). Keep sentences short, relatable, and clear."
             "N4" -> "Strictly JLPT N4: Use compound sentences, ~て-forms, conditions (~たら, ~なら), comparisons, and basic potential or volitional forms."
@@ -238,6 +240,31 @@ class GeminiStoryService {
             else -> "Use natural Japanese suitable for JLPT $jlptLevel."
         }
 
+        val vocabSection = if (wordPromptList.isNotBlank()) {
+            """
+            [Target Vocabulary from Learner's Flashcards to Naturally Integrate]
+            The learner has studied the following target words from their Anki deck. Actively prioritize weaving these specific words into the story so the reader encounters their learned vocabulary in real context:
+            $wordPromptList
+            """.trimIndent()
+        } else {
+            """
+            [Target Vocabulary]
+            No specific flashcard vocabulary constraints. Freely choose natural and creative Japanese vocabulary strictly appropriate for JLPT $jlptLevel learners. You have complete creative freedom.
+            """.trimIndent()
+        }
+
+        val req2 = if (wordPromptList.isNotBlank()) {
+            "2. Actively prioritize and weave target vocabulary words from the learner's list above into the story wherever natural and appropriate."
+        } else {
+            "2. Use natural, creative Japanese vocabulary appropriate for JLPT $jlptLevel learners without restriction."
+        }
+
+        val req4 = if (wordPromptList.isNotBlank()) {
+            "4. Create 3 to 4 multiple-choice reading comprehension questions testing understanding of the story and key vocabulary from the target list in context.\n   Each question must have exactly 4 options and the 0-indexed correctOptionIndex."
+        } else {
+            "4. Create 3 to 4 multiple-choice reading comprehension questions testing story comprehension and vocabulary in context.\n   Each question must have exactly 4 options and the 0-indexed correctOptionIndex."
+        }
+
         return """
             You are a master Japanese teacher and graded-reader author specializing in immersive language learning.
             Write an engaging, coherent Japanese reading passage calibrated strictly to JLPT $jlptLevel.
@@ -245,16 +272,13 @@ class GeminiStoryService {
             [JLPT Level Calibration]
             $levelRules
 
-            [Target Vocabulary from Learner's Flashcards to Naturally Integrate]
-            The learner has studied the following target words from their Anki deck. Actively prioritize weaving these specific words into the story so the reader encounters their learned vocabulary in real context:
-            $wordPromptList
+            $vocabSection
 
             [Requirements]
             1. Write a natural, compelling story in Japanese (150-300 words).
-            2. Actively prioritize and weave target vocabulary words from the learner's list above into the story wherever natural and appropriate.
+            $req2
             3. Do NOT use romaji. Do NOT use ruby/furigana brackets like [ふりがな]. Standard Japanese characters only.
-            4. Create 3 to 4 multiple-choice reading comprehension questions testing understanding of the story and key vocabulary from the target list in context.
-               Each question must have exactly 4 options and the 0-indexed correctOptionIndex.
+            $req4
             5. Return ONLY valid JSON with this exact schema (no markdown formatting, no code blocks):
             {
               "title": "Story Title in Japanese",

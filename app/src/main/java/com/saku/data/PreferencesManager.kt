@@ -89,6 +89,10 @@ class PreferencesManager(
         get() = prefs.getBoolean(KEY_HIGHLIGHT_VOCABULARY_WORDS, true)
         set(value) = prefs.edit().putBoolean(KEY_HIGHLIGHT_VOCABULARY_WORDS, value).apply()
 
+    var connectStudiedWords: Boolean
+        get() = prefs.getBoolean(KEY_CONNECT_STUDIED_WORDS, true)
+        set(value) = prefs.edit().putBoolean(KEY_CONNECT_STUDIED_WORDS, value).apply()
+
     var lastReadStoryId: String?
         get() = prefs.getString(KEY_LAST_READ_STORY_ID, null)
         set(value) = prefs.edit().putString(KEY_LAST_READ_STORY_ID, value).apply()
@@ -192,6 +196,7 @@ class PreferencesManager(
         private const val KEY_GEMINI_MODEL = "gemini_model"
         private const val KEY_INTERNET_DISCLOSURE = "internet_disclosure_accepted"
         private const val KEY_HIGHLIGHT_VOCABULARY_WORDS = "highlight_vocabulary_words"
+        private const val KEY_CONNECT_STUDIED_WORDS = "connect_studied_words"
         const val DEFAULT_FISH_AUDIO_VOICE_ID = "7f9298f1369f4262af796300803b1a1f"
         const val DEFAULT_FISH_AUDIO_VOICE_URL = "https://fish.audio/m/7f9298f1369f4262af796300803b1a1f"
         const val DEFAULT_FISH_AUDIO_MODEL = "s2.1-pro-free"

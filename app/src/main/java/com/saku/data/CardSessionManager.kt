@@ -65,13 +65,22 @@ object CardSessionManager {
         }
     }
 
+    fun setActiveCard(card: CardInfo?, notify: Boolean = false, context: Context? = null) {
+        currentCard = card
+        if (notify) {
+            if (context != null) notifyAllSurfaces(context) else notifyUi()
+        }
+    }
+
     fun gradeCard(
         context: Context,
         ease: Int,
         timeTaken: Long = 5000L,
+        specificCard: CardInfo? = null,
+        targetDeckId: Long? = null,
         onComplete: ((CardInfo?) -> Unit)? = null
     ) {
-        val card = currentCard ?: getOrFetchCard(context)
+        val card = specificCard ?: currentCard ?: getOrFetchCard(context)
         val ankiHelper = AnkiDroidHelper(context)
         val prefs = PreferencesManager(context)
         val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
@@ -95,15 +104,22 @@ object CardSessionManager {
 
             Thread {
                 ankiHelper.answerCard(card.noteId, card.cardOrd, ease, timeTaken)
-                val nextCard = ankiHelper.getNextDueCard(selectedDecks, excludeNoteId = card.noteId)
+                val deckQueryIds = if (targetDeckId != null && targetDeckId > 0) setOf(targetDeckId) else selectedDecks
+                val nextDeckCard = ankiHelper.getNextDueCard(deckQueryIds, excludeNoteId = card.noteId)
                 val freshStats = ankiHelper.getSelectedDeckStats(selectedDecks)
 
                 mainHandler.post {
-                    currentCard = nextCard
+                    if (currentCard?.noteId == card.noteId || specificCard == null) {
+                        currentCard = if (targetDeckId != null && targetDeckId > 0) {
+                            nextDeckCard ?: ankiHelper.getNextDueCard(selectedDecks, excludeNoteId = card.noteId)
+                        } else {
+                            nextDeckCard
+                        }
+                    }
                     currentStats = freshStats
                     isRevealed = false
                     notifyAllSurfaces(context)
-                    onComplete?.invoke(nextCard)
+                    onComplete?.invoke(nextDeckCard)
                 }
             }.start()
         } else {

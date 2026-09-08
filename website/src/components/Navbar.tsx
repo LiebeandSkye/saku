@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Menu, X, Smartphone, Sparkles } from 'lucide-react';
+import { Download, QrCode, Star } from 'lucide-react';
 import { GithubIcon } from './icons/GithubIcon';
-import confetti from 'canvas-confetti';
+import { ThemeToggle } from './ThemeToggle';
 
 interface NavbarProps {
   onOpenQrModal: () => void;
@@ -9,7 +9,6 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onOpenQrModal }) => {
   const [isScrolled, setIsScrolled] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -19,185 +18,56 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQrModal }) => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleDownloadClick = () => {
-    confetti({
-      particleCount: 80,
-      spread: 60,
-      origin: { y: 0.2 },
-      colors: ['#52C47C', '#CF7B88', '#E06C75', '#6EE7A0', '#F0F3F8']
-    });
-  };
-
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-      isScrolled ? 'glass-nav py-3 shadow-lg shadow-black/30' : 'bg-transparent py-5'
-    }`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
-        {/* Brand Logo */}
-        <a href="#" className="flex items-center gap-3 group">
-          <div className="w-10 h-10 rounded-xl bg-[#1F222A] border border-saku-border group-hover:border-saku-matcha/50 flex items-center justify-center transition-colors shadow-sm overflow-hidden p-1.5">
-            <img src="/favicon.svg" alt="Saku Icon" className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="font-serif font-bold text-lg text-white tracking-wide">Saku</span>
-            </div>
-            <p className="text-[11px] text-saku-text-muted hidden sm:block">Japanese Flashcard Widget</p>
-          </div>
+    <header
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-200 ${
+        isScrolled
+          ? 'bg-white/90 dark:bg-[#15171C]/90 backdrop-blur-md border-b border-slate-200 dark:border-[#2F3440] py-3.5 shadow-sm'
+          : 'bg-transparent py-5'
+      }`}
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+        {/* Authentic Brand Logo */}
+        <a href="#" className="flex items-baseline gap-2 group cursor-pointer select-none">
+          <span className="font-bold text-xl text-slate-900 dark:text-[#E8EAF0] tracking-tight">アンキ</span>
+          <span className="text-xs font-semibold tracking-[0.2em] text-slate-500 dark:text-[#9AA1AD]">SAKU</span>
         </a>
 
-        {/* Desktop Nav Links */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-saku-text-secondary">
-          <a href="#features" className="hover:text-white transition-colors cursor-pointer">Features</a>
-          <a href="#simulator" className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5">
-            <Smartphone className="w-3.5 h-3.5 text-saku-matcha" />
-            <span>Interactive Widget</span>
-          </a>
-          <a href="#how-it-works" className="hover:text-white transition-colors cursor-pointer">Architecture</a>
-          <a href="#ai-reader" className="hover:text-white transition-colors cursor-pointer flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-saku-rose" />
-            <span>AI Stories</span>
-          </a>
-          <a href="#setup" className="hover:text-white transition-colors cursor-pointer">Setup</a>
-          <a href="#faq" className="hover:text-white transition-colors cursor-pointer">FAQ</a>
-        </nav>
+        {/* Right Actions: Theme, QR, GitHub, Download */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
 
-        {/* Action Buttons */}
-        <div className="hidden lg:flex items-center gap-3">
           <button
             onClick={onOpenQrModal}
-            className="px-3 py-2 text-xs font-medium text-saku-text-secondary hover:text-white bg-[#1F222A] hover:bg-[#262A34] border border-saku-border rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-            title="Scan QR to download on your phone"
+            className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-[#9AA1AD] hover:text-slate-900 dark:hover:text-[#E8EAF0] bg-slate-100 dark:bg-[#1F222A] hover:bg-slate-200 dark:hover:bg-[#262A34] border border-slate-200 dark:border-[#2F3440] rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+            title="Scan QR to download on phone"
           >
-            <Smartphone className="w-3.5 h-3.5 text-saku-matcha" />
-            <span>Scan QR</span>
+            <QrCode className="w-3.5 h-3.5 text-emerald-600 dark:text-[#52C47C]" />
+            <span className="hidden sm:inline">Scan QR</span>
           </button>
 
           <a
             href="https://github.com/LiebeandSkye/saku"
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 text-saku-text-secondary hover:text-white bg-[#1F222A] hover:bg-[#262A34] border border-saku-border rounded-lg transition-colors cursor-pointer"
-            aria-label="GitHub Repository"
+            className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-[#9AA1AD] hover:text-slate-900 dark:hover:text-[#E8EAF0] bg-slate-100 dark:bg-[#1F222A] hover:bg-slate-200 dark:hover:bg-[#262A34] border border-slate-200 dark:border-[#2F3440] rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 group"
+            title="Star Saku on GitHub"
           >
-            <GithubIcon className="w-4 h-4" />
+            <GithubIcon className="w-3.5 h-3.5 text-slate-700 dark:text-[#9AA1AD] group-hover:text-slate-900 dark:group-hover:text-[#E8EAF0]" />
+            <span className="hidden sm:inline">Give me a star!</span>
+            <Star className="w-3 h-3 text-amber-400 fill-amber-400/80 group-hover:fill-amber-400 group-hover:scale-110 transition-all" />
           </a>
 
           <a
             href="/Saku.apk"
             download="Saku.apk"
-            onClick={handleDownloadClick}
-            className="px-4 py-2 text-xs font-semibold text-[#091F11] bg-saku-matcha hover:bg-saku-matcha-light rounded-lg transition-all duration-200 shadow-sm hover:shadow-saku-glow flex items-center gap-2 cursor-pointer font-sans"
+            className="px-4 py-1.5 text-xs font-semibold text-white bg-[#52C47C] hover:bg-[#43A869] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download APK</span>
+            <Download className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Download</span>
           </a>
-        </div>
-
-        {/* Mobile Hamburger Button */}
-        <div className="flex md:hidden items-center gap-2">
-          <a
-            href="/Saku.apk"
-            download="Saku.apk"
-            onClick={handleDownloadClick}
-            className="px-3 py-1.5 text-xs font-semibold text-[#091F11] bg-saku-matcha rounded-lg flex items-center gap-1.5"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>APK</span>
-          </a>
-
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-lg bg-[#1F222A] text-saku-text-secondary hover:text-white border border-saku-border cursor-pointer"
-            aria-label="Toggle Menu"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
         </div>
       </div>
-
-      {/* Mobile Drawer Menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden glass-nav border-t border-saku-border px-6 py-5 mt-3 space-y-4 animate-fadeIn">
-          <nav className="flex flex-col space-y-3 text-sm font-medium">
-            <a
-              href="#features"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-saku-text-secondary hover:text-white py-1"
-            >
-              Features
-            </a>
-            <a
-              href="#simulator"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-saku-text-secondary hover:text-white py-1 flex items-center gap-2"
-            >
-              <Smartphone className="w-4 h-4 text-saku-matcha" />
-              Interactive Widget Demo
-            </a>
-            <a
-              href="#how-it-works"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-saku-text-secondary hover:text-white py-1"
-            >
-              Architecture & IPC
-            </a>
-            <a
-              href="#ai-reader"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-saku-text-secondary hover:text-white py-1 flex items-center gap-2"
-            >
-              <Sparkles className="w-4 h-4 text-saku-rose" />
-              AI Graded Stories
-            </a>
-            <a
-              href="#setup"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-saku-text-secondary hover:text-white py-1"
-            >
-              5-Second Setup Guide
-            </a>
-            <a
-              href="#requirements"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-saku-text-secondary hover:text-white py-1"
-            >
-              Device Compatibility
-            </a>
-            <a
-              href="#faq"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-saku-text-secondary hover:text-white py-1"
-            >
-              FAQ & Permissions
-            </a>
-          </nav>
-
-          <div className="pt-4 border-t border-saku-border flex flex-col gap-2.5">
-            <a
-              href="/Saku.apk"
-              download="Saku.apk"
-              onClick={() => {
-                handleDownloadClick();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full py-2.5 text-center text-sm font-semibold text-[#091F11] bg-saku-matcha rounded-lg flex items-center justify-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Download Saku.apk (~20 MB)
-            </a>
-            <a
-              href="https://github.com/LiebeandSkye/saku"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-2.5 text-center text-sm font-medium text-white bg-[#1F222A] border border-saku-border rounded-lg flex items-center justify-center gap-2"
-            >
-              <GithubIcon className="w-4 h-4" />
-              View on GitHub
-            </a>
-          </div>
-        </div>
-      )}
     </header>
   );
 };

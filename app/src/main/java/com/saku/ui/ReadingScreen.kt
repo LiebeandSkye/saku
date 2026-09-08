@@ -135,6 +135,7 @@ fun ReadingScreen(
     var selectedJlpt by remember { mutableStateOf(prefs.readingJlptLevel) }
     var selectedModel by remember { mutableStateOf(prefs.geminiModel) }
     var highlightWords by remember { mutableStateOf(prefs.highlightVocabularyWords) }
+    var connectStudiedWords by remember { mutableStateOf(prefs.connectStudiedWords) }
     var showJlptMenu by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showModelDialog by remember { mutableStateOf(false) }
@@ -233,7 +234,7 @@ fun ReadingScreen(
         coroutineScope.launch {
             isGeneratingStory = true
             generationError = null
-            val words = vocabSummary?.words ?: emptyList()
+            val words = if (connectStudiedWords) (vocabSummary?.words ?: emptyList()) else emptyList()
             val result = storyService.generateStory(
                 apiKey = apiKey,
                 jlptLevel = selectedJlpt,
@@ -541,6 +542,36 @@ fun ReadingScreen(
                         modifier = Modifier.scale(0.85f)
                     )
                 }
+
+                // Row 4: Connect Studied Words Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp, start = 4.dp, end = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Connect studied words?",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SakuColors.TextSecondary
+                    )
+                    Switch(
+                        checked = connectStudiedWords,
+                        onCheckedChange = {
+                            connectStudiedWords = it
+                            prefs.connectStudiedWords = it
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SakuColors.SagePrimary,
+                            uncheckedThumbColor = SakuColors.TextSecondary,
+                            uncheckedTrackColor = Color(0xFF262A34)
+                        ),
+                        modifier = Modifier.scale(0.85f)
+                    )
+                }
             }
         }
 
@@ -638,8 +669,8 @@ fun ReadingScreen(
                                 Text("Analyzing AnkiDroid database...", fontSize = 13.sp, color = SakuColors.TextSecondary)
                             }
                         } else {
-                            val studied = vocabSummary?.studiedCount ?: 0
-                            val suspended = vocabSummary?.suspendedCount ?: 0
+                            val studied = if (connectStudiedWords) (vocabSummary?.studiedCount ?: 0) else 0
+                            val suspended = if (connectStudiedWords) (vocabSummary?.suspendedCount ?: 0) else 0
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = "$studied",
@@ -669,7 +700,7 @@ fun ReadingScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Suspended: $suspended",
+                                    text = "Suspended",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = SakuColors.TextSecondary
@@ -693,7 +724,23 @@ fun ReadingScreen(
                 // Expandable Vocabulary Chips
                 if (isVocabExpanded) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    val words = vocabSummary?.words ?: emptyList()
+                    if (!connectStudiedWords) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = SakuColors.SurfaceElevated,
+                            border = BorderStroke(1.dp, SakuColors.Border),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Word connection is disabled. Stories will be generated freely by Gemini without Anki vocabulary restrictions.",
+                                fontSize = 12.sp,
+                                color = SakuColors.TextSecondary,
+                                lineHeight = 18.sp,
+                                modifier = Modifier.padding(14.dp)
+                            )
+                        }
+                    } else {
+                        val words = vocabSummary?.words ?: emptyList()
                     if (words.isEmpty()) {
                         Text(
                             text = if (!hasAnkiPermission) "AnkiDroid permission required to read flashcards."
@@ -820,6 +867,7 @@ fun ReadingScreen(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }

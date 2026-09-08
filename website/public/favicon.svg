@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="sakuraGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF9EAA" />
+      <stop offset="60%" stop-color="#E06C75" />
+      <stop offset="100%" stop-color="#2D7D46" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Rounded Squircle Base -->
+  <rect width="120" height="120" x="4" y="4" rx="28" fill="#15171C" stroke="#2F3440" stroke-width="3" filter="url(#glow)"/>
+  
+  <!-- Subtle Petal accents -->
+  <circle cx="64" cy="38" r="16" fill="#CF7B88" opacity="0.85"/>
+  <circle cx="89" cy="56" r="16" fill="#CF7B88" opacity="0.85"/>
+  <circle cx="79" cy="86" r="16" fill="#CF7B88" opacity="0.85"/>
+  <circle cx="49" cy="86" r="16" fill="#CF7B88" opacity="0.85"/>
+  <circle cx="39" cy="56" r="16" fill="#CF7B88" opacity="0.85"/>
+  <circle cx="64" cy="64" r="10" fill="#52C47C"/>
+
+  <!-- Kanji 咲 centered -->
+  <text x="64" y="73" font-family="'Noto Serif JP', serif" font-weight="900" font-size="28" fill="#FFFFFF" text-anchor="middle">咲</text>
+</svg>

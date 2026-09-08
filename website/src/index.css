@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: #15171C;
+    color: #E8EAF0;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #15171C;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #2F3440;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #414858;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    background: rgba(31, 34, 42, 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .glass-card-hover {
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .glass-card-hover:hover {
+    background: rgba(38, 42, 52, 0.85);
+    border-color: rgba(82, 196, 124, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5), 0 0 20px -5px rgba(82, 196, 124, 0.15);
+  }
+
+  .glass-nav {
+    background: rgba(21, 23, 28, 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  /* Ruby styling for furigana */
+  ruby {
+    ruby-position: over;
+    ruby-align: center;
+  }
+  rt {
+    font-size: 0.6em;
+    color: #52C47C;
+    font-weight: 500;
+    user-select: none;
+    letter-spacing: 0.05em;
+  }
+
+  .text-gradient-matcha {
+    background: linear-gradient(135deg, #6EE7A0 0%, #52C47C 50%, #2D7D46 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-sakura {
+    background: linear-gradient(135deg, #FFCAD4 0%, #CF7B88 50%, #B05566 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}

@@ -21,6 +21,7 @@ object CardSessionManager {
         private set
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val surfaceExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
 
     fun addListener(listener: () -> Unit) {
@@ -106,12 +107,15 @@ object CardSessionManager {
                 ankiHelper.answerCard(card.noteId, card.cardOrd, ease, timeTaken)
                 val deckQueryIds = if (targetDeckId != null && targetDeckId > 0) setOf(targetDeckId) else selectedDecks
                 val nextDeckCard = ankiHelper.getNextDueCard(deckQueryIds, excludeNoteId = card.noteId)
+                val fallbackCard = if (nextDeckCard == null && targetDeckId != null && targetDeckId > 0) {
+                    ankiHelper.getNextDueCard(selectedDecks, excludeNoteId = card.noteId)
+                } else null
                 val freshStats = ankiHelper.getSelectedDeckStats(selectedDecks)
 
                 mainHandler.post {
                     if (currentCard?.noteId == card.noteId || specificCard == null) {
                         currentCard = if (targetDeckId != null && targetDeckId > 0) {
-                            nextDeckCard ?: ankiHelper.getNextDueCard(selectedDecks, excludeNoteId = card.noteId)
+                            nextDeckCard ?: fallbackCard
                         } else {
                             nextDeckCard
                         }
@@ -175,6 +179,7 @@ object CardSessionManager {
     }
 
     fun refresh(context: Context) {
+        AnkiDroidHelper.invalidateDeckCache()
         Thread {
             val ankiHelper = AnkiDroidHelper(context)
             val prefs = PreferencesManager(context)
@@ -202,9 +207,15 @@ object CardSessionManager {
 
     fun notifyAllSurfaces(context: Context) {
         notifyUi()
-        if (PreferencesManager(context).isServiceEnabled) {
-            LockScreenCardService.updateNotification(context)
+        surfaceExecutor.execute {
+            try {
+                if (PreferencesManager(context).isServiceEnabled) {
+                    LockScreenCardService.updateNotification(context)
+                }
+                SakuWidgetProvider.updateAllWidgets(context)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
-        SakuWidgetProvider.updateAllWidgets(context)
     }
 }

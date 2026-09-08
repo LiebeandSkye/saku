@@ -48,76 +48,99 @@ class AnkiDroidHelper(private val context: Context) {
         if (!granted) {
             return false
         }
-        return try {
-            val cursor = resolver.query(DECKS_URI, null, null, null, null)
-            cursor?.use {
-                true
-            } ?: false
-        } catch (e: SecurityException) {
-            false
-        } catch (e: Exception) {
-            false
+        return synchronized(ankiIpcLock) {
+            try {
+                val cursor = resolver.query(DECKS_URI, null, null, null, null)
+                cursor?.use {
+                    true
+                } ?: false
+            } catch (e: SecurityException) {
+                false
+            } catch (e: Exception) {
+                false
+            }
         }
     }
 
-    fun getDeckList(): List<DeckInfo> {
-        val decks = mutableListOf<DeckInfo>()
-        val uris = listOf(DECKS_URI, Uri.parse("content://$AUTHORITY/decks"))
-
-        for (uri in uris) {
-            try {
-                val cursor = resolver.query(uri, null, null, null, null)
-                cursor?.use { cur ->
-                    val nameIdx = cur.getColumnIndex(COL_DECK_NAME)
-                    val idIdx = cur.getColumnIndex(COL_DECK_ID)
-                    val countsIdx = cur.getColumnIndex(COL_DECK_COUNTS)
-
-                    while (cur.moveToNext()) {
-                        val name = cur.getString(nameIdx) ?: continue
-                        val id = cur.getLong(idIdx)
-                        var newC = 0
-                        var learnC = 0
-                        var revC = 0
-
-                        if (countsIdx >= 0) {
-                            val countsStr = cur.getString(countsIdx) ?: ""
-                            val nums = Regex("\\d+").findAll(countsStr).map { it.value.toInt() }.toList()
-                            if (nums.size >= 3) {
-                                learnC = nums[0]
-                                revC = nums[1]
-                                newC = nums[2]
-                            }
-                        }
-
-                        if (newC > 100) {
-                            val dueNew = getNotesDueCount("deck:\"$name\" is:new is:due")
-                            if (dueNew > 0) newC = dueNew
-                        }
-
-                        if (newC == 0 && learnC == 0 && revC == 0) {
-                            val s = getDeckStatsForDeck(name)
-                            newC = s.first
-                            learnC = s.second
-                            revC = s.third
-                        }
-
-                        decks.add(
-                            DeckInfo(
-                                id = id,
-                                name = name,
-                                newCount = newC,
-                                learnCount = learnC,
-                                reviewCount = revC
-                            )
-                        )
-                    }
-                }
-                if (decks.isNotEmpty()) break
-            } catch (e: Exception) {
-                e.printStackTrace()
+    fun getDeckList(forceRefresh: Boolean = false): List<DeckInfo> {
+        if (!forceRefresh) {
+            val cached = cachedDeckList
+            if (cached != null && (System.currentTimeMillis() - cachedDeckListTimestamp < DECK_CACHE_TTL_MS)) {
+                return cached
             }
         }
-        return decks
+
+        return synchronized(ankiIpcLock) {
+            if (!forceRefresh) {
+                val cached = cachedDeckList
+                if (cached != null && (System.currentTimeMillis() - cachedDeckListTimestamp < DECK_CACHE_TTL_MS)) {
+                    return@synchronized cached
+                }
+            }
+
+            val decks = mutableListOf<DeckInfo>()
+            val uris = listOf(DECKS_URI, Uri.parse("content://$AUTHORITY/decks"))
+
+            for (uri in uris) {
+                try {
+                    val cursor = resolver.query(uri, null, null, null, null)
+                    cursor?.use { cur ->
+                        val nameIdx = cur.getColumnIndex(COL_DECK_NAME)
+                        val idIdx = cur.getColumnIndex(COL_DECK_ID)
+                        val countsIdx = cur.getColumnIndex(COL_DECK_COUNTS)
+
+                        while (cur.moveToNext()) {
+                            val name = cur.getString(nameIdx) ?: continue
+                            val id = cur.getLong(idIdx)
+                            var newC = 0
+                            var learnC = 0
+                            var revC = 0
+
+                            if (countsIdx >= 0) {
+                                val countsStr = cur.getString(countsIdx) ?: ""
+                                val nums = Regex("\\d+").findAll(countsStr).map { it.value.toInt() }.toList()
+                                if (nums.size >= 3) {
+                                    learnC = nums[0]
+                                    revC = nums[1]
+                                    newC = nums[2]
+                                }
+                            }
+
+                            if (newC > 100) {
+                                val dueNew = getNotesDueCountInternal("deck:\"$name\" is:new is:due")
+                                if (dueNew > 0) newC = dueNew
+                            }
+
+                            if (newC == 0 && learnC == 0 && revC == 0) {
+                                val s = getDeckStatsForDeckInternal(name)
+                                newC = s.first
+                                learnC = s.second
+                                revC = s.third
+                            }
+
+                            decks.add(
+                                DeckInfo(
+                                    id = id,
+                                    name = name,
+                                    newCount = newC,
+                                    learnCount = learnC,
+                                    reviewCount = revC
+                                )
+                            )
+                        }
+                    }
+                    if (decks.isNotEmpty()) break
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+
+            if (decks.isNotEmpty()) {
+                cachedDeckList = decks
+                cachedDeckListTimestamp = System.currentTimeMillis()
+            }
+            decks
+        }
     }
 
     fun getAnkiLaunchIntent(deckId: Long? = null): Intent {
@@ -170,11 +193,17 @@ class AnkiDroidHelper(private val context: Context) {
     }
 
     fun getDeckStatsForDeck(deckName: String): Triple<Int, Int, Int> {
+        return synchronized(ankiIpcLock) {
+            getDeckStatsForDeckInternal(deckName)
+        }
+    }
+
+    private fun getDeckStatsForDeckInternal(deckName: String): Triple<Int, Int, Int> {
         val cleanDeck = deckName.trim()
-        val newNotes = getNotesDueCount("deck:\"$cleanDeck\" is:new is:due").takeIf { it > 0 }
-            ?: getNotesDueCount("deck:\"$cleanDeck\" is:new")
-        val learnNotes = getNotesDueCount("deck:\"$cleanDeck\" is:learn")
-        val dueNotes = getNotesDueCount("deck:\"$cleanDeck\" is:due -is:learn -is:new")
+        val newNotes = getNotesDueCountInternal("deck:\"$cleanDeck\" is:new is:due").takeIf { it > 0 }
+            ?: getNotesDueCountInternal("deck:\"$cleanDeck\" is:new")
+        val learnNotes = getNotesDueCountInternal("deck:\"$cleanDeck\" is:learn")
+        val dueNotes = getNotesDueCountInternal("deck:\"$cleanDeck\" is:due -is:learn -is:new")
         if (newNotes > 0 || learnNotes > 0 || dueNotes > 0) {
             return Triple(newNotes, learnNotes, dueNotes)
         }
@@ -182,6 +211,12 @@ class AnkiDroidHelper(private val context: Context) {
     }
 
     fun getNotesDueCount(searchQuery: String): Int {
+        return synchronized(ankiIpcLock) {
+            getNotesDueCountInternal(searchQuery)
+        }
+    }
+
+    private fun getNotesDueCountInternal(searchQuery: String): Int {
         return try {
             val cursor = resolver.query(NOTES_URI, arrayOf("_id"), searchQuery, null, null)
             cursor?.use { it.count } ?: 0
@@ -210,89 +245,93 @@ class AnkiDroidHelper(private val context: Context) {
         excludeNoteId: Long?,
         decks: List<DeckInfo>
     ): CardInfo? {
-        try {
-            val selection = if (deckId != null) "deckID=$deckId, limit=10" else "limit=10"
+        return synchronized(ankiIpcLock) {
+            try {
+                val selection = if (deckId != null) "deckID=$deckId, limit=10" else "limit=10"
 
-            val cursor = resolver.query(
-                SCHEDULE_URI,
-                null,
-                selection,
-                null,
-                null
-            )
+                val cursor = resolver.query(
+                    SCHEDULE_URI,
+                    null,
+                    selection,
+                    null,
+                    null
+                )
 
-            cursor?.use { cur ->
-                while (cur.moveToNext()) {
-                    val noteId = cur.getLong(
-                        cur.getColumnIndexOrThrow(COL_NOTE_ID)
-                    )
-                    if (excludeNoteId != null && noteId == excludeNoteId && cur.count > 1) {
-                        continue
-                    }
-                    val cardOrd = cur.getInt(
-                        cur.getColumnIndexOrThrow(COL_CARD_ORD)
-                    )
-                    val buttonCount = cur.getInt(
-                        cur.getColumnIndexOrThrow(COL_BUTTON_COUNT)
-                    )
-                    val nextTimes = cur.getString(
-                        cur.getColumnIndexOrThrow(COL_NEXT_REVIEW_TIMES)
-                    ) ?: ""
-
-                    val deckName = if (deckId != null) {
-                        decks.find { it.id == deckId }?.name ?: getDeckNameForNote(noteId)
-                    } else {
-                        getDeckNameForNote(noteId)
-                    }
-
-                    val typeCol = cur.getColumnIndex("type").takeIf { it >= 0 }
-                        ?: cur.getColumnIndex("card_type").takeIf { it >= 0 }
-                    val queueCol = cur.getColumnIndex("queue").takeIf { it >= 0 }
-
-                    val cardType = if (typeCol != null) {
-                        val rawType = cur.getInt(typeCol)
-                        when (rawType) {
-                            0 -> 0
-                            1, 3 -> 1
-                            2 -> 2
-                            else -> 0
+                cursor?.use { cur ->
+                    while (cur.moveToNext()) {
+                        val noteId = cur.getLong(
+                            cur.getColumnIndexOrThrow(COL_NOTE_ID)
+                        )
+                        if (excludeNoteId != null && noteId == excludeNoteId && cur.count > 1) {
+                            continue
                         }
-                    } else if (queueCol != null) {
-                        val rawQueue = cur.getInt(queueCol)
-                        when (rawQueue) {
-                            0 -> 0
-                            1, 3 -> 1
-                            2 -> 2
-                            else -> 0
+                        val cardOrd = cur.getInt(
+                            cur.getColumnIndexOrThrow(COL_CARD_ORD)
+                        )
+                        val buttonCount = cur.getInt(
+                            cur.getColumnIndexOrThrow(COL_BUTTON_COUNT)
+                        )
+                        val nextTimes = cur.getString(
+                            cur.getColumnIndexOrThrow(COL_NEXT_REVIEW_TIMES)
+                        ) ?: ""
+
+                        val deckName = if (deckId != null) {
+                            decks.find { it.id == deckId }?.name ?: (decks.firstOrNull()?.name ?: "")
+                        } else {
+                            decks.firstOrNull()?.name ?: ""
                         }
-                    } else {
-                        when {
-                            getNotesDueCount("nid:$noteId is:learn") > 0 -> 1
-                            getNotesDueCount("nid:$noteId is:new") > 0 -> 0
-                            else -> 2
+
+                        val typeCol = cur.getColumnIndex("type").takeIf { it >= 0 }
+                            ?: cur.getColumnIndex("card_type").takeIf { it >= 0 }
+                        val queueCol = cur.getColumnIndex("queue").takeIf { it >= 0 }
+
+                        val cardType = if (typeCol != null) {
+                            val rawType = cur.getInt(typeCol)
+                            when (rawType) {
+                                0 -> 0
+                                1, 3 -> 1
+                                2 -> 2
+                                else -> 0
+                            }
+                        } else if (queueCol != null) {
+                            val rawQueue = cur.getInt(queueCol)
+                            when (rawQueue) {
+                                0 -> 0
+                                1, 3 -> 1
+                                2 -> 2
+                                else -> 0
+                            }
+                        } else {
+                            0
                         }
+
+                        val parsed = getCardContentInternal(noteId)
+
+                        return@synchronized parsed.copy(
+                            noteId = noteId,
+                            cardOrd = cardOrd,
+                            deckName = deckName.ifEmpty { decks.firstOrNull()?.name ?: "" },
+                            buttonCount = buttonCount,
+                            nextReviewTimes = nextTimes,
+                            cardType = cardType
+                        )
                     }
-
-                    val parsed = getCardContent(noteId)
-
-                    return parsed.copy(
-                        noteId = noteId,
-                        cardOrd = cardOrd,
-                        deckName = deckName.ifEmpty { decks.firstOrNull()?.name ?: "" },
-                        buttonCount = buttonCount,
-                        nextReviewTimes = nextTimes,
-                        cardType = cardType
-                    )
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
 
-        return null
+            null
+        }
     }
 
     fun getCardContent(noteId: Long): CardInfo {
+        return synchronized(ankiIpcLock) {
+            getCardContentInternal(noteId)
+        }
+    }
+
+    private fun getCardContentInternal(noteId: Long): CardInfo {
         try {
             val noteUri = Uri.withAppendedPath(NOTES_URI, noteId.toString())
             resolver.query(
@@ -492,35 +531,55 @@ class AnkiDroidHelper(private val context: Context) {
     }
 
     fun answerCard(noteId: Long, cardOrd: Int, ease: Int, timeTaken: Long = 5000L): Boolean {
-        return try {
-            val values = ContentValues().apply {
-                put(COL_NOTE_ID, noteId)
-                put(COL_CARD_ORD, cardOrd)
-                put(COL_EASE, ease)
-                put(COL_TIME_TAKEN, timeTaken)
+        invalidateDeckCache()
+        return synchronized(ankiIpcLock) {
+            try {
+                val values = ContentValues().apply {
+                    put(COL_NOTE_ID, noteId)
+                    put(COL_CARD_ORD, cardOrd)
+                    put(COL_EASE, ease)
+                    put(COL_TIME_TAKEN, timeTaken)
+                }
+                resolver.update(SCHEDULE_URI, values, null, null) > 0
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
             }
-            resolver.update(SCHEDULE_URI, values, null, null) > 0
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
         }
     }
 
     fun suspendCard(noteId: Long, cardOrd: Int): Boolean {
-        return try {
-            val values = ContentValues().apply {
-                put(COL_NOTE_ID, noteId)
-                put(COL_CARD_ORD, cardOrd)
-                put(COL_SUSPEND, 1)
+        invalidateDeckCache()
+        return synchronized(ankiIpcLock) {
+            try {
+                val values = ContentValues().apply {
+                    put(COL_NOTE_ID, noteId)
+                    put(COL_CARD_ORD, cardOrd)
+                    put(COL_SUSPEND, 1)
+                }
+                resolver.update(SCHEDULE_URI, values, null, null) > 0
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
             }
-            resolver.update(SCHEDULE_URI, values, null, null) > 0
-        } catch (e: Exception) {
-            e.printStackTrace()
-            false
         }
     }
 
     companion object {
+        private val ankiIpcLock = Any()
+
+        @Volatile
+        private var cachedDeckList: List<DeckInfo>? = null
+        private var cachedDeckListTimestamp: Long = 0L
+        private const val DECK_CACHE_TTL_MS = 20_000L // 20-second cache to prevent IPC storms
+
+        fun invalidateDeckCache() {
+            synchronized(ankiIpcLock) {
+                cachedDeckList = null
+                cachedDeckListTimestamp = 0L
+            }
+        }
+
         const val ANKI_PACKAGE = "com.ichi2.anki"
         val ANKI_PACKAGES = listOf(
             "com.ichi2.anki",

@@ -162,6 +162,9 @@ import com.saku.notification.LockScreenCardService
 import com.saku.util.MediaArtworkGenerator
 import com.saku.widget.SakuWidgetProvider
 import com.saku.worker.DueCountWorker
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -886,9 +889,17 @@ class MainActivity : ComponentActivity() {
         var updateInterval by remember { mutableIntStateOf(prefs.updateIntervalMinutes) }
         var snoozeDuration by remember { mutableIntStateOf(prefs.snoozeDurationMinutes) }
 
-        var activeCard by remember { mutableStateOf(CardSessionManager.getOrFetchCard(this@MainActivity)) }
+        var activeCard by remember { mutableStateOf(CardSessionManager.currentCard) }
         var isRevealed by remember { mutableStateOf(CardSessionManager.isRevealed) }
         var stats by remember { mutableStateOf(CardSessionManager.currentStats) }
+
+        LaunchedEffect(Unit) {
+            if (CardSessionManager.currentCard == null) {
+                withContext(Dispatchers.IO) {
+                    CardSessionManager.refresh(this@MainActivity)
+                }
+            }
+        }
 
         DisposableEffect(Unit) {
             val listener = {
@@ -934,12 +945,20 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(selectedDecksList) {
             withContext(Dispatchers.IO) {
-                for (deck in selectedDecksList) {
-                    if (deck.id > 0) {
-                        val card = ankiHelper.getNextDueCard(setOf(deck.id))
-                        withContext(Dispatchers.Main) {
-                            deckCardsCache[deck.id] = card
-                        }
+                val validDeckIds = selectedDecksList.map { it.id }.toSet()
+                withContext(Dispatchers.Main) {
+                    val toRemove = deckCardsCache.keys.filter { it !in validDeckIds }
+                    toRemove.forEach {
+                        deckCardsCache.remove(it)
+                        revealedDeckMap.remove(it)
+                    }
+                }
+                val centerDeck = selectedDecksList.find { it.id == currentCenteredDeckId } ?: selectedDecksList.firstOrNull()
+                if (centerDeck != null && centerDeck.id > 0 && !deckCardsCache.containsKey(centerDeck.id)) {
+                    val card = ankiHelper.getNextDueCard(setOf(centerDeck.id))
+                    withContext(Dispatchers.Main) {
+                        deckCardsCache[centerDeck.id] = card
+                        syncCardSession(card)
                     }
                 }
             }
@@ -1098,54 +1117,22 @@ class MainActivity : ComponentActivity() {
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isShootingStarsEnabledState) SakuColors.VibrantMatchaContainer else SakuColors.Surface,
-                                border = BorderStroke(1.dp, if (isShootingStarsEnabledState) SakuColors.VibrantMatchaBorder else SakuColors.BorderSubtle),
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Icon(
-                                        imageVector = Icons.Filled.AutoAwesome,
-                                        contentDescription = null,
-                                        tint = if (isShootingStarsEnabledState) SakuColors.VibrantMatcha else SakuColors.TextSecondary,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                }
-                            }
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                tint = if (isShootingStarsEnabledState) SakuColors.SagePrimary else SakuColors.TextSecondary,
+                                modifier = Modifier.size(19.dp)
+                            )
 
                             Spacer(modifier = Modifier.width(10.dp))
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "Shooting Stars",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 13.sp,
-                                        color = SakuColors.TextPrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = if (isShootingStarsEnabledState) SakuColors.SageContainer else SakuColors.Surface,
-                                        border = BorderStroke(1.dp, if (isShootingStarsEnabledState) SakuColors.SageContainerBorder else SakuColors.BorderSubtle)
-                                    ) {
-                                        Text(
-                                            text = if (isShootingStarsEnabledState) "On" else "Off",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = if (isShootingStarsEnabledState) SakuColors.SageLight else SakuColors.TextSecondary,
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "",
-                                    fontSize = 11.sp,
-                                    color = SakuColors.TextSecondary
-                                )
-                            }
+                            Text(
+                                text = "Shooting Stars",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = SakuColors.TextPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
 
                             Switch(
                                 checked = isShootingStarsEnabledState,
@@ -1155,7 +1142,7 @@ class MainActivity : ComponentActivity() {
                                 },
                                 colors = SwitchDefaults.colors(
                                     checkedThumbColor = Color.White,
-                                    checkedTrackColor = SakuColors.VibrantMatcha,
+                                    checkedTrackColor = SakuColors.SagePrimary,
                                     uncheckedThumbColor = SakuColors.TextSecondary,
                                     uncheckedTrackColor = SakuColors.Surface
                                 )
@@ -1182,16 +1169,15 @@ class MainActivity : ComponentActivity() {
                     }
                 },
                 onRefresh = {
-                    CardSessionManager.refresh(this@MainActivity)
                     deckCardsCache.clear()
                     revealedDeckMap.clear()
-                    coroutineScope.launch(Dispatchers.IO) {
-                        for (deck in selectedDecksList) {
-                            if (deck.id > 0) {
-                                val card = ankiHelper.getNextDueCard(setOf(deck.id))
-                                withContext(Dispatchers.Main) {
-                                    deckCardsCache[deck.id] = card
-                                }
+                    CardSessionManager.refresh(this@MainActivity)
+                    if (currentCenteredDeckId > 0) {
+                        coroutineScope.launch(Dispatchers.IO) {
+                            val card = ankiHelper.getNextDueCard(setOf(currentCenteredDeckId))
+                            withContext(Dispatchers.Main) {
+                                deckCardsCache[currentCenteredDeckId] = card
+                                syncCardSession(card)
                             }
                         }
                     }
@@ -1325,14 +1311,6 @@ class MainActivity : ComponentActivity() {
                     val dIdLong = deckId.toLongOrNull()
                     if (checked) {
                         selectedDeckIds.add(deckId)
-                        if (dIdLong != null && dIdLong > 0) {
-                            coroutineScope.launch(Dispatchers.IO) {
-                                val card = ankiHelper.getNextDueCard(setOf(dIdLong))
-                                withContext(Dispatchers.Main) {
-                                    deckCardsCache[dIdLong] = card
-                                }
-                            }
-                        }
                     } else {
                         selectedDeckIds.remove(deckId)
                         if (dIdLong != null) {
@@ -1456,7 +1434,9 @@ class MainActivity : ComponentActivity() {
 
         LaunchedEffect(pagerState, decksKey) {
             snapshotFlow { pagerState.currentPage }
-                .collect { page ->
+                .distinctUntilChanged()
+                .collectLatest { page ->
+                    delay(120) // Debounce rapid swiping across pages
                     val actualIndex = page % actualPageCount
                     val deck = decks.getOrNull(actualIndex)
                     if (deck != null) {
@@ -1471,18 +1451,6 @@ class MainActivity : ComponentActivity() {
             deckCardsCache[currentCenterDeck.id] ?: if (currentCenterIndex == 0) activeCard else null
         } else null
         val isCenterRevealed = currentCenterDeck?.let { revealedDeckMap[it.id] } ?: false
-
-        LaunchedEffect(currentCenterDeck?.id) {
-            val dId = currentCenterDeck?.id ?: return@LaunchedEffect
-            if (dId > 0 && !deckCardsCache.containsKey(dId)) {
-                withContext(Dispatchers.IO) {
-                    val card = ankiHelper.getNextDueCard(setOf(dId))
-                    withContext(Dispatchers.Main) {
-                        deckCardsCache[dId] = card
-                    }
-                }
-            }
-        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),

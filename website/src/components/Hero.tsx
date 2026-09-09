@@ -63,13 +63,17 @@ export const Hero: React.FC<HeroProps> = ({ onOpenQrModal }) => {
           <div className="lg:col-span-5 flex justify-center">
             <div className="relative w-full max-w-[320px] rounded-[36px] bg-[#1F222A] p-2.5 border-2 border-[#2F3440] shadow-2xl overflow-hidden">
               <video
-                src="/screenshots/demo.mp4"
                 autoPlay
                 loop
                 muted
                 playsInline
+                preload="auto"
+                poster="/screenshots/demo-poster.webp"
                 className="w-full h-auto rounded-[28px] object-cover block select-none pointer-events-none"
-              />
+              >
+                <source src="/screenshots/demo.webm" type="video/webm" />
+                <source src="/screenshots/demo.mp4" type="video/mp4" />
+              </video>
             </div>
           </div>
         </div>

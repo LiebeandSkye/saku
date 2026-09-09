@@ -59,14 +59,16 @@ export const Hero: React.FC<HeroProps> = ({ onOpenQrModal }) => {
             </p>
           </div>
 
-          {/* Right Column: Authentic App Screenshot */}
+          {/* Right Column: Authentic App Demo Video */}
           <div className="lg:col-span-5 flex justify-center">
             <div className="relative w-full max-w-[320px] rounded-[36px] bg-[#1F222A] p-2.5 border-2 border-[#2F3440] shadow-2xl overflow-hidden">
-              <img
-                src="/screenshots/cards_tab.png"
-                alt="Saku App Lock Screen & Cards Interface"
-                className="w-full h-auto rounded-[28px] object-cover block select-none"
-                loading="eager"
+              <video
+                src="/screenshots/demo.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-auto rounded-[28px] object-cover block select-none pointer-events-none"
               />
             </div>
           </div>

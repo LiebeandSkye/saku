@@ -1448,9 +1448,25 @@ class MainActivity : ComponentActivity() {
         val currentCenterIndex = pagerState.currentPage % actualPageCount
         val currentCenterDeck = decks.getOrNull(currentCenterIndex)
         val centerCard = if (currentCenterDeck != null) {
-            deckCardsCache[currentCenterDeck.id] ?: if (currentCenterIndex == 0) activeCard else null
+            if (deckCardsCache.containsKey(currentCenterDeck.id)) {
+                deckCardsCache[currentCenterDeck.id]
+            } else {
+                if (currentCenterIndex == 0) activeCard else null
+            }
         } else null
         val isCenterRevealed = currentCenterDeck?.let { revealedDeckMap[it.id] } ?: false
+        var isGrading by remember { mutableStateOf(false) }
+
+        LaunchedEffect(centerCard) {
+            isGrading = false
+        }
+
+        LaunchedEffect(isGrading) {
+            if (isGrading) {
+                delay(1200)
+                isGrading = false
+            }
+        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -1531,7 +1547,11 @@ class MainActivity : ComponentActivity() {
                     ) { page ->
                         val actualIndex = page % actualPageCount
                         val deck = decks[actualIndex]
-                        val cardForDeck = deckCardsCache[deck.id] ?: if (actualIndex == 0) activeCard else null
+                        val cardForDeck = if (deckCardsCache.containsKey(deck.id)) {
+                            deckCardsCache[deck.id]
+                        } else {
+                            if (actualIndex == 0) activeCard else null
+                        }
                         val isCenterPage = pagerState.currentPage == page
                         val isDeckRevealed = (revealedDeckMap[deck.id] == true) && isCenterPage
 
@@ -1572,7 +1592,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Button(
                         onClick = {
-                            if (currentCenterDeck != null && centerCard != null) {
+                            if (currentCenterDeck != null && centerCard != null && !isGrading) {
+                                isGrading = true
                                 onAgain(currentCenterDeck.id, centerCard)
                             }
                         },
@@ -1587,7 +1608,7 @@ class MainActivity : ComponentActivity() {
                             disabledContentColor = Color.White.copy(alpha = 0.45f)
                         ),
                         contentPadding = PaddingValues(horizontal = 4.dp),
-                        enabled = centerCard != null
+                        enabled = centerCard != null && !isGrading
                     ) {
                         Text("Again", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
@@ -1620,7 +1641,8 @@ class MainActivity : ComponentActivity() {
                     }
                     Button(
                         onClick = {
-                            if (currentCenterDeck != null && centerCard != null) {
+                            if (currentCenterDeck != null && centerCard != null && !isGrading) {
+                                isGrading = true
                                 onGood(currentCenterDeck.id, centerCard)
                             }
                         },
@@ -1635,7 +1657,7 @@ class MainActivity : ComponentActivity() {
                             disabledContentColor = Color.White.copy(alpha = 0.45f)
                         ),
                         contentPadding = PaddingValues(horizontal = 4.dp),
-                        enabled = centerCard != null
+                        enabled = centerCard != null && !isGrading
                     ) {
                         Text("Good", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }

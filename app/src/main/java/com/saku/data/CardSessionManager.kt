@@ -107,18 +107,11 @@ object CardSessionManager {
                 ankiHelper.answerCard(card.noteId, card.cardOrd, ease, timeTaken)
                 val deckQueryIds = if (targetDeckId != null && targetDeckId > 0) setOf(targetDeckId) else selectedDecks
                 val nextDeckCard = ankiHelper.getNextDueCard(deckQueryIds, excludeNoteId = card.noteId)
-                val fallbackCard = if (nextDeckCard == null && targetDeckId != null && targetDeckId > 0) {
-                    ankiHelper.getNextDueCard(selectedDecks, excludeNoteId = card.noteId)
-                } else null
                 val freshStats = ankiHelper.getSelectedDeckStats(selectedDecks)
 
                 mainHandler.post {
                     if (currentCard?.noteId == card.noteId || specificCard == null) {
-                        currentCard = if (targetDeckId != null && targetDeckId > 0) {
-                            nextDeckCard ?: fallbackCard
-                        } else {
-                            nextDeckCard
-                        }
+                        currentCard = nextDeckCard
                     }
                     currentStats = freshStats
                     isRevealed = false

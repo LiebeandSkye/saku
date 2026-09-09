@@ -262,7 +262,7 @@ class AnkiDroidHelper(private val context: Context) {
                         val noteId = cur.getLong(
                             cur.getColumnIndexOrThrow(COL_NOTE_ID)
                         )
-                        if (excludeNoteId != null && noteId == excludeNoteId && cur.count > 1) {
+                        if (excludeNoteId != null && noteId == excludeNoteId) {
                             continue
                         }
                         val cardOrd = cur.getInt(

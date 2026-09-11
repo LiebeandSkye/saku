@@ -16,6 +16,7 @@ data class CardInfo(
     val question: String,
     val answer: String,
     val deckName: String,
+    val deckId: Long = 0L,
     val buttonCount: Int = 4,
     val nextReviewTimes: String = "",
     val kanji: String = "",

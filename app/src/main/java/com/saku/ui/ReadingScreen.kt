@@ -113,6 +113,8 @@ import com.saku.data.ReadingHistoryManager
 import com.saku.data.ReadingVocabularySummary
 import com.saku.reading.FishAudioService
 import com.saku.reading.GeminiStoryService
+import com.saku.reading.GenerationStatus
+import com.saku.reading.StoryGenerationManager
 import com.saku.data.StoryThemes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -177,9 +179,24 @@ fun ReadingScreen(
     var vocabFilterMode by remember { mutableStateOf("all") } // "all", "studied", "suspended"
 
     var currentStory by remember { mutableStateOf<GeneratedStory?>(null) }
-    var isGeneratingStory by remember { mutableStateOf(false) }
+    val isGeneratingStory = StoryGenerationManager.isGenerating
     var generationError by remember { mutableStateOf<String?>(null) }
     var showInternetConsentDialog by remember { mutableStateOf(false) }
+    var savedStories by remember { mutableStateOf(historyManager.getStories()) }
+
+    LaunchedEffect(StoryGenerationManager.latestStory) {
+        StoryGenerationManager.latestStory?.let { newStory ->
+            currentStory = newStory
+            savedStories = historyManager.getStories()
+        }
+    }
+
+    val generationStatus = StoryGenerationManager.status
+    LaunchedEffect(generationStatus) {
+        if (generationStatus is GenerationStatus.Error) {
+            generationError = generationStatus.message
+        }
+    }
 
     val userAnswers = remember { mutableStateMapOf<Int, Int>() }
 
@@ -198,7 +215,6 @@ fun ReadingScreen(
     // History Sheet
     val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showHistorySheet by remember { mutableStateOf(false) }
-    var savedStories by remember { mutableStateOf(historyManager.getStories()) }
 
     // Word Detail Sheet
     val wordDetailSheetState = rememberModalBottomSheetState()
@@ -221,10 +237,15 @@ fun ReadingScreen(
     LaunchedEffect(Unit) {
         val past = historyManager.getStories()
         savedStories = past
-        if (past.isNotEmpty() && currentStory == null) {
-            val lastId = prefs.lastReadStoryId
-            val found = if (lastId != null) past.find { it.id == lastId } else null
-            currentStory = found ?: past.first()
+        if (currentStory == null) {
+            val latest = StoryGenerationManager.latestStory
+            if (latest != null) {
+                currentStory = latest
+            } else if (past.isNotEmpty()) {
+                val lastId = prefs.lastReadStoryId
+                val found = if (lastId != null) past.find { it.id == lastId } else null
+                currentStory = found ?: past.first()
+            }
         }
     }
 
@@ -252,43 +273,40 @@ fun ReadingScreen(
     var holdProgress by remember { mutableFloatStateOf(0f) }
 
     fun executeGeneration() {
-        coroutineScope.launch {
-            isGeneratingStory = true
-            generationError = null
+        generationError = null
 
-            val (targetTheme, targetTopic) = if (isCustomThemeModeActive && !customStoryTheme.isNullOrBlank()) {
-                val chosenTheme = customStoryTheme!!
-                val chosenTopic = customStoryTopic ?: run {
-                    val topics = StoryThemes.CATEGORIES[chosenTheme] ?: emptyList()
-                    val eligible = topics.filter { it !in prefs.disabledStoryTopics }.ifEmpty { topics }
-                    if (eligible.isNotEmpty()) eligible.random() else "A memorable event"
-                }
-                Pair(chosenTheme, chosenTopic)
-            } else {
-                StoryThemes.getRandomThemeAndTopic(
-                    disabledThemes = prefs.disabledStoryThemes,
-                    disabledTopics = prefs.disabledStoryTopics
-                )
+        val (targetTheme, targetTopic) = if (isCustomThemeModeActive && !customStoryTheme.isNullOrBlank()) {
+            val chosenTheme = customStoryTheme!!
+            val chosenTopic = customStoryTopic ?: run {
+                val topics = StoryThemes.CATEGORIES[chosenTheme] ?: emptyList()
+                val eligible = topics.filter { it !in prefs.disabledStoryTopics }.ifEmpty { topics }
+                if (eligible.isNotEmpty()) eligible.random() else "A memorable event"
             }
-
-            val words = if (connectStudiedWords) (vocabSummary?.words ?: emptyList()) else emptyList()
-            val result = storyService.generateStory(
-                apiKey = apiKey,
-                jlptLevel = selectedJlpt,
-                vocabularyList = words,
-                preferredModel = selectedModel,
-                theme = targetTheme,
-                topic = targetTopic
+            Pair(chosenTheme, chosenTopic)
+        } else {
+            StoryThemes.getRandomThemeAndTopic(
+                disabledThemes = prefs.disabledStoryThemes,
+                disabledTopics = prefs.disabledStoryTopics
             )
-            result.onSuccess { story ->
-                currentStory = story
-                historyManager.saveStory(story)
-                savedStories = historyManager.getStories()
-            }.onFailure { err ->
-                generationError = err.message ?: "Failed to generate story"
-            }
-            isGeneratingStory = false
         }
+
+        val words = if (connectStudiedWords) (vocabSummary?.words ?: emptyList()) else emptyList()
+        StoryGenerationManager.startGeneration(
+            context = context,
+            apiKey = apiKey,
+            jlptLevel = selectedJlpt,
+            vocabularyList = words,
+            preferredModel = selectedModel,
+            theme = targetTheme,
+            topic = targetTopic,
+            onSuccess = { story ->
+                currentStory = story
+                savedStories = historyManager.getStories()
+            },
+            onError = { err ->
+                generationError = err
+            }
+        )
     }
 
     Column(

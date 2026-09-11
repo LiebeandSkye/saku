@@ -17,6 +17,36 @@ class AnkiDroidHelper(private val context: Context) {
 
     private val resolver: ContentResolver get() = context.contentResolver
 
+    val authority: String
+        get() = "${getInstalledPackage()}.flashcards"
+
+    val scheduleUri: Uri
+        get() = Uri.parse("content://$authority/schedule")
+
+    val selectedDeckUri: Uri
+        get() = Uri.parse("content://$authority/selected_deck")
+
+    val decksUri: Uri
+        get() = Uri.parse("content://$authority/decks")
+
+    val notesUri: Uri
+        get() = Uri.parse("content://$authority/notes")
+
+    fun selectDeck(deckId: Long): Boolean {
+        if (deckId <= 0) return false
+        return synchronized(ankiIpcLock) {
+            try {
+                val values = ContentValues().apply {
+                    put(COL_DECK_ID, deckId)
+                }
+                resolver.update(selectedDeckUri, values, null, null) > 0
+            } catch (e: Exception) {
+                e.printStackTrace()
+                false
+            }
+        }
+    }
+
     fun isAnkiDroidInstalled(): Boolean {
         for (pkg in ANKI_PACKAGES) {
             try {
@@ -50,7 +80,7 @@ class AnkiDroidHelper(private val context: Context) {
         }
         return synchronized(ankiIpcLock) {
             try {
-                val cursor = resolver.query(DECKS_URI, null, null, null, null)
+                val cursor = resolver.query(decksUri, null, null, null, null)
                 cursor?.use {
                     true
                 } ?: false
@@ -79,7 +109,7 @@ class AnkiDroidHelper(private val context: Context) {
             }
 
             val decks = mutableListOf<DeckInfo>()
-            val uris = listOf(DECKS_URI, Uri.parse("content://$AUTHORITY/decks"))
+            val uris = listOf(decksUri, Uri.parse("content://$authority/decks/"))
 
             for (uri in uris) {
                 try {
@@ -218,7 +248,7 @@ class AnkiDroidHelper(private val context: Context) {
 
     private fun getNotesDueCountInternal(searchQuery: String): Int {
         return try {
-            val cursor = resolver.query(NOTES_URI, arrayOf("_id"), searchQuery, null, null)
+            val cursor = resolver.query(notesUri, arrayOf("_id"), searchQuery, null, null)
             cursor?.use { it.count } ?: 0
         } catch (e: Exception) {
             0
@@ -247,15 +277,34 @@ class AnkiDroidHelper(private val context: Context) {
     ): CardInfo? {
         return synchronized(ankiIpcLock) {
             try {
-                val selection = if (deckId != null) "deckID=$deckId, limit=10" else "limit=10"
+                val hasSpecificDeck = deckId != null && deckId > 0
+                val (selection, selectionArgs) = if (hasSpecificDeck) {
+                    Pair("limit=?, deckID=?", arrayOf("10", deckId.toString()))
+                } else {
+                    Pair("limit=?", arrayOf("10"))
+                }
 
-                val cursor = resolver.query(
-                    SCHEDULE_URI,
-                    null,
-                    selection,
-                    null,
+                var cursor = try {
+                    resolver.query(
+                        scheduleUri,
+                        null,
+                        selection,
+                        selectionArgs,
+                        null
+                    )
+                } catch (e: Exception) {
                     null
-                )
+                }
+
+                // Fallback for legacy AnkiDroid builds that expect inlined selection string
+                if (cursor == null) {
+                    val rawSelection = if (hasSpecificDeck) "deckID=$deckId, limit=10" else "limit=10"
+                    cursor = try {
+                        resolver.query(scheduleUri, null, rawSelection, null, null)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
 
                 cursor?.use { cur ->
                     while (cur.moveToNext()) {
@@ -275,11 +324,16 @@ class AnkiDroidHelper(private val context: Context) {
                             cur.getColumnIndexOrThrow(COL_NEXT_REVIEW_TIMES)
                         ) ?: ""
 
-                        val deckName = if (deckId != null) {
-                            decks.find { it.id == deckId }?.name ?: (decks.firstOrNull()?.name ?: "")
+                        val cursorDeckId = cur.getColumnIndex(COL_DECK_ID).takeIf { it >= 0 }?.let { cur.getLong(it) }
+                            ?: cur.getColumnIndex("did").takeIf { it >= 0 }?.let { cur.getLong(it) }
+                        val resolvedDeckId = if (deckId != null && deckId > 0) {
+                            deckId
                         } else {
-                            decks.firstOrNull()?.name ?: ""
+                            cursorDeckId?.takeIf { it > 0 } ?: (decks.firstOrNull()?.id ?: 0L)
                         }
+                        val deckName = decks.find { it.id == resolvedDeckId }?.name
+                            ?: (if (deckId != null && deckId > 0) decks.find { it.id == deckId }?.name else null)
+                            ?: (decks.firstOrNull()?.name ?: "")
 
                         val typeCol = cur.getColumnIndex("type").takeIf { it >= 0 }
                             ?: cur.getColumnIndex("card_type").takeIf { it >= 0 }
@@ -310,6 +364,7 @@ class AnkiDroidHelper(private val context: Context) {
                         return@synchronized parsed.copy(
                             noteId = noteId,
                             cardOrd = cardOrd,
+                            deckId = resolvedDeckId,
                             deckName = deckName.ifEmpty { decks.firstOrNull()?.name ?: "" },
                             buttonCount = buttonCount,
                             nextReviewTimes = nextTimes,
@@ -333,7 +388,7 @@ class AnkiDroidHelper(private val context: Context) {
 
     private fun getCardContentInternal(noteId: Long): CardInfo {
         try {
-            val noteUri = Uri.withAppendedPath(NOTES_URI, noteId.toString())
+            val noteUri = Uri.withAppendedPath(notesUri, noteId.toString())
             resolver.query(
                 noteUri,
                 null,
@@ -453,35 +508,56 @@ class AnkiDroidHelper(private val context: Context) {
         )
     }
 
-    fun getCardImageBitmap(imageFileName: String): Bitmap? {
+    fun getCardImageBitmap(imageFileName: String, maxDimension: Int = 600): Bitmap? {
         if (imageFileName.isBlank()) return null
         val cleanName = imageFileName.trim()
 
         try {
-            val mediaUri = Uri.parse("content://$AUTHORITY/media/" + Uri.encode(cleanName))
+            val mediaUri = Uri.parse("content://$authority/media/" + Uri.encode(cleanName))
+            val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             resolver.openInputStream(mediaUri)?.use { stream ->
-                val options = BitmapFactory.Options().apply {
-                    inSampleSize = 2
+                BitmapFactory.decodeStream(stream, null, boundsOptions)
+            }
+            if (boundsOptions.outWidth > 0 && boundsOptions.outHeight > 0) {
+                var sampleSize = 1
+                val maxEdge = maxOf(boundsOptions.outWidth, boundsOptions.outHeight)
+                while (maxEdge / sampleSize > maxDimension) {
+                    sampleSize *= 2
                 }
-                return BitmapFactory.decodeStream(stream, null, options)
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize.coerceAtLeast(1)
+                }
+                resolver.openInputStream(mediaUri)?.use { stream ->
+                    return BitmapFactory.decodeStream(stream, null, decodeOptions)
+                }
             }
         } catch (e: Exception) {
         }
 
+        val installedPkg = getInstalledPackage()
         val possibleFolders = listOf(
-            File("/storage/emulated/0/Android/data/com.ichi2.anki/files/AnkiDroid/collection.media"),
+            File("/storage/emulated/0/Android/data/$installedPkg/files/AnkiDroid/collection.media"),
             File("/storage/emulated/0/AnkiDroid/collection.media"),
-            File(context.filesDir.parentFile?.parentFile, "com.ichi2.anki/files/AnkiDroid/collection.media")
+            File(context.filesDir.parentFile?.parentFile, "$installedPkg/files/AnkiDroid/collection.media")
         )
 
         for (folder in possibleFolders) {
             val file = File(folder, cleanName)
             if (file.exists()) {
                 try {
-                    val options = BitmapFactory.Options().apply {
-                        inSampleSize = 2
+                    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, boundsOptions)
+                    if (boundsOptions.outWidth > 0 && boundsOptions.outHeight > 0) {
+                        var sampleSize = 1
+                        val maxEdge = maxOf(boundsOptions.outWidth, boundsOptions.outHeight)
+                        while (maxEdge / sampleSize > maxDimension) {
+                            sampleSize *= 2
+                        }
+                        val decodeOptions = BitmapFactory.Options().apply {
+                            inSampleSize = sampleSize.coerceAtLeast(1)
+                        }
+                        return BitmapFactory.decodeFile(file.absolutePath, decodeOptions)
                     }
-                    return BitmapFactory.decodeFile(file.absolutePath, options)
                 } catch (e: Exception) {
                 }
             }
@@ -530,17 +606,28 @@ class AnkiDroidHelper(private val context: Context) {
         return ""
     }
 
-    fun answerCard(noteId: Long, cardOrd: Int, ease: Int, timeTaken: Long = 5000L): Boolean {
+    fun answerCard(noteId: Long, cardOrd: Int, ease: Int, timeTaken: Long = 5000L, deckId: Long? = null): Boolean {
         invalidateDeckCache()
         return synchronized(ankiIpcLock) {
             try {
+                if (deckId != null && deckId > 0) {
+                    try {
+                        val selValues = ContentValues().apply {
+                            put(COL_DECK_ID, deckId)
+                        }
+                        resolver.update(selectedDeckUri, selValues, null, null)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
                 val values = ContentValues().apply {
                     put(COL_NOTE_ID, noteId)
                     put(COL_CARD_ORD, cardOrd)
                     put(COL_EASE, ease)
                     put(COL_TIME_TAKEN, timeTaken)
                 }
-                resolver.update(SCHEDULE_URI, values, null, null) > 0
+                val count = resolver.update(scheduleUri, values, null, null)
+                count > 0
             } catch (e: Exception) {
                 e.printStackTrace()
                 false
@@ -548,16 +635,27 @@ class AnkiDroidHelper(private val context: Context) {
         }
     }
 
-    fun suspendCard(noteId: Long, cardOrd: Int): Boolean {
+    fun suspendCard(noteId: Long, cardOrd: Int, deckId: Long? = null): Boolean {
         invalidateDeckCache()
         return synchronized(ankiIpcLock) {
             try {
+                if (deckId != null && deckId > 0) {
+                    try {
+                        val selValues = ContentValues().apply {
+                            put(COL_DECK_ID, deckId)
+                        }
+                        resolver.update(selectedDeckUri, selValues, null, null)
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
                 val values = ContentValues().apply {
                     put(COL_NOTE_ID, noteId)
                     put(COL_CARD_ORD, cardOrd)
                     put(COL_SUSPEND, 1)
                 }
-                resolver.update(SCHEDULE_URI, values, null, null) > 0
+                val count = resolver.update(scheduleUri, values, null, null)
+                count > 0
             } catch (e: Exception) {
                 e.printStackTrace()
                 false
@@ -592,6 +690,7 @@ class AnkiDroidHelper(private val context: Context) {
 
         val DECKS_URI: Uri = Uri.parse("content://$AUTHORITY/decks/")
         val SCHEDULE_URI: Uri = Uri.parse("content://$AUTHORITY/schedule/")
+        val SELECTED_DECK_URI: Uri = Uri.parse("content://$AUTHORITY/selected_deck")
         val NOTES_URI: Uri = Uri.parse("content://$AUTHORITY/notes")
 
         private const val COL_DECK_NAME = "deck_name"

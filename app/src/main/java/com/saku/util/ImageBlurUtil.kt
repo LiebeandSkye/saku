@@ -141,9 +141,9 @@ object ImageBlurUtil {
                 stackpointer = (stackpointer + 1) % div
                 sir = stack[stackpointer % div]
 
-                routsum -= sir[0]
-                goutsum -= sir[1]
-                boutsum -= sir[2]
+                routsum += sir[0]
+                goutsum += sir[1]
+                boutsum += sir[2]
 
                 rinsum -= sir[0]
                 ginsum -= sir[1]

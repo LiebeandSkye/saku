@@ -159,9 +159,12 @@ import com.saku.data.CardSessionManager
 import com.saku.data.DeckInfo
 import com.saku.data.PreferencesManager
 import com.saku.notification.LockScreenCardService
+import com.saku.reading.GenerationStatus
+import com.saku.reading.StoryGenerationManager
 import com.saku.util.MediaArtworkGenerator
 import com.saku.widget.SakuWidgetProvider
 import com.saku.worker.DueCountWorker
+import androidx.compose.foundation.layout.statusBarsPadding
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -441,7 +444,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun syncCardSession(card: CardInfo?) {
-        if (card == null) return
         CardSessionManager.setActiveCard(card, notify = false)
     }
 
@@ -537,6 +539,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        val storyGenStatus = StoryGenerationManager.status
+        LaunchedEffect(storyGenStatus) {
+            if (storyGenStatus is GenerationStatus.Success && pagerState.currentPage != 1) {
+                Toast.makeText(this@MainActivity, "New story is ready in Reading tab!", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -604,70 +613,94 @@ class MainActivity : ComponentActivity() {
             Scaffold(
                 containerColor = Color.Transparent,
                 topBar = {
-                    TopAppBar(
-                        title = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = "アンキ",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SakuColors.TextPrimary
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "SAKU",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = SakuColors.TextSecondary,
-                                    letterSpacing = 1.5.sp
-                                )
-                            }
-                        },
-                        actions = {
-                            // History (Book Icon) button: switches to Reading tab and opens reading history
-                            IconButton(onClick = {
-                                coroutineScope.launch {
-                                    pagerState.animateScrollToPage(1)
-                                }
-                                openHistoryTrigger++
-                            }) {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.MenuBook,
-                                    contentDescription = "Reading History",
-                                    tint = SakuColors.TextSecondary
-                                )
-                            }
-
-                            // Refresh button
-                            IconButton(onClick = {
-                                coroutineScope.launch {
-                                    isRefreshing = true
-                                    refreshData()
-                                    CardSessionManager.refresh(this@MainActivity)
-                                    isRefreshing = false
-                                }
-                            }) {
-                                if (isRefreshing) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = SakuColors.SagePrimary,
-                                        strokeWidth = 2.dp
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        TopAppBar(
+                            title = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "アンキ",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SakuColors.TextPrimary
                                     )
-                                } else {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "SAKU",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = SakuColors.TextSecondary,
+                                        letterSpacing = 1.5.sp
+                                    )
+                                }
+                            },
+                            actions = {
+                                // History (Book Icon) button: switches to Reading tab and opens reading history
+                                IconButton(onClick = {
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(1)
+                                    }
+                                    openHistoryTrigger++
+                                }) {
                                     Icon(
-                                        Icons.Filled.Refresh,
-                                        contentDescription = "Refresh",
+                                        Icons.AutoMirrored.Filled.MenuBook,
+                                        contentDescription = "Reading History",
                                         tint = SakuColors.TextSecondary
                                     )
                                 }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = Color.Transparent,
-                            titleContentColor = SakuColors.TextPrimary,
-                            actionIconContentColor = SakuColors.TextSecondary
+
+                                // Refresh button
+                                IconButton(onClick = {
+                                    coroutineScope.launch {
+                                        isRefreshing = true
+                                        refreshData()
+                                        CardSessionManager.refresh(this@MainActivity)
+                                        isRefreshing = false
+                                    }
+                                }) {
+                                    if (isRefreshing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            color = SakuColors.SagePrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Icon(
+                                            Icons.Filled.Refresh,
+                                            contentDescription = "Refresh",
+                                            tint = SakuColors.TextSecondary
+                                        )
+                                    }
+                                }
+                            },
+                            colors = TopAppBarDefaults.topAppBarColors(
+                                containerColor = Color.Transparent,
+                                titleContentColor = SakuColors.TextPrimary,
+                                actionIconContentColor = SakuColors.TextSecondary
+                            )
                         )
-                    )
+
+                        // Compact iOS Dynamic Island pill indicator at top center
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .matchParentSize()
+                                .statusBarsPadding(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            StoryGenerationPill(
+                                status = StoryGenerationManager.status,
+                                currentTheme = currentAppTheme,
+                                onPillClick = {
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(1)
+                                    }
+                                },
+                                onDismiss = {
+                                    StoryGenerationManager.dismissStatus()
+                                }
+                            )
+                        }
+                    }
                 }
             ) { padding ->
                 HorizontalPager(
@@ -868,6 +901,17 @@ class MainActivity : ComponentActivity() {
                                         maxLines = 1,
                                         softWrap = false
                                     )
+                                    if (index == 1 && StoryGenerationManager.isGenerating) {
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(
+                                                    color = if (isLight) SakuColors.SagePrimary else SakuColors.VibrantMatchaLight,
+                                                    shape = CircleShape
+                                                )
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -953,12 +997,15 @@ class MainActivity : ComponentActivity() {
                         revealedDeckMap.remove(it)
                     }
                 }
-                val centerDeck = selectedDecksList.find { it.id == currentCenteredDeckId } ?: selectedDecksList.firstOrNull()
-                if (centerDeck != null && centerDeck.id > 0 && !deckCardsCache.containsKey(centerDeck.id)) {
-                    val card = ankiHelper.getNextDueCard(setOf(centerDeck.id))
-                    withContext(Dispatchers.Main) {
-                        deckCardsCache[centerDeck.id] = card
-                        syncCardSession(card)
+                for (deck in selectedDecksList) {
+                    if (deck.id > 0 && !deckCardsCache.containsKey(deck.id)) {
+                        val card = ankiHelper.getNextDueCard(setOf(deck.id))
+                        withContext(Dispatchers.Main) {
+                            deckCardsCache[deck.id] = card
+                            if (deck.id == currentCenteredDeckId) {
+                                syncCardSession(card)
+                            }
+                        }
                     }
                 }
             }
@@ -1172,12 +1219,16 @@ class MainActivity : ComponentActivity() {
                     deckCardsCache.clear()
                     revealedDeckMap.clear()
                     CardSessionManager.refresh(this@MainActivity)
-                    if (currentCenteredDeckId > 0) {
-                        coroutineScope.launch(Dispatchers.IO) {
-                            val card = ankiHelper.getNextDueCard(setOf(currentCenteredDeckId))
-                            withContext(Dispatchers.Main) {
-                                deckCardsCache[currentCenteredDeckId] = card
-                                syncCardSession(card)
+                    coroutineScope.launch(Dispatchers.IO) {
+                        for (deck in selectedDecksList) {
+                            if (deck.id > 0) {
+                                val card = ankiHelper.getNextDueCard(setOf(deck.id))
+                                withContext(Dispatchers.Main) {
+                                    deckCardsCache[deck.id] = card
+                                    if (deck.id == currentCenteredDeckId) {
+                                        syncCardSession(card)
+                                    }
+                                }
                             }
                         }
                     }
@@ -1216,6 +1267,22 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 },
+                onSuspend = { deckId, oldCard ->
+                    syncCardSession(oldCard)
+                    revealedDeckMap[deckId] = false
+                    CardSessionManager.suspendCurrentCard(
+                        this@MainActivity,
+                        targetDeckId = deckId,
+                        specificCard = oldCard
+                    ) { nextCard ->
+                        runOnUiThread {
+                            deckCardsCache[deckId] = nextCard
+                            if (nextCard != null) {
+                                syncCardSession(nextCard)
+                            }
+                        }
+                    }
+                },
                 onOpenAnki = { deckId ->
                     val launchIntent = ankiHelper.getAnkiLaunchIntent(deckId)
                     startActivity(launchIntent)
@@ -1223,16 +1290,18 @@ class MainActivity : ComponentActivity() {
                 onDeckChanged = { deckId ->
                     currentCenteredDeckId = deckId
                     if (deckId > 0) {
-                        if (!deckCardsCache.containsKey(deckId)) {
+                        if (deckCardsCache.containsKey(deckId)) {
+                            syncCardSession(deckCardsCache[deckId])
+                        } else {
                             coroutineScope.launch(Dispatchers.IO) {
                                 val card = ankiHelper.getNextDueCard(setOf(deckId))
                                 withContext(Dispatchers.Main) {
                                     deckCardsCache[deckId] = card
-                                    syncCardSession(card)
+                                    if (deckId == currentCenteredDeckId) {
+                                        syncCardSession(card)
+                                    }
                                 }
                             }
-                        } else {
-                            syncCardSession(deckCardsCache[deckId])
                         }
                     }
                 }
@@ -1410,9 +1479,41 @@ class MainActivity : ComponentActivity() {
         onRefresh: () -> Unit,
         onAgain: (Long, CardInfo) -> Unit,
         onGood: (Long, CardInfo) -> Unit,
+        onSuspend: (Long, CardInfo) -> Unit,
         onOpenAnki: (Long?) -> Unit,
         onDeckChanged: (Long) -> Unit
     ) {
+        if (decks.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+                border = BorderStroke(1.dp, SakuColors.Border)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "No decks available",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SakuColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Select decks below or sync with AnkiDroid to preview cards.",
+                        fontSize = 12.5.sp,
+                        color = SakuColors.TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+            return
+        }
+
         val actualPageCount = decks.size.coerceAtLeast(1)
         val virtualPageCount = actualPageCount * 10000
         val initialPage = (virtualPageCount / 2) - ((virtualPageCount / 2) % actualPageCount)
@@ -1546,7 +1647,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth()
                     ) { page ->
                         val actualIndex = page % actualPageCount
-                        val deck = decks[actualIndex]
+                        val deck = decks.getOrNull(actualIndex) ?: return@HorizontalPager
                         val cardForDeck = if (deckCardsCache.containsKey(deck.id)) {
                             deckCardsCache[deck.id]
                         } else {
@@ -1677,6 +1778,50 @@ class MainActivity : ComponentActivity() {
                         contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
                         Text("Anki", fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                    }
+                }
+
+                if (isCenterRevealed && centerCard != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                if (!isGrading) {
+                                    isGrading = true
+                                    currentCenterDeck?.let { onSuspend(it.id, centerCard) }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = SakuColors.SurfaceElevated,
+                                contentColor = SakuColors.AccentRose
+                            ),
+                            border = BorderStroke(1.dp, SakuColors.AccentRose.copy(alpha = 0.4f)),
+                            contentPadding = PaddingValues(horizontal = 12.dp),
+                            enabled = !isGrading
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Suspend card",
+                                tint = SakuColors.AccentRose,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Suspend Card",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SakuColors.AccentRose
+                            )
+                        }
                     }
                 }
             }

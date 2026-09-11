@@ -4,7 +4,7 @@
 ### Minimal Spaced Repetition Japanese Flashcard Widget for Android
 
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?style=flat&logo=android&logoColor=white)](https://android.com)
-[![Latest Release](https://img.shields.io/badge/Release-v2.5.0-FF69B4?style=flat&logo=github)](https://github.com/LiebeandSkye/saku/releases/tag/v2.5.0)
+[![Latest Release](https://img.shields.io/badge/Release-v2.6.0-FF69B4?style=flat&logo=github)](https://github.com/LiebeandSkye/saku/releases/tag/v2.6.0)
 [![APK Size](https://img.shields.io/badge/APK%20Size-~20%20MB-52C47C?style=flat&logo=android)](https://github.com/LiebeandSkye/saku/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%20%26%20Glance-4285F4?style=flat&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
@@ -47,12 +47,13 @@
 
 ---
 
-## ✨ What's New in v2.5.0
+## ✨ What's New in v2.6.0
 
-* **🔗 Flexible Studied Words Toggle in AI Reader**: Switch between restricting reading passages to your studied Anki flashcard vocabulary or generating unconstrained, creative Japanese graded stories for your target JLPT level.
-* **🎯 Deck-Targeted Anki Launch**: Opening AnkiDroid from deck cards or the reviewer opens directly into the targeted deck.
-* **🌐 Refreshed Web Showcase Portal**: Cleaned up and redesigned modern landing portal with responsive light/dark themes and direct APK download.
-* **⚡ Review Session Improvements**: Enhanced card session management for smoother card rating and deck transitions.
+* **🔄 Asynchronous Background Story Generation**: Generate stories seamlessly in the background with a floating interactive progress pill and notification integration.
+* **🔒 Lock Screen & Notification System Overhaul**: Redesigned lock screen card and notification controls with immediate rating updates, custom media artwork rendering, and ultra-reliable foreground lifecycle handling.
+* **🎯 Comprehensive Deck Sync & State Management**: Real-time cross-surface syncing across Home Screen widget, Lock Screen notification, and main app deck carousel.
+* **⚡ Field Parsing & Furigana Hardening**: Robust Japanese parser handling complex bracket notations, cloze tags, and deck HTML formatting.
+* **🎨 Story Themes & Curated Topics**: Choose tailored themes and custom topics for generated graded readers.
 
 ---
 
@@ -60,7 +61,7 @@
 
 ### Option 1: Official Showcase Website & Direct APK
 * Visit the dedicated [**Saku Web Portal**](website/) (or run `npm run dev` in `website/`) to preview features and download the APK directly.
-* Download **`Saku.apk`** (~20 MB) directly from the repository or from the [**GitHub Releases (v2.5.0)**](https://github.com/LiebeandSkye/saku/releases) page.
+* Download **`Saku.apk`** (~20 MB) directly from the repository or from the [**GitHub Releases (v2.6.0)**](https://github.com/LiebeandSkye/saku/releases) page.
 * Tap the downloaded file and select **Install** *(if prompted by Google Play Protect, tap "More details" $\rightarrow$ "Install anyway")*.
 
 ### Option 2: 5-Second First-Time Setup

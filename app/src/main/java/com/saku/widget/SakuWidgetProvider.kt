@@ -47,13 +47,22 @@ class SakuWidgetProvider : AppWidgetProvider() {
                 CardSessionManager.toggleReveal(context)
             }
             ACTION_WIDGET_AGAIN -> {
-                CardSessionManager.gradeCard(context, 1)
+                val pendingResult = goAsync()
+                CardSessionManager.gradeCard(context, 1) {
+                    pendingResult.finish()
+                }
             }
             ACTION_WIDGET_GOOD -> {
-                CardSessionManager.gradeCard(context, 3)
+                val pendingResult = goAsync()
+                CardSessionManager.gradeCard(context, 3) {
+                    pendingResult.finish()
+                }
             }
             ACTION_WIDGET_REFRESH -> {
-                CardSessionManager.refresh(context)
+                val pendingResult = goAsync()
+                CardSessionManager.refresh(context) {
+                    pendingResult.finish()
+                }
             }
         }
     }
@@ -89,7 +98,7 @@ class SakuWidgetProvider : AppWidgetProvider() {
                 val stats = CardSessionManager.currentStats
 
                 val imageBitmap = if (!card?.imageFileName.isNullOrBlank()) {
-                    ankiHelper.getCardImageBitmap(card!!.imageFileName)
+                    ankiHelper.getCardImageBitmap(card!!.imageFileName, maxDimension = 300)
                 } else {
                     null
                 }
@@ -109,8 +118,18 @@ class SakuWidgetProvider : AppWidgetProvider() {
                     else -> 0.75f
                 }
 
-                val targetW = (widthDp * density).toInt().coerceAtLeast(300)
-                val targetH = (heightDp * density).toInt().coerceAtLeast(300)
+                val maxDim = 480
+                val rawW = (widthDp * density).toInt().coerceAtLeast(280)
+                val rawH = (heightDp * density).toInt().coerceAtLeast(280)
+                val (targetW, targetH) = if (rawW > maxDim || rawH > maxDim) {
+                    if (rawW >= rawH) {
+                        maxDim to ((rawH.toFloat() / rawW) * maxDim).toInt().coerceAtLeast(200)
+                    } else {
+                        ((rawW.toFloat() / rawH) * maxDim).toInt().coerceAtLeast(200) to maxDim
+                    }
+                } else {
+                    rawW to rawH
+                }
 
                 val artwork = MediaArtworkGenerator.generateArtwork(
                     context = context,
@@ -166,7 +185,9 @@ class SakuWidgetProvider : AppWidgetProvider() {
                 )
                 rv.setOnClickPendingIntent(R.id.btn_widget_good, goodPending)
 
-                val ankiIntent = ankiHelper.getAnkiLaunchIntent()
+                val targetDeckId = card?.deckId?.takeIf { it > 0 }
+                    ?: com.saku.data.PreferencesManager(context).getSelectedDeckIdsAsLongs().let { if (it.size == 1) it.first() else null }
+                val ankiIntent = ankiHelper.getAnkiLaunchIntent(targetDeckId)
                 val ankiPending = PendingIntent.getActivity(
                     context,
                     304,

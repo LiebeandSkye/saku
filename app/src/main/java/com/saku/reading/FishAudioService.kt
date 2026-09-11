@@ -183,12 +183,14 @@ class FishAudioService(private val context: Context) {
                     onPlaybackStateCallback?.invoke(true)
                 }
                 setOnCompletionListener {
+                    val completion = onCompletionCallback
                     stopAudio()
-                    onCompletionCallback?.invoke()
+                    completion?.invoke()
                 }
                 setOnErrorListener { _, _, _ ->
+                    val completion = onCompletionCallback
                     stopAudio()
-                    onCompletionCallback?.invoke()
+                    completion?.invoke()
                     true
                 }
                 prepareAsync()
@@ -204,21 +206,26 @@ class FishAudioService(private val context: Context) {
      * Stops audio playback and releases the MediaPlayer.
      */
     fun stopAudio() {
-        try {
-            mediaPlayer?.let { mp ->
-                if (mp.isPlaying) {
-                    mp.stop()
+        val mp = mediaPlayer
+        mediaPlayer = null
+        mp?.let { player ->
+            try {
+                try {
+                    player.stop()
+                } catch (ignored: Exception) {
                 }
-                mp.reset()
-                mp.release()
+                player.reset()
+                player.release()
+            } catch (ignored: Exception) {
+                try {
+                    player.release()
+                } catch (e: Exception) {
+                }
             }
-        } catch (ignored: Exception) {
-        } finally {
-            mediaPlayer = null
-            onPlaybackStateCallback?.invoke(false)
-            onPlaybackStateCallback = null
-            onCompletionCallback = null
         }
+        onPlaybackStateCallback?.invoke(false)
+        onPlaybackStateCallback = null
+        onCompletionCallback = null
     }
 
     fun isPlaying(): Boolean {

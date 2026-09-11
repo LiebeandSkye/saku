@@ -23,6 +23,8 @@ class DueCountWorker(
         if (!prefs.isServiceEnabled) return Result.success()
         if (prefs.isSnoozed) return Result.success()
 
+        com.saku.anki.AnkiDroidHelper.invalidateDeckCache()
+        CardSessionManager.getOrFetchCard(applicationContext, forceRefresh = true)
         LockScreenCardService.updateNotification(applicationContext)
         SakuWidgetProvider.updateAllWidgets(applicationContext)
         return Result.success()

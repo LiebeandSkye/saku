@@ -553,7 +553,7 @@ object MediaArtworkGenerator {
         if (bitmapToDraw != null) {
             drawCroppedBitmapWithOverlay(canvas, bitmapToDraw, artworkAlpha, dimAlpha, dstRect)
             // Recycle temporary generated bitmaps to prevent memory leaks
-            if (bgType == "dark_blur" || bgType == "sunset" || bgType == "custom" || bgType == "anki_lock") {
+            if (bgType == "dark_blur" || bgType == "sunset" || bgType == "custom" || bgType == "anki_lock" || bgType == "default") {
                 try {
                     bitmapToDraw.recycle()
                 } catch (e: Exception) {}

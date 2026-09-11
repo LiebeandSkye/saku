@@ -228,5 +228,20 @@ class JapaneseFieldParserTest {
         assertEquals("In baseball there are nine people on one team.", result.exampleTranslation)
         assertTrue(result.exampleFuriganaLine.isNotEmpty())
     }
+
+    @Test
+    fun testKanaToRomajiWithDeParticle() {
+        // Direct 'で' conversion
+        assertEquals("de", JapaneseFieldParser.kanaToRomaji("で"))
+
+        // 'だ ぢ づ で ど' series
+        assertEquals("da ji zu de do", JapaneseFieldParser.kanaToRomaji("だ ぢ づ で ど"))
+
+        // Sentence containing 'で' particle
+        assertEquals("densha de iku", JapaneseFieldParser.kanaToRomaji("でんしゃ で いく"))
+
+        // Sokuon before 'で' (e.g. slang/onomatopoeia)
+        assertEquals("dde", JapaneseFieldParser.kanaToRomaji("っで"))
+    }
 }
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, QrCode, ExternalLink } from 'lucide-react';
+import { X, QrCode, ExternalLink, Download } from 'lucide-react';
+import { APK_DOWNLOAD_URL, GITHUB_RELEASES_URL } from '../constants';
 
 interface QrModalProps {
   isOpen: boolean;
@@ -9,7 +10,7 @@ interface QrModalProps {
 export const QrModal: React.FC<QrModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
-  const downloadUrl = 'https://github.com/LiebeandSkye/saku/releases';
+  const downloadUrl = APK_DOWNLOAD_URL;
 
   return (
     <div
@@ -55,16 +56,26 @@ export const QrModal: React.FC<QrModalProps> = ({ isOpen, onClose }) => {
           </span>
         </div>
 
-        {/* Action Link */}
-        <a
-          href={downloadUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full py-2.5 rounded-xl bg-[#52C47C] hover:bg-[#43A869] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
-        >
-          <span>Open Download Link</span>
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
+        {/* Action Links */}
+        <div className="space-y-2">
+          <a
+            href={APK_DOWNLOAD_URL}
+            className="w-full py-2.5 rounded-xl bg-[#52C47C] hover:bg-[#43A869] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Direct Download APK</span>
+          </a>
+
+          <a
+            href={GITHUB_RELEASES_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full py-2 rounded-xl text-slate-500 dark:text-[#9AA1AD] hover:text-slate-900 dark:hover:text-[#E8EAF0] text-xs font-medium flex items-center justify-center gap-1 transition-colors"
+          >
+            <span>View Release on GitHub</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
       </div>
     </div>
   );

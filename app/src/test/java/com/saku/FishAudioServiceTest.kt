@@ -21,8 +21,8 @@ class FishAudioServiceTest {
 
     @Test
     fun testDefaultFishAudioConstants() {
-        assertEquals("7f9298f1369f4262af796300803b1a1f", PreferencesManager.DEFAULT_FISH_AUDIO_VOICE_ID)
-        assertEquals("https://fish.audio/m/7f9298f1369f4262af796300803b1a1f", PreferencesManager.DEFAULT_FISH_AUDIO_VOICE_URL)
+        assertEquals("5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.DEFAULT_FISH_AUDIO_VOICE_ID)
+        assertEquals("https://fish.audio/m/5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.DEFAULT_FISH_AUDIO_VOICE_URL)
         assertEquals("s2.1-pro-free", PreferencesManager.DEFAULT_FISH_AUDIO_MODEL)
         assertTrue(PreferencesManager.AVAILABLE_FISH_AUDIO_MODELS.any { it.id == "s2.1-pro-free" })
         assertTrue(PreferencesManager.AVAILABLE_FISH_AUDIO_MODELS.any { it.id == "s2.1-pro" })
@@ -30,30 +30,30 @@ class FishAudioServiceTest {
 
     @Test
     fun testExtractVoiceIdFromRawId() {
-        val rawId = "7f9298f1369f4262af796300803b1a1f"
+        val rawId = "5b09815a54a04395bf6ad642d57ce12a"
         assertEquals(rawId, PreferencesManager.extractVoiceId(rawId))
         assertEquals(rawId, PreferencesManager.extractVoiceId("  $rawId  "))
     }
 
     @Test
     fun testExtractVoiceIdFromUrl() {
-        val url = "https://fish.audio/m/7f9298f1369f4262af796300803b1a1f"
-        assertEquals("7f9298f1369f4262af796300803b1a1f", PreferencesManager.extractVoiceId(url))
+        val url = "https://fish.audio/m/5b09815a54a04395bf6ad642d57ce12a"
+        assertEquals("5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.extractVoiceId(url))
 
-        val urlWithTrailingSlash = "https://fish.audio/m/7f9298f1369f4262af796300803b1a1f/"
-        assertEquals("7f9298f1369f4262af796300803b1a1f", PreferencesManager.extractVoiceId(urlWithTrailingSlash))
+        val urlWithTrailingSlash = "https://fish.audio/m/5b09815a54a04395bf6ad642d57ce12a/"
+        assertEquals("5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.extractVoiceId(urlWithTrailingSlash))
 
-        val urlWithQuery = "https://fish.audio/m/7f9298f1369f4262af796300803b1a1f?share=1"
-        assertEquals("7f9298f1369f4262af796300803b1a1f", PreferencesManager.extractVoiceId(urlWithQuery))
+        val urlWithQuery = "https://fish.audio/m/5b09815a54a04395bf6ad642d57ce12a?share=1"
+        assertEquals("5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.extractVoiceId(urlWithQuery))
 
-        val urlModelsPath = "https://fish.audio/models/7f9298f1369f4262af796300803b1a1f"
-        assertEquals("7f9298f1369f4262af796300803b1a1f", PreferencesManager.extractVoiceId(urlModelsPath))
+        val urlModelsPath = "https://fish.audio/models/5b09815a54a04395bf6ad642d57ce12a"
+        assertEquals("5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.extractVoiceId(urlModelsPath))
     }
 
     @Test
     fun testExtractVoiceIdBlankDefaults() {
-        assertEquals("7f9298f1369f4262af796300803b1a1f", PreferencesManager.extractVoiceId(""))
-        assertEquals("7f9298f1369f4262af796300803b1a1f", PreferencesManager.extractVoiceId("   "))
+        assertEquals("5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.extractVoiceId(""))
+        assertEquals("5b09815a54a04395bf6ad642d57ce12a", PreferencesManager.extractVoiceId("   "))
     }
 
     @Test

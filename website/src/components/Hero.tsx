@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, QrCode, Star } from 'lucide-react';
 import { GithubIcon } from './icons/GithubIcon';
+import { APK_DOWNLOAD_URL, GITHUB_REPO_URL } from '../constants';
 
 interface HeroProps {
   onOpenQrModal: () => void;
@@ -25,8 +26,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenQrModal }) => {
             {/* CTAs */}
             <div className="pt-2 flex flex-wrap items-center gap-3 justify-center lg:justify-start">
               <a
-                href="/Saku.apk"
-                download="Saku.apk"
+                href={APK_DOWNLOAD_URL}
                 className="px-6 py-3 rounded-xl bg-[#52C47C] hover:bg-[#43A869] text-white font-bold text-sm transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
               >
                 <Download className="w-4 h-4 stroke-[2.5]" />
@@ -42,7 +42,7 @@ export const Hero: React.FC<HeroProps> = ({ onOpenQrModal }) => {
               </button>
 
               <a
-                href="https://github.com/LiebeandSkye/saku"
+                href={GITHUB_REPO_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-[#1F222A] hover:bg-slate-200 dark:hover:bg-[#262A34] text-slate-700 dark:text-[#E8EAF0] border border-slate-200 dark:border-[#2F3440] text-sm font-medium transition-colors flex items-center gap-2 cursor-pointer group"

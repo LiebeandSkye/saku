@@ -2492,8 +2492,8 @@ class MainActivity : ComponentActivity() {
                 Surface(
                     onClick = { showModelDialog = true },
                     shape = RoundedCornerShape(14.dp),
-                    color = SakuColors.AccentLavenderContainer.copy(alpha = 0.6f),
-                    border = BorderStroke(1.dp, SakuColors.AccentLavender.copy(alpha = 0.35f)),
+                    color = SakuColors.SurfaceElevated,
+                    border = BorderStroke(1.dp, SakuColors.BorderSubtle),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -2510,41 +2510,30 @@ class MainActivity : ComponentActivity() {
                             Icon(
                                 Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                tint = SakuColors.AccentLavender,
+                                tint = SakuColors.SagePrimary,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = PreferencesManager.getModelDisplayName(currentModel),
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.5.sp,
-                                    color = SakuColors.TextPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = currentModel,
-                                    fontSize = 11.sp,
-                                    fontFamily = FontFamily.Monospace,
-                                    color = SakuColors.AccentLavender,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            Text(
+                                text = PreferencesManager.getModelDisplayName(currentModel),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = SakuColors.TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = SakuColors.AccentLavenderContainer,
-                            border = BorderStroke(1.dp, SakuColors.AccentLavender.copy(alpha = 0.4f))
+                            color = SakuColors.SageContainer,
+                            border = BorderStroke(1.dp, SakuColors.SageContainerBorder)
                         ) {
                             Text(
                                 text = "Change",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = SakuColors.AccentLavender,
+                                color = SakuColors.SageLight,
                                 maxLines = 1,
                                 softWrap = false,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)

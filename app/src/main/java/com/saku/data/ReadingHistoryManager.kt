@@ -51,6 +51,9 @@ class ReadingHistoryManager(private val context: Context) {
                     }
                 }
 
+                val theme = obj.optString("theme", "").ifBlank { null }
+                val topic = obj.optString("topic", "").ifBlank { null }
+
                 list.add(
                     GeneratedStory(
                         id = obj.optString("id", ""),
@@ -59,7 +62,9 @@ class ReadingHistoryManager(private val context: Context) {
                         jlptLevel = obj.optString("jlptLevel", "N5"),
                         createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
                         targetWords = words,
-                        questions = questions
+                        questions = questions,
+                        theme = theme,
+                        topic = topic
                     )
                 )
             }
@@ -99,6 +104,8 @@ class ReadingHistoryManager(private val context: Context) {
                     put("content", story.content)
                     put("jlptLevel", story.jlptLevel)
                     put("createdAt", story.createdAt)
+                    story.theme?.let { put("theme", it) }
+                    story.topic?.let { put("topic", it) }
                     val wordsArr = JSONArray()
                     story.targetWords.forEach { wordsArr.put(it) }
                     put("targetWords", wordsArr)

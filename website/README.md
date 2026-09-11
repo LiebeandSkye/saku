@@ -10,9 +10,9 @@ Built with **React 19 + TypeScript + Tailwind CSS + Vite** following **UI/UX Pro
 
 - **Interactive Widget Simulator**: Live replica of the Android Glance widget. Flip cards, test Anki ratings (`Again`, `Hard`, `Good`, `Easy`), toggle furigana, and switch between Dim, OLED Dark, and Light skins.
 - **Dual Download Channels**:
-  - Direct local APK download (`/Saku.apk`, ~20 MB) with celebratory confetti.
+  - Direct verified APK download (~20 MB) automatically pointing to the latest release.
   - GitHub Releases link with tags, source code, and release notes.
-  - QR Code scanner modal for scanning from mobile devices.
+  - QR Code scanner modal for scanning and downloading directly on mobile devices.
 - **Bento Grid Feature Showcase**:
   - 100% On-Device & Zero Login (Android IPC `com.ichi2.anki.api`).
   - Native FSRS & SM-2 algorithm preservation.
@@ -48,7 +48,7 @@ npm run dev
 npm run build
 ```
 
-The production assets and `Saku.apk` will be output to `website/dist/`.
+The production assets will be output to `website/dist/`.
 
 ### Preview production build
 ```bash

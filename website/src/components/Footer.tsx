@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, ExternalLink, Star } from 'lucide-react';
 import { GithubIcon } from './icons/GithubIcon';
+import { APK_DOWNLOAD_URL, GITHUB_LICENSE_URL, GITHUB_REPO_URL } from '../constants';
 
 export const Footer: React.FC = () => {
   return (
@@ -19,8 +20,7 @@ export const Footer: React.FC = () => {
         {/* Links */}
         <div className="flex items-center gap-5">
           <a
-            href="/Saku.apk"
-            download="Saku.apk"
+            href={APK_DOWNLOAD_URL}
             className="hover:text-slate-900 dark:hover:text-[#E8EAF0] transition-colors flex items-center gap-1.5"
           >
             <Download className="w-3.5 h-3.5" />
@@ -28,7 +28,7 @@ export const Footer: React.FC = () => {
           </a>
 
           <a
-            href="https://github.com/LiebeandSkye/saku"
+            href={GITHUB_REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-slate-900 dark:hover:text-[#E8EAF0] transition-colors flex items-center gap-1.5 group"
@@ -39,7 +39,7 @@ export const Footer: React.FC = () => {
           </a>
 
           <a
-            href="https://github.com/LiebeandSkye/saku/blob/main/LICENSE"
+            href={GITHUB_LICENSE_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-slate-900 dark:hover:text-[#E8EAF0] transition-colors flex items-center gap-1"

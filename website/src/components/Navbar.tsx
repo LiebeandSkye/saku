@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Download, Menu, QrCode, Star, X } from 'lucide-react';
 import { GithubIcon } from './icons/GithubIcon';
 import { ThemeToggle } from './ThemeToggle';
+import { APK_DOWNLOAD_URL, GITHUB_REPO_URL } from '../constants';
 
 interface NavbarProps {
   onOpenQrModal: () => void;
@@ -62,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQrModal }) => {
           </button>
 
           <a
-            href="https://github.com/LiebeandSkye/saku"
+            href={GITHUB_REPO_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-[#9AA1AD] hover:text-slate-900 dark:hover:text-[#E8EAF0] bg-slate-100 dark:bg-[#1F222A] hover:bg-slate-200 dark:hover:bg-[#262A34] border border-slate-200 dark:border-[#2F3440] rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 group"
@@ -74,8 +75,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQrModal }) => {
           </a>
 
           <a
-            href="/Saku.apk"
-            download="Saku.apk"
+            href={APK_DOWNLOAD_URL}
             className="px-4 py-1.5 text-xs font-semibold text-white bg-[#52C47C] hover:bg-[#43A869] rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <Download className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -88,8 +88,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQrModal }) => {
           <ThemeToggle />
 
           <a
-            href="/Saku.apk"
-            download="Saku.apk"
+            href={APK_DOWNLOAD_URL}
             className="px-3 py-1.5 text-xs font-semibold text-white bg-[#52C47C] active:bg-[#43A869] rounded-xl transition-colors flex items-center gap-1.5 shadow-sm"
           >
             <Download className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -146,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQrModal }) => {
 
           <div className="pt-2 border-t border-slate-200 dark:border-[#2F3440] flex flex-col gap-2">
             <a
-              href="https://github.com/LiebeandSkye/saku"
+              href={GITHUB_REPO_URL}
               target="_blank"
               rel="noopener noreferrer"
               onClick={() => setIsMobileMenuOpen(false)}
@@ -174,8 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenQrModal }) => {
             </button>
 
             <a
-              href="/Saku.apk"
-              download="Saku.apk"
+              href={APK_DOWNLOAD_URL}
               onClick={() => setIsMobileMenuOpen(false)}
               className="w-full py-3 px-4 rounded-xl bg-[#52C47C] hover:bg-[#43A869] active:bg-[#3B965D] text-white font-bold text-sm transition-colors flex items-center justify-center gap-2 shadow-sm mt-1"
             >

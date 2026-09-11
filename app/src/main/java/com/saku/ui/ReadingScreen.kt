@@ -6,6 +6,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -108,7 +113,17 @@ import com.saku.data.ReadingHistoryManager
 import com.saku.data.ReadingVocabularySummary
 import com.saku.reading.FishAudioService
 import com.saku.reading.GeminiStoryService
+import com.saku.data.StoryThemes
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -229,17 +244,41 @@ fun ReadingScreen(
     }
 
     val jlptLevels = listOf("N5", "N4", "N3", "N2", "N1")
+    val hapticFeedback = LocalHapticFeedback.current
+    var showThemeConfigDialog by remember { mutableStateOf(false) }
+    var isCustomThemeModeActive by remember { mutableStateOf(prefs.isCustomThemeModeActive) }
+    var customStoryTheme by remember { mutableStateOf(prefs.customStoryTheme) }
+    var customStoryTopic by remember { mutableStateOf(prefs.customStoryTopic) }
+    var holdProgress by remember { mutableFloatStateOf(0f) }
 
     fun executeGeneration() {
         coroutineScope.launch {
             isGeneratingStory = true
             generationError = null
+
+            val (targetTheme, targetTopic) = if (isCustomThemeModeActive && !customStoryTheme.isNullOrBlank()) {
+                val chosenTheme = customStoryTheme!!
+                val chosenTopic = customStoryTopic ?: run {
+                    val topics = StoryThemes.CATEGORIES[chosenTheme] ?: emptyList()
+                    val eligible = topics.filter { it !in prefs.disabledStoryTopics }.ifEmpty { topics }
+                    if (eligible.isNotEmpty()) eligible.random() else "A memorable event"
+                }
+                Pair(chosenTheme, chosenTopic)
+            } else {
+                StoryThemes.getRandomThemeAndTopic(
+                    disabledThemes = prefs.disabledStoryThemes,
+                    disabledTopics = prefs.disabledStoryTopics
+                )
+            }
+
             val words = if (connectStudiedWords) (vocabSummary?.words ?: emptyList()) else emptyList()
             val result = storyService.generateStory(
                 apiKey = apiKey,
                 jlptLevel = selectedJlpt,
                 vocabularyList = words,
-                preferredModel = selectedModel
+                preferredModel = selectedModel,
+                theme = targetTheme,
+                topic = targetTopic
             )
             result.onSuccess { story ->
                 currentStory = story
@@ -423,7 +462,7 @@ fun ReadingScreen(
                             Icon(
                                 Icons.Filled.AutoAwesome,
                                 contentDescription = null,
-                                tint = SakuColors.AccentLavender,
+                                tint = SakuColors.SagePrimary,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -873,62 +912,229 @@ fun ReadingScreen(
             }
         }
 
-        // 4. Generate Story Action Button (Frosted Sage Pill)
-        Button(
-            onClick = {
-                if (apiKey.isBlank()) {
-                    showApiKeyDialog = true
-                    return@Button
+        // Custom Mode Active Indicator (Pill above Generate button)
+        if (isCustomThemeModeActive && !customStoryTheme.isNullOrBlank()) {
+            val themeBadge = StoryThemes.getThemeBadgeColors(customStoryTheme!!)
+            val formattedTheme = StoryThemes.formatThemeName(customStoryTheme!!)
+            val topicText = customStoryTopic ?: "Any topic"
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = themeBadge.backgroundColor,
+                border = BorderStroke(1.dp, themeBadge.borderColor),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            tint = themeBadge.contentColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Theme: $formattedTheme • $topicText",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = themeBadge.contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = themeBadge.contentColor.copy(alpha = 0.2f),
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clickable {
+                                prefs.isCustomThemeModeActive = false
+                                prefs.customStoryTheme = null
+                                prefs.customStoryTopic = null
+                                isCustomThemeModeActive = false
+                                customStoryTheme = null
+                                customStoryTopic = null
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = "Reset to random",
+                                tint = themeBadge.contentColor,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
                 }
-                if (!prefs.hasAcceptedInternetDisclosure) {
-                    showInternetConsentDialog = true
-                    return@Button
-                }
-                executeGeneration()
-            },
-            enabled = !isGeneratingStory,
+            }
+        }
+
+        // 4. Generate Story Action Button with 2.5s hold-to-configure
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = SakuColors.SagePrimary.copy(alpha = 0.85f),
-                contentColor = SakuColors.OnSage,
-                disabledContainerColor = SakuColors.SagePrimary.copy(alpha = 0.40f)
-            ),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                .height(52.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    if (isGeneratingStory) SakuColors.SagePrimary.copy(alpha = 0.40f)
+                    else SakuColors.SagePrimary.copy(alpha = 0.85f)
+                )
+                .border(
+                    BorderStroke(
+                        width = if (holdProgress > 0f) 2.dp else 1.dp,
+                        color = if (holdProgress > 0f) {
+                            Color(0xFFFFD54F).copy(alpha = (0.5f + holdProgress * 0.5f).coerceIn(0f, 1f))
+                        } else {
+                            Color.White.copy(alpha = 0.25f)
+                        }
+                    ),
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .pointerInput(isGeneratingStory, apiKey, prefs.hasAcceptedInternetDisclosure) {
+                    if (isGeneratingStory) return@pointerInput
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        val startTime = System.currentTimeMillis()
+                        var holdCompleted = false
+
+                        val holdJob = coroutineScope.launch {
+                            val duration = 2500L
+                            val stepMs = 16L
+                            while (isActive) {
+                                val elapsed = System.currentTimeMillis() - startTime
+                                val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
+                                holdProgress = progress
+                                if (progress >= 1f) {
+                                    holdCompleted = true
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showThemeConfigDialog = true
+                                    holdProgress = 0f
+                                    break
+                                }
+                                delay(stepMs)
+                            }
+                        }
+
+                        val up = waitForUpOrCancellation()
+                        holdJob.cancel()
+                        holdProgress = 0f
+
+                        if (up != null && !holdCompleted) {
+                            if (apiKey.isBlank()) {
+                                showApiKeyDialog = true
+                            } else if (!prefs.hasAcceptedInternetDisclosure) {
+                                showInternetConsentDialog = true
+                            } else {
+                                executeGeneration()
+                            }
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center
         ) {
-            if (isGeneratingStory) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = SakuColors.OnSage
+            // Charging progress fill when holding
+            if (holdProgress > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .fillMaxWidth(holdProgress)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color(0xFFFFD54F).copy(alpha = 0.45f),
+                                    Color(0xFFFFB74D).copy(alpha = 0.35f)
+                                )
+                            )
+                        )
+                        .align(Alignment.CenterStart)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "Crafting $selectedJlpt Japanese Story...",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    color = SakuColors.OnSage,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            } else {
-                Icon(
-                    Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = SakuColors.OnSage
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (currentStory == null) "Generate $selectedJlpt Story" else "Generate Another Story",
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    color = SakuColors.OnSage,
-                    maxLines = 1,
-                    softWrap = false
-                )
+            }
+
+            // Button Content
+            AnimatedContent(
+                targetState = when {
+                    isGeneratingStory -> 0
+                    holdProgress > 0f -> 1
+                    else -> 2
+                },
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(200)) togetherWith fadeOut(animationSpec = tween(150))
+                },
+                label = "StoryButtonStateTransition"
+            ) { state ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    when (state) {
+                        0 -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = SakuColors.OnSage
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            RotatingStatusText(
+                                phrases = listOf(
+                                    "Crafting $selectedJlpt story...",
+                                    "Weaving the plot...",
+                                    "Polishing details...",
+                                    "Adding some flair...",
+                                    "Fine-tuning emotions...",
+                                    "Almost there..."
+                                ),
+                                isGenerating = isGeneratingStory,
+                                color = SakuColors.OnSage
+                            )
+                        }
+                        1 -> {
+                            Icon(
+                                Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = Color(0xFFFFD54F)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Configuring... ${(holdProgress * 100).toInt()}%",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = Color.White,
+                                maxLines = 1
+                            )
+                        }
+                        else -> {
+                            Icon(
+                                Icons.Filled.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = SakuColors.OnSage
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (currentStory == null) "Generate $selectedJlpt Story" else "Generate Another Story",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 15.sp,
+                                color = SakuColors.OnSage,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -1518,6 +1724,25 @@ fun ReadingScreen(
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                 )
                                             }
+                                            if (!item.theme.isNullOrBlank()) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                val themeBadge = StoryThemes.getThemeBadgeColors(item.theme)
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = themeBadge.backgroundColor,
+                                                    border = BorderStroke(1.dp, themeBadge.borderColor)
+                                                ) {
+                                                    Text(
+                                                        text = StoryThemes.formatThemeName(item.theme),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = themeBadge.contentColor,
+                                                        maxLines = 1,
+                                                        softWrap = false,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Text(
                                                 text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(item.createdAt)),
@@ -1647,6 +1872,19 @@ fun ReadingScreen(
                 executeGeneration()
             },
             onDismiss = { showInternetConsentDialog = false }
+        )
+    }
+
+    // Story Theme & Topic Configuration Dialog
+    if (showThemeConfigDialog) {
+        StoryThemeConfigDialog(
+            prefs = prefs,
+            onDismiss = { showThemeConfigDialog = false },
+            onConfigurationChanged = {
+                isCustomThemeModeActive = prefs.isCustomThemeModeActive
+                customStoryTheme = prefs.customStoryTheme
+                customStoryTopic = prefs.customStoryTopic
+            }
         )
     }
 }

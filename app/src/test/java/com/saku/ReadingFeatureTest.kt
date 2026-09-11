@@ -179,4 +179,21 @@ class ReadingFeatureTest {
         assertTrue(prompt.contains("without restriction"))
         org.junit.Assert.assertFalse(prompt.contains("Learner's Flashcards"))
     }
+
+    @Test
+    fun testBuildJlptStoryPromptQuizGuidelines() {
+        val service = com.saku.reading.GeminiStoryService()
+        val prompt = service.buildJlptStoryPrompt("N3", "")
+
+        assertTrue(prompt.contains("[JLPT Reading Comprehension (読解) Quiz Guidelines]"))
+        assertTrue(prompt.contains("Design 3 to 4 authentic JLPT-style multiple-choice reading comprehension questions calibrated strictly to JLPT N3"))
+        assertTrue(prompt.contains("Overlooked / Forgotten Early Details"))
+        assertTrue(prompt.contains("True Motivation vs. False Clues (なぜ/どうして)"))
+        assertTrue(prompt.contains("Distractor (Trap Choice) Engineering (MANDATORY)"))
+        assertTrue(prompt.contains("Recency Bias / Timeline Trap"))
+        assertTrue(prompt.contains("ZERO Obvious / Out-of-Context Choices"))
+        assertTrue(prompt.contains("questionText\" and all 4 \"options\" must be in natural Japanese"))
+        assertTrue(prompt.contains("clarifying why distractors are traps"))
+        assertTrue(prompt.contains("選択肢1"))
+    }
 }

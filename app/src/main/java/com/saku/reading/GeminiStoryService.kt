@@ -4,6 +4,7 @@ import com.saku.data.AnkiVocabularyItem
 import com.saku.data.GeneratedStory
 import com.saku.data.PreferencesManager
 import com.saku.data.StoryQuizQuestion
+import com.saku.data.StoryThemes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -30,7 +31,9 @@ class GeminiStoryService {
         apiKey: String,
         jlptLevel: String,
         vocabularyList: List<AnkiVocabularyItem>,
-        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL
+        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL,
+        theme: String? = null,
+        topic: String? = null
     ): Result<GeneratedStory> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("Gemini API key is required"))
@@ -61,12 +64,20 @@ class GeminiStoryService {
             ""
         }
 
-        val prompt = buildJlptStoryPrompt(jlptLevel, wordPromptList)
+        val prompt = buildJlptStoryPrompt(jlptLevel, wordPromptList, theme, topic)
 
         // Directly call preferred model with zero fallbacks to ensure maximum speed.
         // If an error occurs, fail immediately and prompt the user to switch models.
         try {
-            val story = callGeminiApi(apiKey, preferredModel, prompt, jlptLevel, selectedWords.map { it.displayWord })
+            val story = callGeminiApi(
+                apiKey = apiKey,
+                model = preferredModel,
+                prompt = prompt,
+                jlptLevel = jlptLevel,
+                targetWords = selectedWords.map { it.displayWord },
+                theme = theme,
+                topic = topic
+            )
             Result.success(story)
         } catch (e: Exception) {
             val errorDetails = e.message ?: "Unknown error"
@@ -80,7 +91,9 @@ class GeminiStoryService {
         model: String,
         prompt: String,
         jlptLevel: String,
-        targetWords: List<String>
+        targetWords: List<String>,
+        theme: String? = null,
+        topic: String? = null
     ): GeneratedStory {
         val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
 
@@ -144,13 +157,15 @@ class GeminiStoryService {
             throw IOException("Story text was empty")
         }
 
-        return parseStoryResponse(rawText, jlptLevel, targetWords)
+        return parseStoryResponse(rawText, jlptLevel, targetWords, theme, topic)
     }
 
     private fun parseStoryResponse(
         rawText: String,
         jlptLevel: String,
-        targetWords: List<String>
+        targetWords: List<String>,
+        theme: String? = null,
+        topic: String? = null
     ): GeneratedStory {
         val clean = cleanJsonString(rawText)
         return try {
@@ -191,7 +206,9 @@ class GeminiStoryService {
                 jlptLevel = jlptLevel,
                 createdAt = System.currentTimeMillis(),
                 targetWords = targetWords,
-                questions = questions
+                questions = questions,
+                theme = theme,
+                topic = topic
             )
         } catch (e: Exception) {
             // Fallback for raw text responses
@@ -212,7 +229,9 @@ class GeminiStoryService {
                 jlptLevel = jlptLevel,
                 createdAt = System.currentTimeMillis(),
                 targetWords = targetWords,
-                questions = emptyList()
+                questions = emptyList(),
+                theme = theme,
+                topic = topic
             )
         }
     }
@@ -230,7 +249,12 @@ class GeminiStoryService {
         return clean.trim()
     }
 
-    internal fun buildJlptStoryPrompt(jlptLevel: String, wordPromptList: String): String {
+    internal fun buildJlptStoryPrompt(
+        jlptLevel: String,
+        wordPromptList: String,
+        theme: String? = null,
+        topic: String? = null
+    ): String {
         val levelRules = when (jlptLevel) {
             "N5" -> "Strictly JLPT N5: Use elementary ~です/~ます forms, simple sentence conjunctions (そして, でも, だから), and basic particles (は, が, を, に, で, へ, と, も). Keep sentences short, relatable, and clear."
             "N4" -> "Strictly JLPT N4: Use compound sentences, ~て-forms, conditions (~たら, ~なら), comparisons, and basic potential or volitional forms."
@@ -238,6 +262,25 @@ class GeminiStoryService {
             "N2" -> "Strictly JLPT N2: Use nuanced narrative prose, varied sentence structures, idiomatic expressions, and pre-advanced Japanese vocabulary."
             "N1" -> "Strictly JLPT N1: Use literary, sophisticated Japanese expression, subtle nuances, and rich descriptive vocabulary."
             else -> "Use natural Japanese suitable for JLPT $jlptLevel."
+        }
+
+        val themeSection = if (!theme.isNullOrBlank() && !topic.isNullOrBlank()) {
+            val formattedTheme = StoryThemes.formatThemeName(theme)
+            """
+            [Story Theme & Narrative Premise]
+            Theme: $formattedTheme
+            Topic / Premise: $topic
+            Actively center the story's narrative, characters, emotional tone, and premise around this specific theme and topic.
+            """.trimIndent()
+        } else if (!theme.isNullOrBlank()) {
+            val formattedTheme = StoryThemes.formatThemeName(theme)
+            """
+            [Story Theme & Narrative Premise]
+            Theme: $formattedTheme
+            Actively center the story's narrative, characters, and emotional tone around this specific theme.
+            """.trimIndent()
+        } else {
+            ""
         }
 
         val vocabSection = if (wordPromptList.isNotBlank()) {
@@ -253,6 +296,35 @@ class GeminiStoryService {
             """.trimIndent()
         }
 
+        val quizSection = """
+            [JLPT Reading Comprehension (読解) Quiz Guidelines]
+            Design 3 to 4 authentic JLPT-style multiple-choice reading comprehension questions calibrated strictly to JLPT $jlptLevel.
+            The questions must be intellectually engaging and test true comprehension—NEVER make basic questions that can be answered at a single glance.
+
+            1. JLPT Question Types & Traps:
+               - Overlooked / Forgotten Early Details: Craft questions about crucial premises, reasons, settings, or character intentions established in the first or second paragraph. Readers frequently get absorbed in later plot developments and forget or overlook these earlier details.
+               - True Motivation vs. False Clues (なぜ/どうして): Ask why a character acted, felt, or chose something. The genuine reason was established earlier, while subsequent events or superficial excuses act as tempting distractor traps.
+               - Timeline & Sequence (前後の関係): Ask what occurred before/after or what triggered a change in events, testing whether the reader maintained clear chronological awareness.
+               - Content Verification (本文の内容と合っているもの): Craft questions asking which statement accurately reflects the passage.
+
+            2. Distractor (Trap Choice) Engineering (MANDATORY):
+               - ZERO Obvious / Out-of-Context Choices: Every single wrong option MUST reference real characters, events, locations, or dialogue that ACTUALLY appeared in the story. NEVER include absurd, silly, or obviously fake options.
+               - Recency Bias / Timeline Trap: An incorrect option accurately describes something that happened, but at the wrong point in the timeline (e.g., in the ending rather than the initial cause).
+               - Subject / Object / Role Reversal: An option uses true actions from the text, but attributes them to the wrong character or inverts who did what to whom.
+               - Partial Truth / Plausible Misunderstanding: An option sounds very plausible and contains real phrases from the story, but twists a crucial condition, relationship, or conclusion.
+               - Uniform Length & Structure: All 4 options must be written in natural Japanese at the JLPT $jlptLevel level, with similar sentence length and grammar style so the correct answer cannot be guessed by appearance.
+
+            3. Language & Formatting:
+               - "questionText" and all 4 "options" must be in natural Japanese calibrated to JLPT $jlptLevel.
+               - "explanation": Provide a concise explanation in English (or clear Japanese) explaining why the correct choice is right (referencing where in the story the answer is found) and pointing out why the misleading options are traps.
+        """.trimIndent()
+
+        val req1 = if (!theme.isNullOrBlank() && !topic.isNullOrBlank()) {
+            "1. Write a natural, compelling story in Japanese (150-300 words) centered on the given theme and topic premise."
+        } else {
+            "1. Write a natural, compelling story in Japanese (150-300 words)."
+        }
+
         val req2 = if (wordPromptList.isNotBlank()) {
             "2. Actively prioritize and weave target vocabulary words from the learner's list above into the story wherever natural and appropriate."
         } else {
@@ -260,22 +332,26 @@ class GeminiStoryService {
         }
 
         val req4 = if (wordPromptList.isNotBlank()) {
-            "4. Create 3 to 4 multiple-choice reading comprehension questions testing understanding of the story and key vocabulary from the target list in context.\n   Each question must have exactly 4 options and the 0-indexed correctOptionIndex."
+            "4. Create 3 to 4 multiple-choice reading comprehension questions testing understanding of the story and key vocabulary from the target list in context, strictly adhering to the [JLPT Reading Comprehension (読解) Quiz Guidelines] above.\n   Each question must have exactly 4 options in Japanese and the 0-indexed correctOptionIndex."
         } else {
-            "4. Create 3 to 4 multiple-choice reading comprehension questions testing story comprehension and vocabulary in context.\n   Each question must have exactly 4 options and the 0-indexed correctOptionIndex."
+            "4. Create 3 to 4 multiple-choice reading comprehension questions testing story comprehension and vocabulary in context, strictly adhering to the [JLPT Reading Comprehension (読解) Quiz Guidelines] above.\n   Each question must have exactly 4 options in Japanese and the 0-indexed correctOptionIndex."
         }
+
+        val middleSections = listOfNotNull(
+            "[JLPT Level Calibration]\n$levelRules",
+            themeSection.takeIf { it.isNotBlank() },
+            vocabSection,
+            quizSection
+        ).joinToString("\n\n")
 
         return """
             You are a master Japanese teacher and graded-reader author specializing in immersive language learning.
             Write an engaging, coherent Japanese reading passage calibrated strictly to JLPT $jlptLevel.
 
-            [JLPT Level Calibration]
-            $levelRules
-
-            $vocabSection
+            $middleSections
 
             [Requirements]
-            1. Write a natural, compelling story in Japanese (150-300 words).
+            $req1
             $req2
             3. Do NOT use romaji. Do NOT use ruby/furigana brackets like [ふりがな]. Standard Japanese characters only.
             $req4
@@ -286,10 +362,10 @@ class GeminiStoryService {
               "questions": [
                 {
                   "id": 1,
-                  "questionText": "Question testing comprehension or vocabulary context",
-                  "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+                  "questionText": "Question in Japanese (e.g., 本文の内容と合っているものはどれか)",
+                  "options": ["選択肢1", "選択肢2", "選択肢3", "選択肢4"],
                   "correctOptionIndex": 0,
-                  "explanation": "Brief explanation of the answer"
+                  "explanation": "Explanation citing story context and clarifying why distractors are traps"
                 }
               ]
             }

@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/Saku.apk",
+      "destination": "https://github.com/LiebeandSkye/saku/releases/latest/download/Saku.apk",
+      "permanent": false
+    }
+  ]
+}

@@ -157,11 +157,11 @@ class PreferencesManager(
         const val DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 
         val AVAILABLE_GEMINI_MODELS = listOf(
-            GeminiModelOption("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite", "Ultra-fast / Low Latency"),
-            GeminiModelOption("gemini-3.8-flash", "Gemini 3.8 Flash", "Latest & Most Intelligent"),
-            GeminiModelOption("gemini-3.7-flash", "Gemini 3.7 Flash", "Fast & Multimodal"),
-            GeminiModelOption("gemini-3.6-flash", "Gemini 3.6 Flash", "Stable Flash"),
-            GeminiModelOption("gemini-3.5-flash", "Gemini 3.5 Flash", "Balanced")
+            GeminiModelOption("gemini-3.5-flash-lite", "Gemini 3.5 Flash-Lite", "Default • Fastest"),
+            GeminiModelOption("gemini-3.8-flash", "Gemini 3.8 Flash", "Recommended • Most capable"),
+            GeminiModelOption("gemini-3.7-flash", "Gemini 3.7 Flash", "Fast & multimodal reasoning"),
+            GeminiModelOption("gemini-3.6-flash", "Gemini 3.6 Flash", "Stable general performance"),
+            GeminiModelOption("gemini-3.5-flash", "Gemini 3.5 Flash", "Balanced speed & quality")
         )
 
         fun getModelDisplayName(modelId: String): String {
@@ -197,8 +197,8 @@ class PreferencesManager(
         private const val KEY_INTERNET_DISCLOSURE = "internet_disclosure_accepted"
         private const val KEY_HIGHLIGHT_VOCABULARY_WORDS = "highlight_vocabulary_words"
         private const val KEY_CONNECT_STUDIED_WORDS = "connect_studied_words"
-        const val DEFAULT_FISH_AUDIO_VOICE_ID = "7f9298f1369f4262af796300803b1a1f"
-        const val DEFAULT_FISH_AUDIO_VOICE_URL = "https://fish.audio/m/7f9298f1369f4262af796300803b1a1f"
+        const val DEFAULT_FISH_AUDIO_VOICE_ID = "5b09815a54a04395bf6ad642d57ce12a"
+        const val DEFAULT_FISH_AUDIO_VOICE_URL = "https://fish.audio/m/5b09815a54a04395bf6ad642d57ce12a"
         const val DEFAULT_FISH_AUDIO_MODEL = "s2.1-pro-free"
 
         val AVAILABLE_FISH_AUDIO_MODELS = listOf(
@@ -235,6 +235,11 @@ class PreferencesManager(
         private const val KEY_APP_THEME = "app_theme"
         private const val KEY_RECENT_JISHO_SEARCHES = "recent_jisho_searches"
         private const val KEY_SHOOTING_STARS_ENABLED = "key_shooting_stars_enabled"
+        private const val KEY_DISABLED_STORY_THEMES = "disabled_story_themes"
+        private const val KEY_DISABLED_STORY_TOPICS = "disabled_story_topics"
+        private const val KEY_CUSTOM_STORY_THEME = "custom_story_theme"
+        private const val KEY_CUSTOM_STORY_TOPIC = "custom_story_topic"
+        private const val KEY_CUSTOM_THEME_MODE_ACTIVE = "custom_theme_mode_active"
     }
 
     var recentJishoSearches: List<String>
@@ -260,6 +265,26 @@ class PreferencesManager(
     fun clearRecentJishoSearches() {
         recentJishoSearches = emptyList()
     }
+
+    var disabledStoryThemes: Set<String>
+        get() = prefs.getStringSet(KEY_DISABLED_STORY_THEMES, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(KEY_DISABLED_STORY_THEMES, value).apply()
+
+    var disabledStoryTopics: Set<String>
+        get() = prefs.getStringSet(KEY_DISABLED_STORY_TOPICS, emptySet()) ?: emptySet()
+        set(value) = prefs.edit().putStringSet(KEY_DISABLED_STORY_TOPICS, value).apply()
+
+    var customStoryTheme: String?
+        get() = prefs.getString(KEY_CUSTOM_STORY_THEME, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_CUSTOM_STORY_THEME, value?.trim()).apply()
+
+    var customStoryTopic: String?
+        get() = prefs.getString(KEY_CUSTOM_STORY_TOPIC, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_CUSTOM_STORY_TOPIC, value?.trim()).apply()
+
+    var isCustomThemeModeActive: Boolean
+        get() = prefs.getBoolean(KEY_CUSTOM_THEME_MODE_ACTIVE, false)
+        set(value) = prefs.edit().putBoolean(KEY_CUSTOM_THEME_MODE_ACTIVE, value).apply()
 }
 
 data class GeminiModelOption(

@@ -142,34 +142,48 @@ class ReadingHistoryTest {
             theme = "Food",
             topic = "Ramen"
         )
-        assertEquals("food", tagFood)
+        assertEquals("cafe+scenery", tagFood)
 
         val tagSchool = NekosService.determineTag(
-            title = "高校の制服",
+            title = "学校の教室で勉強",
             theme = "School Life",
-            topic = "Uniform"
+            topic = "Classroom"
         )
-        assertEquals("school_uniform", tagSchool)
+        assertEquals("classroom+scenery", tagSchool)
 
-        val tagCat = NekosService.determineTag(
-            title = "私の可愛い猫",
-            theme = "Pets",
-            topic = "Cat"
+        val tagShrine = NekosService.determineTag(
+            title = "京都の神社を参拝する",
+            theme = "Travel",
+            topic = "Shrine"
         )
-        assertEquals("catgirl", tagCat)
+        assertEquals("shrine+scenery", tagShrine)
 
         val tagNature = NekosService.determineTag(
             title = "桜の花が咲いた",
             theme = "Nature",
             topic = "Cherry blossoms"
         )
-        assertEquals("flowers", tagNature)
+        assertEquals("cherry_blossoms+scenery", tagNature)
 
         val tagNight = NekosService.determineTag(
             title = "東京の夜景",
             theme = "City",
             topic = "Night scene"
         )
-        assertEquals("night", tagNight)
+        assertEquals("night+scenery", tagNight)
+
+        val tagTrain = NekosService.determineTag(
+            title = "新幹線で旅行",
+            theme = "Travel",
+            topic = "Train"
+        )
+        assertEquals("train+scenery", tagTrain)
+
+        val tagDefault = NekosService.determineTag(
+            title = "不思議な話",
+            theme = null,
+            topic = null
+        )
+        assertEquals("scenery", tagDefault)
     }
 }

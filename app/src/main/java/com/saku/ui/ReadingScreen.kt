@@ -7,6 +7,9 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -46,6 +49,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Key
@@ -92,6 +96,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -224,6 +229,7 @@ fun ReadingScreen(
     // History Sheet
     val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showHistorySheet by remember { mutableStateOf(false) }
+    val expandedHistoryCards = remember { mutableStateMapOf<String, Boolean>() }
 
     // Word Detail Sheet
     val wordDetailSheetState = rememberModalBottomSheetState()
@@ -242,10 +248,12 @@ fun ReadingScreen(
         }
     }
 
-    // Auto-fetch Nekos background image for any stories missing an imageUrl
+    // Auto-fetch scenery background image for any stories missing an imageUrl or with old character images
     LaunchedEffect(showHistorySheet) {
         if (showHistorySheet) {
-            val unassigned = savedStories.filter { it.imageUrl.isNullOrBlank() }
+            val unassigned = savedStories.filter {
+                it.imageUrl.isNullOrBlank() || it.imageUrl.contains("nekosapi.com")
+            }
             if (unassigned.isNotEmpty()) {
                 withContext(Dispatchers.IO) {
                     for (story in unassigned) {
@@ -1748,13 +1756,24 @@ fun ReadingScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(savedStories, key = { it.id }) { item ->
+                            val isExpanded = expandedHistoryCards[item.id] == true
+                            val rotationAngle by animateFloatAsState(
+                                targetValue = if (isExpanded) 180f else 0f,
+                                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                                label = "card_chevron_rotation"
+                            )
+                            val cardMinHeight = if (isExpanded) 280.dp else 125.dp
+
                             Card(
                                 shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = SakuColors.SurfaceElevated),
                                 border = BorderStroke(1.dp, if (item.isPinned) SakuColors.SagePrimary.copy(alpha = 0.7f) else SakuColors.Border),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .defaultMinSize(minHeight = 112.dp)
+                                    .animateContentSize(
+                                        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+                                    )
+                                    .defaultMinSize(minHeight = cardMinHeight)
                                     .clickable {
                                         currentStory = item
                                         coroutineScope.launch {
@@ -1766,9 +1785,9 @@ fun ReadingScreen(
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .defaultMinSize(minHeight = 112.dp)
+                                        .defaultMinSize(minHeight = cardMinHeight)
                                 ) {
-                                    // Nekos background image
+                                    // Background Scenery Image
                                     if (!item.imageUrl.isNullOrBlank()) {
                                         AsyncImage(
                                             model = item.imageUrl,
@@ -1776,36 +1795,46 @@ fun ReadingScreen(
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.matchParentSize()
                                         )
-                                        // High-contrast gradient scrim to ensure text readability
+                                        // Dual top-and-bottom vertical gradient scrim:
+                                        // Top scrim for badges & action buttons; middle is clear for scenery art; bottom scrim for title & date
                                         Box(
                                             modifier = Modifier
                                                 .matchParentSize()
                                                 .background(
-                                                    Brush.horizontalGradient(
-                                                        colors = listOf(
-                                                            Color(0xF2121214),
-                                                            Color(0xE018181B),
-                                                            Color(0x9918181B)
-                                                        )
+                                                    Brush.verticalGradient(
+                                                        0.0f to Color(0xCC121214),
+                                                        0.22f to Color(0x55121214),
+                                                        0.50f to Color(0x11121214),
+                                                        0.72f to Color(0xAA121214),
+                                                        1.0f to Color(0xF2121214)
                                                     )
                                                 )
                                         )
                                     }
 
-                                    Row(
+                                    Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 18.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
+                                            .defaultMinSize(minHeight = cardMinHeight)
+                                            .padding(14.dp),
+                                        verticalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                        // --- TOP HEADER ROW ---
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            // Top-Left: Badges (Pinned, JLPT, Theme)
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            ) {
                                                 if (item.isPinned) {
                                                     Surface(
                                                         shape = RoundedCornerShape(6.dp),
-                                                        color = SakuColors.SagePrimary.copy(alpha = 0.2f),
-                                                        border = BorderStroke(1.dp, SakuColors.SagePrimary.copy(alpha = 0.6f))
+                                                        color = SakuColors.SagePrimary.copy(alpha = 0.25f),
+                                                        border = BorderStroke(1.dp, SakuColors.SagePrimary.copy(alpha = 0.8f))
                                                     ) {
                                                         Row(
                                                             verticalAlignment = Alignment.CenterVertically,
@@ -1829,6 +1858,7 @@ fun ReadingScreen(
                                                     }
                                                     Spacer(modifier = Modifier.width(6.dp))
                                                 }
+
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
                                                     color = SakuColors.SageContainer
@@ -1843,6 +1873,7 @@ fun ReadingScreen(
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                     )
                                                 }
+
                                                 if (!item.theme.isNullOrBlank()) {
                                                     Spacer(modifier = Modifier.width(6.dp))
                                                     val themeBadge = StoryThemes.getThemeBadgeColors(item.theme)
@@ -1867,55 +1898,120 @@ fun ReadingScreen(
                                                         )
                                                     }
                                                 }
-                                                Spacer(modifier = Modifier.width(8.dp))
+                                            }
+
+                                            Spacer(modifier = Modifier.width(8.dp))
+
+                                            // Top-Right: Action Buttons pill: [Pin] [Expand Dropdown] [Delete]
+                                            Surface(
+                                                shape = RoundedCornerShape(20.dp),
+                                                color = Color.Black.copy(alpha = 0.45f),
+                                                border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f))
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                ) {
+                                                    // Pin Button
+                                                    IconButton(
+                                                        onClick = {
+                                                            historyManager.togglePin(item.id)
+                                                            savedStories = historyManager.getStories()
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (item.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                                            contentDescription = if (item.isPinned) "Unpin Story" else "Pin Story",
+                                                            tint = if (item.isPinned) SakuColors.SagePrimary else Color.White.copy(alpha = 0.8f),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+
+                                                    // Dropdown / Expand Chevron Button
+                                                    IconButton(
+                                                        onClick = {
+                                                            expandedHistoryCards[item.id] = !isExpanded
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.KeyboardArrowDown,
+                                                            contentDescription = if (isExpanded) "Collapse Card" else "Expand Card",
+                                                            tint = if (isExpanded) SakuColors.SagePrimary else Color.White.copy(alpha = 0.8f),
+                                                            modifier = Modifier
+                                                                .size(18.dp)
+                                                                .rotate(rotationAngle)
+                                                        )
+                                                    }
+
+                                                    // Delete Button
+                                                    IconButton(
+                                                        onClick = {
+                                                            historyManager.deleteStory(item.id)
+                                                            savedStories = historyManager.getStories()
+                                                            if (currentStory?.id == item.id) {
+                                                                currentStory = savedStories.firstOrNull()
+                                                            }
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Filled.DeleteOutline,
+                                                            contentDescription = "Delete Story",
+                                                            tint = SakuColors.AccentRose,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Center breathing space to showcase scenery artwork clearly (expands when card is expanded)
+                                        Spacer(modifier = Modifier.height(if (isExpanded) 120.dp else 28.dp))
+
+                                        // --- BOTTOM SECTION ---
+                                        Column(modifier = Modifier.fillMaxWidth()) {
+                                            // Optional story excerpt when expanded so user can read a snippet
+                                            if (isExpanded && item.content.isNotBlank()) {
+                                                Text(
+                                                    text = item.content.replace("\n", " ").trim(),
+                                                    fontSize = 13.sp,
+                                                    lineHeight = 18.sp,
+                                                    color = Color.White.copy(alpha = 0.85f),
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.padding(bottom = 8.dp)
+                                                )
+                                            }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.Bottom,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                // Bottom-Left: Story Title
+                                                Text(
+                                                    text = item.title,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    fontSize = 16.sp,
+                                                    color = if (!item.imageUrl.isNullOrBlank()) Color.White else SakuColors.TextPrimary,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .padding(end = 12.dp)
+                                                )
+
+                                                // Bottom-Right: Date (no longer trimmed by header)
                                                 Text(
                                                     text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(item.createdAt)),
                                                     fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Medium,
                                                     color = if (!item.imageUrl.isNullOrBlank()) Color.White.copy(alpha = 0.75f) else SakuColors.TextSecondary,
                                                     maxLines = 1,
                                                     softWrap = false
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Text(
-                                                text = item.title,
-                                                fontWeight = FontWeight.SemiBold,
-                                                fontSize = 16.sp,
-                                                color = if (!item.imageUrl.isNullOrBlank()) Color.White else SakuColors.TextPrimary,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            IconButton(
-                                                onClick = {
-                                                    historyManager.togglePin(item.id)
-                                                    savedStories = historyManager.getStories()
-                                                }
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (item.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                                                    contentDescription = if (item.isPinned) "Unpin Story" else "Pin Story",
-                                                    tint = if (item.isPinned) SakuColors.SagePrimary else if (!item.imageUrl.isNullOrBlank()) Color.White.copy(alpha = 0.7f) else SakuColors.TextTertiary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                            IconButton(
-                                                onClick = {
-                                                    historyManager.deleteStory(item.id)
-                                                    savedStories = historyManager.getStories()
-                                                    if (currentStory?.id == item.id) {
-                                                        currentStory = savedStories.firstOrNull()
-                                                    }
-                                                }
-                                            ) {
-                                                Icon(
-                                                    Icons.Filled.DeleteOutline,
-                                                    contentDescription = "Delete Story",
-                                                    tint = SakuColors.AccentRose,
-                                                    modifier = Modifier.size(20.dp)
                                                 )
                                             }
                                         }

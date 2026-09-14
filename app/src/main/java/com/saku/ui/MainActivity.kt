@@ -395,6 +395,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var currentAppTheme by remember { mutableStateOf(AppTheme.fromId(prefs.appTheme)) }
+            var currentReadingTheme by remember { mutableStateOf(ReadingTheme.fromId(prefs.readingScreenTheme)) }
             var showIntro by remember { mutableStateOf(true) }
 
             SakuTheme(theme = currentAppTheme) {
@@ -404,6 +405,11 @@ class MainActivity : ComponentActivity() {
                         onThemeChanged = { newTheme ->
                             currentAppTheme = newTheme
                             prefs.appTheme = newTheme.id
+                        },
+                        currentReadingTheme = currentReadingTheme,
+                        onReadingThemeChanged = { newReadingTheme ->
+                            currentReadingTheme = newReadingTheme
+                            prefs.readingScreenTheme = newReadingTheme.id
                         }
                     )
 
@@ -475,7 +481,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainContainer(
         currentAppTheme: AppTheme,
-        onThemeChanged: (AppTheme) -> Unit
+        onThemeChanged: (AppTheme) -> Unit,
+        currentReadingTheme: ReadingTheme,
+        onReadingThemeChanged: (ReadingTheme) -> Unit
     ) {
         var isRefreshing by remember { mutableStateOf(false) }
         val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
@@ -718,13 +726,20 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
-                                ModernSettingsScreen(padding, currentAppTheme, onThemeChanged)
+                                ModernSettingsScreen(
+                                    padding = padding,
+                                    currentAppTheme = currentAppTheme,
+                                    onThemeChanged = onThemeChanged,
+                                    currentReadingTheme = currentReadingTheme,
+                                    onReadingThemeChanged = onReadingThemeChanged
+                                )
                             }
                         }
                         1 -> ReadingScreen(
                             padding = padding,
                             prefs = prefs,
                             hasAnkiPermission = hasPermissionState,
+                            readingTheme = currentReadingTheme,
                             openHistoryTrigger = openHistoryTrigger,
                             onHistoryTriggerConsumed = { openHistoryTrigger = 0 },
                             onNavigateToJisho = { word ->
@@ -925,7 +940,9 @@ class MainActivity : ComponentActivity() {
     fun ModernSettingsScreen(
         padding: PaddingValues,
         currentAppTheme: AppTheme,
-        onThemeChanged: (AppTheme) -> Unit
+        onThemeChanged: (AppTheme) -> Unit,
+        currentReadingTheme: ReadingTheme,
+        onReadingThemeChanged: (ReadingTheme) -> Unit
     ) {
         var isEnabled by remember { mutableStateOf(prefs.isServiceEnabled) }
         var classicRevealedAction by remember { mutableStateOf(prefs.classicRevealedAction) }
@@ -1146,6 +1163,16 @@ class MainActivity : ComponentActivity() {
                         selectedTheme = currentAppTheme,
                         onThemeSelected = { newTheme ->
                             onThemeChanged(newTheme)
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Reading Screen Theme Picker (5 color-theory curated themes)
+                    ReadingThemePicker(
+                        selectedTheme = currentReadingTheme,
+                        onThemeSelected = { newReadingTheme ->
+                            onReadingThemeChanged(newReadingTheme)
                         }
                     )
 

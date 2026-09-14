@@ -136,6 +136,7 @@ fun ReadingScreen(
     padding: PaddingValues,
     prefs: PreferencesManager,
     hasAnkiPermission: Boolean,
+    readingTheme: ReadingTheme = ReadingTheme.fromId(prefs.readingScreenTheme),
     openHistoryTrigger: Int = 0,
     onHistoryTriggerConsumed: () -> Unit = {},
     onNavigateToJisho: (String) -> Unit = {}
@@ -943,6 +944,7 @@ fun ReadingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 2.dp)
+                    .clickable { showThemeConfigDialog = true }
             ) {
                 Row(
                     modifier = Modifier
@@ -1183,8 +1185,8 @@ fun ReadingScreen(
         if (story != null) {
             Card(
                 shape = RoundedCornerShape(26.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF5EEDB)),
-                border = BorderStroke(1.dp, Color(0xFFE5DDC7))
+                colors = CardDefaults.cardColors(containerColor = readingTheme.containerColor),
+                border = BorderStroke(1.dp, readingTheme.borderColor)
             ) {
                 Column(modifier = Modifier.padding(22.dp)) {
                     // Header: JLPT Tag Badge (Left) & Copy Button (Right)
@@ -1193,20 +1195,49 @@ fun ReadingScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFE8DECB),
-                            border = BorderStroke(1.dp, Color(0xFFDDD2BC))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f, fill = false)
                         ) {
-                            Text(
-                                text = "JLPT ${story.jlptLevel}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF5A5243),
-                                maxLines = 1,
-                                softWrap = false,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = readingTheme.jlptBadgeBackground,
+                                border = BorderStroke(1.dp, readingTheme.jlptBadgeBorder)
+                            ) {
+                                Text(
+                                    text = "JLPT ${story.jlptLevel}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = readingTheme.jlptBadgeText,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                            if (!story.theme.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                val themeBadge = StoryThemes.getThemeBadgeColors(story.theme)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = themeBadge.backgroundColor,
+                                    border = BorderStroke(1.dp, themeBadge.borderColor)
+                                ) {
+                                    val badgeText = if (!story.topic.isNullOrBlank()) {
+                                        "${StoryThemes.formatThemeName(story.theme)} • ${story.topic}"
+                                    } else {
+                                        StoryThemes.formatThemeName(story.theme)
+                                    }
+                                    Text(
+                                        text = badgeText,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = themeBadge.contentColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1270,7 +1301,7 @@ fun ReadingScreen(
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(18.dp),
                                         strokeWidth = 2.dp,
-                                        color = Color(0xFF6C6453)
+                                        color = readingTheme.iconTintColor
                                     )
                                 } else if (isCurrentStoryPlaying) {
                                     Icon(
@@ -1283,7 +1314,7 @@ fun ReadingScreen(
                                     Icon(
                                         Icons.AutoMirrored.Filled.VolumeUp,
                                         contentDescription = "Narrate Story",
-                                        tint = Color(0xFF6C6453),
+                                        tint = readingTheme.iconTintColor,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
@@ -1300,7 +1331,7 @@ fun ReadingScreen(
                                 Icon(
                                     Icons.Filled.ContentCopy,
                                     contentDescription = "Copy Story",
-                                    tint = Color(0xFF6C6453),
+                                    tint = readingTheme.iconTintColor,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -1322,7 +1353,7 @@ fun ReadingScreen(
                                     text = story.title,
                                     fontSize = 22.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1E1E1E),
+                                    color = readingTheme.textPrimaryColor,
                                     lineHeight = 30.sp
                                 )
 
@@ -1330,10 +1361,12 @@ fun ReadingScreen(
 
                                 // Pure Japanese Story Content with In-Text Highlights
                                 if (highlightWords && vocabSummary != null && vocabSummary!!.words.isNotEmpty()) {
-                                    val annotatedContent = remember(story.content, vocabSummary?.words, highlightWords) {
+                                    val annotatedContent = remember(story.content, vocabSummary?.words, highlightWords, readingTheme) {
                                         buildHighlightedStoryText(
                                             content = story.content,
                                             vocabWords = vocabSummary!!.words,
+                                            highlightBg = readingTheme.wordHighlightBackground,
+                                            highlightText = readingTheme.wordHighlightTextColor,
                                             onWordTapped = { item ->
                                                 selectedWordDetail = item
                                             }
@@ -1342,7 +1375,7 @@ fun ReadingScreen(
                                     Text(
                                         text = annotatedContent,
                                         fontSize = 17.sp,
-                                        color = Color(0xFF1E1E1E),
+                                        color = readingTheme.textPrimaryColor,
                                         lineHeight = 34.sp,
                                         letterSpacing = 0.5.sp
                                     )
@@ -1350,7 +1383,7 @@ fun ReadingScreen(
                                     Text(
                                         text = story.content,
                                         fontSize = 17.sp,
-                                        color = Color(0xFF1E1E1E),
+                                        color = readingTheme.textPrimaryColor,
                                         lineHeight = 34.sp,
                                         letterSpacing = 0.5.sp
                                     )
@@ -1361,8 +1394,8 @@ fun ReadingScreen(
                         Spacer(modifier = Modifier.height(20.dp))
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = Color(0xFFEBE2CF),
-                            border = BorderStroke(1.dp, Color(0xFFDDD2BC)),
+                            color = readingTheme.surfaceColor,
+                            border = BorderStroke(1.dp, readingTheme.surfaceBorderColor),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
@@ -1370,7 +1403,7 @@ fun ReadingScreen(
                                     Icon(
                                         Icons.Filled.School,
                                         contentDescription = null,
-                                        tint = Color(0xFF5A5243),
+                                        tint = readingTheme.iconTintColor,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -1378,7 +1411,7 @@ fun ReadingScreen(
                                         text = "TARGET WORDS FROM YOUR CARDS (${story.targetWords.size})",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF6C6453),
+                                        color = readingTheme.textSecondaryColor,
                                         letterSpacing = 0.5.sp
                                     )
                                 }
@@ -1393,10 +1426,10 @@ fun ReadingScreen(
                                         val matchedItem = vocabSummary?.words?.find { it.displayWord == word || it.kanji == word }
                                         Surface(
                                             shape = RoundedCornerShape(8.dp),
-                                            color = if (isPresent) Color(0xFFDFD4BE) else Color(0xFFF0E8D7),
+                                            color = if (isPresent) readingTheme.targetChipPresentBackground else readingTheme.targetChipBackground,
                                             border = BorderStroke(
                                                 1.dp,
-                                                if (isPresent) Color(0xFFC9BC9F) else Color(0xFFE0D5C0)
+                                                if (isPresent) readingTheme.targetChipPresentBorder else readingTheme.targetChipBorder
                                             ),
                                             onClick = {
                                                 matchedItem?.let { selectedWordDetail = it }
@@ -1410,7 +1443,7 @@ fun ReadingScreen(
                                                     text = word,
                                                     fontSize = 12.sp,
                                                     fontWeight = if (isPresent) FontWeight.Bold else FontWeight.Normal,
-                                                    color = Color(0xFF2C2820),
+                                                    color = readingTheme.targetChipText,
                                                     maxLines = 1,
                                                     softWrap = false
                                                 )
@@ -1419,7 +1452,7 @@ fun ReadingScreen(
                                                     Icon(
                                                         Icons.Filled.Check,
                                                         contentDescription = "Used in story",
-                                                        tint = Color(0xFF4A6B4F),
+                                                        tint = if (readingTheme.isDark) Color(0xFF6EE7A0) else Color(0xFF4A6B4F),
                                                         modifier = Modifier.size(12.dp)
                                                     )
                                                 }
@@ -1436,8 +1469,8 @@ fun ReadingScreen(
                         Spacer(modifier = Modifier.height(20.dp))
                         Surface(
                             shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFFEDE5D3),
-                            border = BorderStroke(1.dp, Color(0xFFDDD2BC)),
+                            color = readingTheme.surfaceColor,
+                            border = BorderStroke(1.dp, readingTheme.surfaceBorderColor),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(modifier = Modifier.padding(18.dp)) {
@@ -1450,7 +1483,7 @@ fun ReadingScreen(
                                         Icon(
                                             Icons.Filled.AutoAwesome,
                                             contentDescription = null,
-                                            tint = Color(0xFF5A5243),
+                                            tint = readingTheme.iconTintColor,
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
@@ -1458,7 +1491,7 @@ fun ReadingScreen(
                                             text = "Reading Comprehension Quiz",
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF2C2820)
+                                            color = readingTheme.quizQuestionText
                                         )
                                     }
 
@@ -1471,10 +1504,10 @@ fun ReadingScreen(
                                                 Icons.Filled.Refresh,
                                                 contentDescription = "Reset Quiz",
                                                 modifier = Modifier.size(14.dp),
-                                                tint = Color(0xFF6C6453)
+                                                tint = readingTheme.iconTintColor
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Reset", color = Color(0xFF6C6453), fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                            Text("Reset", color = readingTheme.iconTintColor, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                         }
                                     }
                                 }
@@ -1482,7 +1515,7 @@ fun ReadingScreen(
                                 Text(
                                     text = "Test your understanding of the story and vocabulary.",
                                     fontSize = 12.sp,
-                                    color = Color(0xFF6C6453),
+                                    color = readingTheme.textSecondaryColor,
                                     modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
                                 )
 
@@ -1492,10 +1525,18 @@ fun ReadingScreen(
                                 if (answeredCount == story.questions.size && story.questions.isNotEmpty()) {
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
-                                        color = if (correctCount == story.questions.size) Color(0xFFD8E8D5) else Color(0xFFE2D6C0),
+                                        color = if (correctCount == story.questions.size) {
+                                            if (readingTheme.isDark) Color(0xFF1E3827) else Color(0xFFD8E8D5)
+                                        } else {
+                                            readingTheme.targetChipBackground
+                                        },
                                         border = BorderStroke(
                                             1.dp,
-                                            if (correctCount == story.questions.size) Color(0xFF7E9F85) else Color(0xFFC5B89F)
+                                            if (correctCount == story.questions.size) {
+                                                if (readingTheme.isDark) Color(0xFF4A8F5C) else Color(0xFF7E9F85)
+                                            } else {
+                                                readingTheme.surfaceBorderColor
+                                            }
                                         ),
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1511,7 +1552,7 @@ fun ReadingScreen(
                                                 else "Score: $correctCount / ${story.questions.size}",
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 14.sp,
-                                                color = Color(0xFF2C2820)
+                                                color = readingTheme.quizQuestionText
                                             )
                                         }
                                     }
@@ -1525,7 +1566,7 @@ fun ReadingScreen(
                                         text = "${qIdx + 1}. ${q.questionText}",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF2C2820)
+                                        color = readingTheme.quizQuestionText
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
 
@@ -1537,17 +1578,17 @@ fun ReadingScreen(
                                         val isCorrectOption = q.correctOptionIndex == optIdx
 
                                         val bgColor = when {
-                                            !isAnswered -> if (isSelected) Color(0xFFDFD4BE) else Color(0xFFF7F2E6)
-                                            isCorrectOption -> Color(0xFFD8E8D5)
-                                            isSelected && !isCorrectOption -> Color(0xFFF5D6D9)
-                                            else -> Color(0xFFF7F2E6)
+                                            !isAnswered -> if (isSelected) readingTheme.quizOptionSelectedBackground else readingTheme.quizOptionBackground
+                                            isCorrectOption -> readingTheme.quizOptionCorrectBackground
+                                            isSelected && !isCorrectOption -> readingTheme.quizOptionWrongBackground
+                                            else -> readingTheme.quizOptionBackground
                                         }
 
                                         val borderColor = when {
-                                            !isAnswered -> if (isSelected) Color(0xFF7E9F85) else Color(0xFFDDD2BC)
-                                            isCorrectOption -> Color(0xFF7E9F85)
-                                            isSelected && !isCorrectOption -> Color(0xFFCF7B88)
-                                            else -> Color(0xFFDDD2BC)
+                                            !isAnswered -> if (isSelected) readingTheme.quizOptionSelectedBorder else readingTheme.quizOptionBorder
+                                            isCorrectOption -> readingTheme.quizOptionCorrectBorder
+                                            isSelected && !isCorrectOption -> readingTheme.quizOptionWrongBorder
+                                            else -> readingTheme.quizOptionBorder
                                         }
 
                                         Surface(
@@ -1570,21 +1611,21 @@ fun ReadingScreen(
                                                 Text(
                                                     text = optText,
                                                     fontSize = 13.sp,
-                                                    color = Color(0xFF2C2820),
+                                                    color = readingTheme.quizQuestionText,
                                                     modifier = Modifier.weight(1f)
                                                 )
                                                 if (isAnswered && isCorrectOption) {
                                                     Icon(
                                                         Icons.Filled.Check,
                                                         contentDescription = "Correct",
-                                                        tint = Color(0xFF4A6B4F),
+                                                        tint = if (readingTheme.isDark) Color(0xFF6EE7A0) else Color(0xFF4A6B4F),
                                                         modifier = Modifier.size(16.dp)
                                                     )
                                                 } else if (isAnswered && isSelected && !isCorrectOption) {
                                                     Icon(
                                                         Icons.Filled.Close,
                                                         contentDescription = "Incorrect",
-                                                        tint = Color(0xFFA84E5B),
+                                                        tint = if (readingTheme.isDark) Color(0xFFE06C75) else Color(0xFFA84E5B),
                                                         modifier = Modifier.size(16.dp)
                                                     )
                                                 }
@@ -1596,14 +1637,14 @@ fun ReadingScreen(
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Surface(
                                             shape = RoundedCornerShape(8.dp),
-                                            color = Color(0xFFF2EADC),
-                                            border = BorderStroke(1.dp, Color(0xFFDDD2BC)),
+                                            color = readingTheme.quizExplanationBackground,
+                                            border = BorderStroke(1.dp, readingTheme.quizExplanationBorder),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text(
                                                 text = "💡 ${q.explanation}",
                                                 fontSize = 12.sp,
-                                                color = Color(0xFF5A5243),
+                                                color = readingTheme.quizExplanationText,
                                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
                                             )
                                         }
@@ -1750,13 +1791,18 @@ fun ReadingScreen(
                                                     color = themeBadge.backgroundColor,
                                                     border = BorderStroke(1.dp, themeBadge.borderColor)
                                                 ) {
+                                                    val historyBadgeText = if (!item.topic.isNullOrBlank()) {
+                                                        "${StoryThemes.formatThemeName(item.theme)} • ${item.topic}"
+                                                    } else {
+                                                        StoryThemes.formatThemeName(item.theme)
+                                                    }
                                                     Text(
-                                                        text = StoryThemes.formatThemeName(item.theme),
+                                                        text = historyBadgeText,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = themeBadge.contentColor,
                                                         maxLines = 1,
-                                                        softWrap = false,
+                                                        overflow = TextOverflow.Ellipsis,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                     )
                                                 }
@@ -1908,12 +1954,14 @@ fun ReadingScreen(
 }
 
 /**
- * Builds an AnnotatedString with warm amber/peach background highlights and clickable links
+ * Builds an AnnotatedString with theme-matched background highlights and clickable links
  * for vocabulary words appearing in the Japanese story.
  */
 private fun buildHighlightedStoryText(
     content: String,
     vocabWords: List<AnkiVocabularyItem>,
+    highlightBg: Color = Color(0xFFF7D5B5),
+    highlightText: Color = Color(0xFF1E1E1E),
     onWordTapped: (AnkiVocabularyItem) -> Unit
 ): AnnotatedString {
     if (vocabWords.isEmpty() || content.isEmpty()) {
@@ -1961,9 +2009,9 @@ private fun buildHighlightedStoryText(
         for (match in matches) {
             addStyle(
                 style = SpanStyle(
-                    background = Color(0xFFF7D5B5),
+                    background = highlightBg,
                     textDecoration = TextDecoration.Underline,
-                    color = Color(0xFF1E1E1E),
+                    color = highlightText,
                     fontWeight = FontWeight.Medium
                 ),
                 start = match.start,
@@ -1974,9 +2022,9 @@ private fun buildHighlightedStoryText(
                     tag = match.item.displayWord,
                     styles = TextLinkStyles(
                         style = SpanStyle(
-                            background = Color(0xFFF7D5B5),
+                            background = highlightBg,
                             textDecoration = TextDecoration.Underline,
-                            color = Color(0xFF1E1E1E),
+                            color = highlightText,
                             fontWeight = FontWeight.Medium
                         )
                     ),

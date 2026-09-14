@@ -82,7 +82,10 @@ fun StoryThemeConfigDialog(
         mutableStateOf(prefs.customStoryTheme ?: StoryThemes.ALL_THEMES.first())
     }
     var selectedCustomTopic by remember {
-        mutableStateOf(prefs.customStoryTopic) // null means "Any topic"
+        val savedTopic = prefs.customStoryTopic
+        val theme = prefs.customStoryTheme ?: StoryThemes.ALL_THEMES.first()
+        val validTopics = StoryThemes.CATEGORIES[theme] ?: emptyList()
+        mutableStateOf(if (savedTopic != null && savedTopic in validTopics) savedTopic else null)
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -268,9 +271,19 @@ fun StoryThemeConfigDialog(
                             onThemeSelected = { newTheme ->
                                 selectedCustomTheme = newTheme
                                 selectedCustomTopic = null // Reset topic to "Any topic" when switching theme
+                                isCustomActive = true
+                                prefs.isCustomThemeModeActive = true
+                                prefs.customStoryTheme = newTheme
+                                prefs.customStoryTopic = null
+                                onConfigurationChanged()
                             },
                             onTopicSelected = { newTopic ->
                                 selectedCustomTopic = newTopic
+                                isCustomActive = true
+                                prefs.isCustomThemeModeActive = true
+                                prefs.customStoryTheme = selectedCustomTheme
+                                prefs.customStoryTopic = newTopic
+                                onConfigurationChanged()
                             },
                             onApplyCustom = {
                                 isCustomActive = true
@@ -278,7 +291,12 @@ fun StoryThemeConfigDialog(
                                 prefs.customStoryTheme = selectedCustomTheme
                                 prefs.customStoryTopic = selectedCustomTopic
                                 onConfigurationChanged()
-                                Toast.makeText(context, "Custom story configured and locked!", Toast.LENGTH_SHORT).show()
+                                val topicDisplay = selectedCustomTopic ?: "Any topic"
+                                Toast.makeText(
+                                    context,
+                                    "Custom story locked: ${StoryThemes.formatThemeName(selectedCustomTheme)} • $topicDisplay",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                                 onDismiss()
                             },
                             onResetToRandom = {
@@ -286,6 +304,7 @@ fun StoryThemeConfigDialog(
                                 prefs.isCustomThemeModeActive = false
                                 prefs.customStoryTheme = null
                                 prefs.customStoryTopic = null
+                                selectedCustomTopic = null
                                 onConfigurationChanged()
                                 Toast.makeText(context, "Switched back to Random mode", Toast.LENGTH_SHORT).show()
                             }
@@ -297,7 +316,15 @@ fun StoryThemeConfigDialog(
 
                 // Footer Done button
                 Button(
-                    onClick = onDismiss,
+                    onClick = {
+                        if (selectedTab == 1 && isCustomActive) {
+                            prefs.isCustomThemeModeActive = true
+                            prefs.customStoryTheme = selectedCustomTheme
+                            prefs.customStoryTopic = selectedCustomTopic
+                            onConfigurationChanged()
+                        }
+                        onDismiss()
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(46.dp),
@@ -728,7 +755,7 @@ private fun CustomStoryContent(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Apply & Lock for Next Stories",
+                text = "Apply & Done",
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp
             )

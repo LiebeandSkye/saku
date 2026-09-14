@@ -144,6 +144,56 @@ class ReadingFeatureTest {
     }
 
     @Test
+    fun testReadingThemePreferencesAndColorTheory() {
+        val fakePrefs = com.saku.util.FakeSharedPreferences()
+        val prefs = com.saku.data.PreferencesManager(fakePrefs)
+
+        // 1. Default should be "warm_parchment"
+        assertEquals("warm_parchment", prefs.readingScreenTheme)
+        assertEquals(com.saku.ui.ReadingTheme.WARM_PARCHMENT, com.saku.ui.ReadingTheme.fromId(prefs.readingScreenTheme))
+
+        // 2. Exactly 5 curated reading themes available
+        val allThemes = com.saku.ui.ReadingTheme.values()
+        assertEquals(5, allThemes.size)
+
+        // 3. Verify IDs and round-trips
+        val expectedIds = listOf("warm_parchment", "matcha_mist", "paper_pearl", "twilight_slate", "obsidian_night")
+        assertEquals(expectedIds, allThemes.map { it.id })
+
+        for (theme in allThemes) {
+            prefs.readingScreenTheme = theme.id
+            assertEquals(theme.id, prefs.readingScreenTheme)
+            assertEquals(theme, com.saku.ui.ReadingTheme.fromId(theme.id))
+        }
+
+        // 4. Fallback on unknown or null id
+        assertEquals(com.saku.ui.ReadingTheme.WARM_PARCHMENT, com.saku.ui.ReadingTheme.fromId(null))
+        assertEquals(com.saku.ui.ReadingTheme.WARM_PARCHMENT, com.saku.ui.ReadingTheme.fromId("non_existent"))
+
+        // 5. Verify color theory properties:
+        // - At least 2 dark themes specifically tailored for reading in the dark
+        val darkThemes = allThemes.filter { it.isDark }
+        val lightThemes = allThemes.filter { !it.isDark }
+        assertEquals(2, darkThemes.size)
+        assertEquals(3, lightThemes.size)
+
+        // - Ensure contrast pairing: dark themes have bright text, light themes have dark text
+        for (theme in lightThemes) {
+            val textLum = theme.textPrimaryColor.red * 0.2126f + theme.textPrimaryColor.green * 0.7152f + theme.textPrimaryColor.blue * 0.0722f
+            val bgLum = theme.containerColor.red * 0.2126f + theme.containerColor.green * 0.7152f + theme.containerColor.blue * 0.0722f
+            assertTrue("Light theme ${theme.title} must have high background luminance", bgLum > 0.7f)
+            assertTrue("Light theme ${theme.title} must have dark text luminance", textLum < 0.3f)
+        }
+
+        for (theme in darkThemes) {
+            val textLum = theme.textPrimaryColor.red * 0.2126f + theme.textPrimaryColor.green * 0.7152f + theme.textPrimaryColor.blue * 0.0722f
+            val bgLum = theme.containerColor.red * 0.2126f + theme.containerColor.green * 0.7152f + theme.containerColor.blue * 0.0722f
+            assertTrue("Dark theme ${theme.title} must have low background luminance for night reading", bgLum < 0.2f)
+            assertTrue("Dark theme ${theme.title} must have comfortable light text luminance", textLum > 0.6f)
+        }
+    }
+
+    @Test
     fun testConnectStudiedWordsPreference() {
         val fakePrefs = com.saku.util.FakeSharedPreferences()
         val prefs = com.saku.data.PreferencesManager(fakePrefs)

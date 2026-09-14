@@ -125,6 +125,31 @@ class StoryThemesTest {
         assertEquals("Mystery", prefs.customStoryTheme)
         assertEquals("A strange letter with no sender", prefs.customStoryTopic)
         assertTrue(prefs.isCustomThemeModeActive)
+
+        // Switching theme clears or resets topic
+        prefs.customStoryTheme = "SliceOfLife"
+        prefs.customStoryTopic = null
+        assertEquals("SliceOfLife", prefs.customStoryTheme)
+        assertNull(prefs.customStoryTopic)
+        assertTrue(prefs.isCustomThemeModeActive)
+
+        // Reset to random
+        prefs.isCustomThemeModeActive = false
+        prefs.customStoryTheme = null
+        prefs.customStoryTopic = null
+        assertFalse(prefs.isCustomThemeModeActive)
+        assertNull(prefs.customStoryTheme)
+        assertNull(prefs.customStoryTopic)
+    }
+
+    @Test
+    fun testTopicValidationAgainstCategory() {
+        val mysteryTopics = StoryThemes.CATEGORIES["Mystery"] ?: emptyList()
+        val happyTopics = StoryThemes.CATEGORIES["Happy"] ?: emptyList()
+
+        val validMysteryTopic = "A strange letter with no sender"
+        assertTrue(mysteryTopics.contains(validMysteryTopic))
+        assertFalse(happyTopics.contains(validMysteryTopic))
     }
 
     @Test

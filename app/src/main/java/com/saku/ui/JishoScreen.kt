@@ -6,8 +6,10 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +41,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -60,6 +64,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -68,8 +73,10 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.saku.data.JishoWord
 import com.saku.data.PreferencesManager
 import com.saku.jisho.JishoService
@@ -77,7 +84,7 @@ import com.saku.util.JapaneseTtsHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun JishoScreen(
     padding: PaddingValues,
@@ -106,6 +113,7 @@ fun JishoScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var recentSearches by remember { mutableStateOf(prefs.recentJishoSearches) }
+    var searchToDelete by remember { mutableStateOf<String?>(null) }
     val expandedSlugs = remember { mutableStateListOf<String>() }
 
     fun executeSearch(searchTerm: String) {
@@ -286,11 +294,18 @@ fun JishoScreen(
                                         shape = RoundedCornerShape(16.dp),
                                         color = SakuColors.SurfaceElevated,
                                         border = BorderStroke(1.dp, SakuColors.Border),
-                                        modifier = Modifier.clickable {
-                                            query = term
-                                            keyboardController?.hide()
-                                            executeSearch(term)
-                                        }
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .combinedClickable(
+                                                onClick = {
+                                                    query = term
+                                                    keyboardController?.hide()
+                                                    executeSearch(term)
+                                                },
+                                                onLongClick = {
+                                                    searchToDelete = term
+                                                }
+                                            )
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -513,6 +528,81 @@ fun JishoScreen(
                                 clipboardManager.setText(AnnotatedString(copyContent))
                                 Toast.makeText(context, "Copied: $copyContent", Toast.LENGTH_SHORT).show()
                             }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // Confirmation Dialog for deleting single history item
+    if (searchToDelete != null) {
+        val targetTerm = searchToDelete ?: ""
+        Dialog(onDismissRequest = { searchToDelete = null }) {
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = SakuColors.Surface),
+                border = BorderStroke(1.dp, SakuColors.Border),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Are you sure you want to delete history?",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = SakuColors.TextPrimary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "\"$targetTerm\"",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SakuColors.SagePrimary,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // Red text saying delete
+                    TextButton(
+                        onClick = {
+                            prefs.removeRecentJishoSearch(targetTerm)
+                            recentSearches = prefs.recentJishoSearches
+                            searchToDelete = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Delete",
+                            color = Color(0xFFE53935),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Another one at the bottom saying cancel with grey text
+                    TextButton(
+                        onClick = {
+                            searchToDelete = null
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "Cancel",
+                            color = SakuColors.TextSecondary,
+                            fontSize = 15.sp
                         )
                     }
                 }

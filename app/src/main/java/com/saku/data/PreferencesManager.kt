@@ -124,6 +124,10 @@ class PreferencesManager(
         get() = prefs.getString(KEY_APP_THEME, "dim") ?: "dim"
         set(value) = prefs.edit().putString(KEY_APP_THEME, value).apply()
 
+    var readingScreenTheme: String
+        get() = prefs.getString(KEY_READING_SCREEN_THEME, "warm_parchment") ?: "warm_parchment"
+        set(value) = prefs.edit().putString(KEY_READING_SCREEN_THEME, value).apply()
+
     var isShootingStarsEnabled: Boolean
         get() = prefs.getBoolean(KEY_SHOOTING_STARS_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOOTING_STARS_ENABLED, value).apply()
@@ -233,6 +237,7 @@ class PreferencesManager(
         private const val KEY_LAST_READ_STORY_ID = "last_read_story_id"
         private const val KEY_READING_BACKGROUND_IMAGE_URI = "reading_background_image_uri"
         private const val KEY_APP_THEME = "app_theme"
+        private const val KEY_READING_SCREEN_THEME = "reading_screen_theme"
         private const val KEY_RECENT_JISHO_SEARCHES = "recent_jisho_searches"
         private const val KEY_SHOOTING_STARS_ENABLED = "key_shooting_stars_enabled"
         private const val KEY_DISABLED_STORY_THEMES = "disabled_story_themes"
@@ -260,6 +265,13 @@ class PreferencesManager(
         current.remove(trimmed)
         current.add(0, trimmed)
         recentJishoSearches = current.take(15)
+    }
+
+    fun removeRecentJishoSearch(term: String) {
+        val trimmed = term.trim()
+        val current = recentJishoSearches.toMutableList()
+        current.remove(trimmed)
+        recentJishoSearches = current
     }
 
     fun clearRecentJishoSearches() {

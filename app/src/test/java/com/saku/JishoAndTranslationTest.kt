@@ -4,6 +4,8 @@ import com.saku.data.JishoJapanese
 import com.saku.data.JishoSense
 import com.saku.data.JishoWord
 import com.saku.translation.TranslationResult
+import com.saku.data.PreferencesManager
+import com.saku.util.FakeSharedPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -70,5 +72,28 @@ class JishoAndTranslationTest {
         assertEquals("猫が好きです", result.sourceText)
         assertEquals("I like cats", result.translatedText)
         assertEquals("Neko ga sukidesu", result.romaji)
+    }
+
+    @Test
+    fun testRemoveRecentJishoSearch() {
+        val fakePrefs = FakeSharedPreferences()
+        val prefs = PreferencesManager(fakePrefs)
+
+        prefs.addRecentJishoSearch("猫")
+        prefs.addRecentJishoSearch("犬")
+        prefs.addRecentJishoSearch("鳥")
+
+        assertEquals(listOf("鳥", "犬", "猫"), prefs.recentJishoSearches)
+
+        // Remove single item "犬"
+        prefs.removeRecentJishoSearch("犬")
+        assertEquals(listOf("鳥", "猫"), prefs.recentJishoSearches)
+
+        // Remove remaining items one by one
+        prefs.removeRecentJishoSearch("鳥")
+        assertEquals(listOf("猫"), prefs.recentJishoSearches)
+
+        prefs.removeRecentJishoSearch("猫")
+        assertEquals(emptyList<String>(), prefs.recentJishoSearches)
     }
 }

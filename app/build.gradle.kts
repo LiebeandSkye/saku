@@ -65,9 +65,12 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Networking (Gemini REST API)
+    // Networking & Media (Gemini REST API, Nekos API, Image Loading)
     implementation(libs.okhttp)
+    implementation(libs.coil.compose)
 
     // Unit Testing
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
+

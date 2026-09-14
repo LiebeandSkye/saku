@@ -29,7 +29,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -392,32 +391,12 @@ fun ReadingThemePicker(
                                 .border(1.5.dp, theme.borderColor, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (theme.isDark) Color.White.copy(alpha = 0.90f)
-                                            else Color(0xFF1E1E1E)
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Check,
-                                        contentDescription = "Selected",
-                                        tint = if (theme.isDark) Color(0xFF1E1E1E) else Color.White,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
-                            } else {
-                                Text(
-                                    text = theme.kanji,
-                                    color = theme.textPrimaryColor,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            Text(
+                                text = theme.kanji,
+                                color = theme.textPrimaryColor,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,6 +46,8 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
@@ -92,6 +95,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -105,6 +109,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.saku.anki.ReadingVocabularyExtractor
 import com.saku.data.AnkiVocabularyItem
 import com.saku.data.GeneratedStory
@@ -114,11 +119,14 @@ import com.saku.data.ReadingVocabularySummary
 import com.saku.reading.FishAudioService
 import com.saku.reading.GeminiStoryService
 import com.saku.reading.GenerationStatus
+import com.saku.reading.NekosService
 import com.saku.reading.StoryGenerationManager
 import com.saku.data.StoryThemes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -231,6 +239,24 @@ fun ReadingScreen(
             savedStories = historyManager.getStories()
             showHistorySheet = true
             onHistoryTriggerConsumed()
+        }
+    }
+
+    // Auto-fetch Nekos background image for any stories missing an imageUrl
+    LaunchedEffect(showHistorySheet) {
+        if (showHistorySheet) {
+            val unassigned = savedStories.filter { it.imageUrl.isNullOrBlank() }
+            if (unassigned.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    for (story in unassigned) {
+                        val url = NekosService.fetchImageUrl(story.title, story.theme, story.topic)
+                        if (!url.isNullOrBlank()) {
+                            historyManager.updateStoryImageUrl(story.id, url)
+                        }
+                    }
+                }
+                savedStories = historyManager.getStories()
+            }
         }
     }
 
@@ -1214,30 +1240,6 @@ fun ReadingScreen(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                 )
                             }
-                            if (!story.theme.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.width(6.dp))
-                                val themeBadge = StoryThemes.getThemeBadgeColors(story.theme)
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = themeBadge.backgroundColor,
-                                    border = BorderStroke(1.dp, themeBadge.borderColor)
-                                ) {
-                                    val badgeText = if (!story.topic.isNullOrBlank()) {
-                                        "${StoryThemes.formatThemeName(story.theme)} • ${story.topic}"
-                                    } else {
-                                        StoryThemes.formatThemeName(story.theme)
-                                    }
-                                    Text(
-                                        text = badgeText,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = themeBadge.contentColor,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                    )
-                                }
-                            }
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1747,11 +1749,12 @@ fun ReadingScreen(
                     ) {
                         items(savedStories, key = { it.id }) { item ->
                             Card(
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(16.dp),
                                 colors = CardDefaults.cardColors(containerColor = SakuColors.SurfaceElevated),
-                                border = BorderStroke(1.dp, SakuColors.Border),
+                                border = BorderStroke(1.dp, if (item.isPinned) SakuColors.SagePrimary.copy(alpha = 0.7f) else SakuColors.Border),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 112.dp)
                                     .clickable {
                                         currentStory = item
                                         coroutineScope.launch {
@@ -1760,85 +1763,162 @@ fun ReadingScreen(
                                         }
                                     }
                             ) {
-                                Row(
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                        .defaultMinSize(minHeight = 112.dp)
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = SakuColors.SageContainer
-                                            ) {
-                                                Text(
-                                                    text = item.jlptLevel,
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = SakuColors.SagePrimary,
-                                                    maxLines = 1,
-                                                    softWrap = false,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    // Nekos background image
+                                    if (!item.imageUrl.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = item.imageUrl,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.matchParentSize()
+                                        )
+                                        // High-contrast gradient scrim to ensure text readability
+                                        Box(
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .background(
+                                                    Brush.horizontalGradient(
+                                                        colors = listOf(
+                                                            Color(0xF2121214),
+                                                            Color(0xE018181B),
+                                                            Color(0x9918181B)
+                                                        )
+                                                    )
                                                 )
-                                            }
-                                            if (!item.theme.isNullOrBlank()) {
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                val themeBadge = StoryThemes.getThemeBadgeColors(item.theme)
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 18.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (item.isPinned) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = SakuColors.SagePrimary.copy(alpha = 0.2f),
+                                                        border = BorderStroke(1.dp, SakuColors.SagePrimary.copy(alpha = 0.6f))
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.PushPin,
+                                                                contentDescription = null,
+                                                                tint = SakuColors.SagePrimary,
+                                                                modifier = Modifier.size(10.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(3.dp))
+                                                            Text(
+                                                                text = "PINNED",
+                                                                fontSize = 9.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = SakuColors.SagePrimary,
+                                                                maxLines = 1
+                                                            )
+                                                        }
+                                                    }
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                }
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
-                                                    color = themeBadge.backgroundColor,
-                                                    border = BorderStroke(1.dp, themeBadge.borderColor)
+                                                    color = SakuColors.SageContainer
                                                 ) {
-                                                    val historyBadgeText = if (!item.topic.isNullOrBlank()) {
-                                                        "${StoryThemes.formatThemeName(item.theme)} • ${item.topic}"
-                                                    } else {
-                                                        StoryThemes.formatThemeName(item.theme)
-                                                    }
                                                     Text(
-                                                        text = historyBadgeText,
+                                                        text = item.jlptLevel,
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = themeBadge.contentColor,
+                                                        color = SakuColors.SagePrimary,
                                                         maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
+                                                        softWrap = false,
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                     )
                                                 }
+                                                if (!item.theme.isNullOrBlank()) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    val themeBadge = StoryThemes.getThemeBadgeColors(item.theme)
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = themeBadge.backgroundColor,
+                                                        border = BorderStroke(1.dp, themeBadge.borderColor)
+                                                    ) {
+                                                        val historyBadgeText = if (!item.topic.isNullOrBlank()) {
+                                                            "${StoryThemes.formatThemeName(item.theme)} • ${item.topic}"
+                                                        } else {
+                                                            StoryThemes.formatThemeName(item.theme)
+                                                        }
+                                                        Text(
+                                                            text = historyBadgeText,
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = themeBadge.contentColor,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(item.createdAt)),
+                                                    fontSize = 11.sp,
+                                                    color = if (!item.imageUrl.isNullOrBlank()) Color.White.copy(alpha = 0.75f) else SakuColors.TextSecondary,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
                                             }
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Spacer(modifier = Modifier.height(8.dp))
                                             Text(
-                                                text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(item.createdAt)),
-                                                fontSize = 11.sp,
-                                                color = SakuColors.TextSecondary,
-                                                maxLines = 1,
-                                                softWrap = false
+                                                text = item.title,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontSize = 16.sp,
+                                                color = if (!item.imageUrl.isNullOrBlank()) Color.White else SakuColors.TextPrimary,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = item.title,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 15.sp,
-                                            color = SakuColors.TextPrimary,
-                                            maxLines = 1
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            historyManager.deleteStory(item.id)
-                                            savedStories = historyManager.getStories()
-                                            if (currentStory?.id == item.id) {
-                                                currentStory = savedStories.firstOrNull()
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    historyManager.togglePin(item.id)
+                                                    savedStories = historyManager.getStories()
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (item.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                                    contentDescription = if (item.isPinned) "Unpin Story" else "Pin Story",
+                                                    tint = if (item.isPinned) SakuColors.SagePrimary else if (!item.imageUrl.isNullOrBlank()) Color.White.copy(alpha = 0.7f) else SakuColors.TextTertiary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = {
+                                                    historyManager.deleteStory(item.id)
+                                                    savedStories = historyManager.getStories()
+                                                    if (currentStory?.id == item.id) {
+                                                        currentStory = savedStories.firstOrNull()
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(
+                                                    Icons.Filled.DeleteOutline,
+                                                    contentDescription = "Delete Story",
+                                                    tint = SakuColors.AccentRose,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
                                             }
                                         }
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.DeleteOutline,
-                                            contentDescription = "Delete Story",
-                                            tint = SakuColors.AccentRose
-                                        )
                                     }
                                 }
                             }

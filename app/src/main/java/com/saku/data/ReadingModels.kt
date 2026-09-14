@@ -37,5 +37,8 @@ data class GeneratedStory(
     val targetWords: List<String> = emptyList(),
     val questions: List<StoryQuizQuestion> = emptyList(),
     val theme: String? = null,
-    val topic: String? = null
+    val topic: String? = null,
+    val isPinned: Boolean = false,
+    val imageUrl: String? = null
 )
+

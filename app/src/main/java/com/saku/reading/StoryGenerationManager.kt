@@ -77,7 +77,10 @@ object StoryGenerationManager {
                 // Automatically save into reading history on background IO dispatcher
                 withContext(Dispatchers.IO) {
                     val historyManager = ReadingHistoryManager(appContext)
-                    historyManager.saveStory(story)
+                    val imageUrl = NekosService.fetchImageUrl(story.title, story.theme, story.topic)
+                    val storyWithImage = if (!imageUrl.isNullOrBlank()) story.copy(imageUrl = imageUrl) else story
+                    latestStory = storyWithImage
+                    historyManager.saveStory(storyWithImage)
                 }
 
                 val prefs = PreferencesManager(appContext)

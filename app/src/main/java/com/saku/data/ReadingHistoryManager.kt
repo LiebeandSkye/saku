@@ -6,11 +6,19 @@ import com.saku.reading.FishAudioService
 import org.json.JSONArray
 import org.json.JSONObject
 
-class ReadingHistoryManager(private val context: Context) {
+class ReadingHistoryManager(
+    private val context: Context?,
+    private val prefs: SharedPreferences
+) {
 
-    private val prefs: SharedPreferences = context.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE
+    constructor(context: Context) : this(
+        context,
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    )
+
+    constructor(prefs: SharedPreferences) : this(
+        null,
+        prefs
     )
 
     fun getStories(): List<GeneratedStory> {
@@ -53,6 +61,8 @@ class ReadingHistoryManager(private val context: Context) {
 
                 val theme = obj.optString("theme", "").ifBlank { null }
                 val topic = obj.optString("topic", "").ifBlank { null }
+                val isPinned = obj.optBoolean("isPinned", false)
+                val imageUrl = obj.optString("imageUrl", "").ifBlank { null }
 
                 list.add(
                     GeneratedStory(
@@ -64,34 +74,71 @@ class ReadingHistoryManager(private val context: Context) {
                         targetWords = words,
                         questions = questions,
                         theme = theme,
-                        topic = topic
+                        topic = topic,
+                        isPinned = isPinned,
+                        imageUrl = imageUrl
                     )
                 )
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        return list.sortedByDescending { it.createdAt }
+        return list.sortedWith(
+            compareByDescending<GeneratedStory> { it.isPinned }
+                .thenByDescending { it.createdAt }
+        )
     }
 
     fun saveStory(story: GeneratedStory) {
         val existing = getStories().filterNot { it.id == story.id }.toMutableList()
         existing.add(0, story) // Newest first
 
+        val sorted = existing.sortedWith(
+            compareByDescending<GeneratedStory> { it.isPinned }
+                .thenByDescending { it.createdAt }
+        )
         // Limit to 50 saved stories to keep storage lightweight
-        val trimmed = if (existing.size > 50) existing.take(50) else existing
+        val trimmed = if (sorted.size > 50) sorted.take(50) else sorted
         saveList(trimmed)
+    }
+
+    fun togglePin(id: String): Boolean {
+        val stories = getStories().toMutableList()
+        val index = stories.indexOfFirst { it.id == id }
+        if (index == -1) return false
+        val current = stories[index]
+        val updated = current.copy(isPinned = !current.isPinned)
+        stories[index] = updated
+        val sorted = stories.sortedWith(
+            compareByDescending<GeneratedStory> { it.isPinned }
+                .thenByDescending { it.createdAt }
+        )
+        saveList(sorted)
+        return updated.isPinned
+    }
+
+    fun updateStoryImageUrl(id: String, imageUrl: String) {
+        val stories = getStories().toMutableList()
+        val index = stories.indexOfFirst { it.id == id }
+        if (index == -1) return
+        val current = stories[index]
+        stories[index] = current.copy(imageUrl = imageUrl)
+        saveList(stories)
     }
 
     fun deleteStory(id: String) {
         val updated = getStories().filterNot { it.id == id }
         saveList(updated)
-        FishAudioService.deleteAudioForStory(context, id)
+        context?.let {
+            FishAudioService.deleteAudioForStory(it, id)
+        }
     }
 
     fun clearAll() {
         prefs.edit().remove(KEY_STORIES).apply()
-        FishAudioService.clearAllAudio(context)
+        context?.let {
+            FishAudioService.clearAllAudio(it)
+        }
     }
 
     private fun saveList(list: List<GeneratedStory>) {
@@ -104,6 +151,8 @@ class ReadingHistoryManager(private val context: Context) {
                     put("content", story.content)
                     put("jlptLevel", story.jlptLevel)
                     put("createdAt", story.createdAt)
+                    put("isPinned", story.isPinned)
+                    story.imageUrl?.let { put("imageUrl", it) }
                     story.theme?.let { put("theme", it) }
                     story.topic?.let { put("topic", it) }
                     val wordsArr = JSONArray()

@@ -50,9 +50,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import com.saku.util.RubyTextRenderer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -1951,12 +1954,16 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     } else {
-                        // Furigana (shown when revealed)
-                        if (isRevealed && !card.kanjiFurigana.isNullOrBlank()) {
+                        val mainWord = card.kanji.ifBlank { card.question }.ifEmpty { "—" }
+                        val wordFurigana = card.kanjiFurigana.trim()
+
+                        // Furigana (shown when revealed, if distinct from main word)
+                        if (isRevealed && wordFurigana.isNotBlank() && wordFurigana != mainWord) {
                             Text(
-                                text = card.kanjiFurigana,
-                                fontSize = 12.5.sp,
-                                color = SakuColors.TextSecondary,
+                                text = wordFurigana,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = SakuColors.SagePrimary,
                                 textAlign = TextAlign.Center,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -1965,7 +1972,6 @@ class MainActivity : ComponentActivity() {
                         }
 
                         // Main kanji / word
-                        val mainWord = card.kanji.ifBlank { card.question }.ifEmpty { "—" }
                         Text(
                             text = mainWord,
                             fontSize = if (mainWord.length > 5) 26.sp else if (mainWord.length > 3) 30.sp else 34.sp,
@@ -2003,17 +2009,66 @@ class MainActivity : ComponentActivity() {
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Example sentence
-                        val sentence = card.sentence
-                        if (sentence.isNotBlank()) {
-                            Text(
-                                text = sentence,
-                                fontSize = 14.sp,
-                                color = if (isLight) SakuColors.TextPrimary else Color.White,
-                                textAlign = TextAlign.Center,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                                lineHeight = 19.sp
-                            )
+                        val rawSentence = card.sentence
+                        val rawSentenceFuri = card.sentenceFurigana.ifBlank { rawSentence }
+                        val enrichedSentenceFuri = remember(rawSentence, rawSentenceFuri, mainWord, wordFurigana) {
+                            if (!rawSentenceFuri.contains("[") &&
+                                !rawSentenceFuri.contains("<ruby") &&
+                                wordFurigana.isNotBlank() &&
+                                mainWord.isNotBlank() &&
+                                rawSentence.contains(mainWord)
+                            ) {
+                                rawSentence.replaceFirst(mainWord, "$mainWord[$wordFurigana]")
+                            } else {
+                                rawSentenceFuri
+                            }
+                        }
+
+                        val rubyTokens = remember(enrichedSentenceFuri, mainWord) {
+                            if (enrichedSentenceFuri.isNotBlank()) {
+                                RubyTextRenderer.parseRubyTokens(enrichedSentenceFuri, highlightWord = mainWord)
+                            } else {
+                                emptyList()
+                            }
+                        }
+                        val hasRuby = rubyTokens.any { it.ruby != null }
+
+                        if (rawSentence.isNotBlank() || hasRuby) {
+                            if (isRevealed && hasRuby) {
+                                RubySentenceFlow(
+                                    tokens = rubyTokens,
+                                    isLight = isLight,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp)
+                                )
+                            } else {
+                                val displaySentence = rawSentence.ifBlank {
+                                    rubyTokens.joinToString("") { it.base }
+                                }
+                                Text(
+                                    text = displaySentence,
+                                    fontSize = 14.sp,
+                                    color = if (isLight) SakuColors.TextPrimary else Color.White,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    lineHeight = 19.sp
+                                )
+                            }
+
+                            // Secondary sentence kana reading if available and no ruby in main sentence
+                            if (isRevealed && !hasRuby && card.sentenceFurigana.isNotBlank() && card.sentenceFurigana != rawSentence) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = card.sentenceFurigana,
+                                    fontSize = 12.sp,
+                                    color = SakuColors.SagePrimary,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
 
                             // Sentence meaning (shown when revealed)
                             if (isRevealed && !card.sentenceMeaning.isNullOrBlank()) {
@@ -2031,6 +2086,55 @@ class MainActivity : ComponentActivity() {
                     }
 
                     Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+
+    @OptIn(ExperimentalLayoutApi::class)
+    @Composable
+    private fun RubySentenceFlow(
+        tokens: List<RubyTextRenderer.RubyToken>,
+        isLight: Boolean,
+        modifier: Modifier = Modifier
+    ) {
+        FlowRow(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            tokens.forEach { token ->
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 0.5.dp)
+                ) {
+                    if (!token.ruby.isNullOrBlank()) {
+                        Text(
+                            text = token.ruby!!,
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp,
+                            color = SakuColors.SagePrimary,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1
+                        )
+                    } else {
+                        Spacer(modifier = Modifier.height(11.dp))
+                    }
+                    Text(
+                        text = token.base,
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
+                        fontWeight = if (token.isTarget) FontWeight.Bold else FontWeight.Normal,
+                        color = if (token.isTarget) {
+                            SakuColors.SagePrimary
+                        } else if (isLight) {
+                            SakuColors.TextPrimary
+                        } else {
+                            Color.White
+                        },
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
                 }
             }
         }

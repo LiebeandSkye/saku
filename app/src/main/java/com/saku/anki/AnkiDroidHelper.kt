@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -12,6 +13,7 @@ import androidx.core.content.ContextCompat
 import com.saku.data.CardInfo
 import com.saku.data.DeckInfo
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class AnkiDroidHelper(private val context: Context) {
 
@@ -386,6 +388,39 @@ class AnkiDroidHelper(private val context: Context) {
         }
     }
 
+    private val modelFieldCache = ConcurrentHashMap<Long, List<String>>()
+
+    fun getModelFieldNames(modelId: Long): List<String> {
+        if (modelId <= 0) return emptyList()
+        modelFieldCache[modelId]?.let { return it }
+
+        var modelCursor: Cursor? = null
+        try {
+            val modelUri = Uri.withAppendedPath(AnkiDroidContract.Models.getContentUri(authority), modelId.toString())
+            modelCursor = resolver.query(
+                modelUri,
+                null,
+                null,
+                null,
+                null
+            )
+            if (modelCursor != null && modelCursor.moveToFirst()) {
+                val fldNamesIdx = modelCursor.getColumnIndex(AnkiDroidContract.Models.FIELD_NAMES)
+                val rawNames = if (fldNamesIdx != -1) modelCursor.getString(fldNamesIdx) ?: "" else ""
+                if (rawNames.isNotEmpty()) {
+                    val names = rawNames.split("\u001f")
+                    modelFieldCache[modelId] = names
+                    return names
+                }
+            }
+        } catch (e: Exception) {
+            // ignore
+        } finally {
+            modelCursor?.close()
+        }
+        return emptyList()
+    }
+
     private fun getCardContentInternal(noteId: Long): CardInfo {
         try {
             val noteUri = Uri.withAppendedPath(notesUri, noteId.toString())
@@ -398,9 +433,12 @@ class AnkiDroidHelper(private val context: Context) {
             )?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val fldsIdx = cursor.getColumnIndex(COL_FLDS)
+                    val midIdx = cursor.getColumnIndex(COL_MID)
+                    val modelId = if (midIdx >= 0) cursor.getLong(midIdx) else -1L
+                    val fieldNames = if (modelId > 0) getModelFieldNames(modelId) else emptyList()
                     if (fldsIdx >= 0) {
                         val fields = cursor.getString(fldsIdx) ?: ""
-                        return parseCardContent(fields)
+                        return parseCardContent(fields, fieldNames)
                     }
                 }
             }
@@ -410,102 +448,8 @@ class AnkiDroidHelper(private val context: Context) {
         return CardInfo(noteId = noteId, cardOrd = 0, question = "", answer = "", deckName = "")
     }
 
-    fun parseCardContent(fields: String): CardInfo {
-        val rawParts = fields.split("\u001f")
-        if (rawParts.isEmpty()) {
-            return CardInfo(noteId = 0L, cardOrd = 0, question = "", answer = "", deckName = "")
-        }
-
-        var detectedKanji = ""
-        var detectedKanjiFurigana = ""
-        var detectedKanjiMeaning = ""
-        var detectedSentence = ""
-        var detectedSentenceFurigana = ""
-        var detectedSentenceMeaning = ""
-        var detectedImage = ""
-
-        val imgRegex = Regex("<img[^>]+src=[\"']?([^\"'>\\s]+)[\"']?")
-        for (part in rawParts) {
-            val match = imgRegex.find(part)
-            if (match != null && detectedImage.isEmpty()) {
-                detectedImage = match.groupValues[1]
-            }
-        }
-
-        if (rawParts.size >= 8) {
-            val cleanVocab = cleanHtml(rawParts[0])
-            val vocabWithFurigana = rawParts.getOrNull(3) ?: ""
-
-            detectedKanji = cleanVocab
-            if (vocabWithFurigana.contains("[") && vocabWithFurigana.contains("]")) {
-                detectedKanjiFurigana = vocabWithFurigana
-            } else if (rawParts.size > 1) {
-                val cleanKana = cleanHtml(rawParts[1])
-                if (cleanKana != cleanVocab && isJapanese(cleanKana)) {
-                    detectedKanjiFurigana = cleanKana
-                }
-            }
-            detectedKanjiMeaning = cleanHtml(rawParts[2])
-
-            val rawSentenceClean = cleanHtml(rawParts[5])
-            val rawSentenceFuri = rawParts[7]
-
-            detectedSentence = rawSentenceClean.ifEmpty { cleanFuriganaToKanji(rawSentenceFuri) }
-            detectedSentenceFurigana = rawSentenceFuri.ifEmpty { rawSentenceClean }
-
-            val rawSentenceEng = cleanHtml(rawParts[6])
-            if (isEnglish(rawSentenceEng)) {
-                detectedSentenceMeaning = rawSentenceEng
-            } else {
-                for (p in rawParts) {
-                    val clean = cleanHtml(p)
-                    if (clean.length > 10 && isEnglish(clean) && !isJapanese(clean) && clean != detectedKanjiMeaning) {
-                        detectedSentenceMeaning = clean
-                        break
-                    }
-                }
-            }
-        } else {
-            val rawVocab = rawParts[0]
-            if (rawVocab.contains("[") && rawVocab.contains("]")) {
-                detectedKanjiFurigana = rawVocab
-                detectedKanji = cleanFuriganaToKanji(rawVocab)
-            } else {
-                detectedKanji = cleanHtml(rawVocab)
-                if (rawParts.size > 1) {
-                    val p1 = cleanHtml(rawParts[1])
-                    if (isJapanese(p1) && p1 != detectedKanji) {
-                        detectedKanjiFurigana = p1
-                    }
-                }
-            }
-            if (rawParts.size > 2) detectedKanjiMeaning = cleanHtml(rawParts[2])
-
-            for (i in 3 until rawParts.size) {
-                val part = rawParts[i]
-                if (part.contains("[") && part.contains("]")) {
-                    detectedSentence = cleanFuriganaToKanji(part)
-                    detectedSentenceFurigana = part
-                } else if (isEnglish(cleanHtml(part)) && cleanHtml(part).length > 10) {
-                    detectedSentenceMeaning = cleanHtml(part)
-                }
-            }
-        }
-
-        return CardInfo(
-            noteId = 0L,
-            cardOrd = 0,
-            question = detectedKanji,
-            answer = detectedKanjiMeaning,
-            deckName = "",
-            kanji = detectedKanji,
-            kanjiFurigana = detectedKanjiFurigana,
-            kanjiMeaning = detectedKanjiMeaning,
-            sentence = detectedSentence,
-            sentenceFurigana = detectedSentenceFurigana,
-            sentenceMeaning = detectedSentenceMeaning,
-            imageFileName = detectedImage
-        )
+    fun parseCardContent(fields: String, fieldNames: List<String> = emptyList()): CardInfo {
+        return Companion.parseCardContent(fields, fieldNames)
     }
 
     fun getCardImageBitmap(imageFileName: String, maxDimension: Int = 600): Bitmap? {
@@ -688,10 +632,10 @@ class AnkiDroidHelper(private val context: Context) {
         const val PERMISSION_READ_WRITE_DATABASE = "com.ichi2.anki.permission.READ_WRITE_DATABASE"
         private const val AUTHORITY = "com.ichi2.anki.flashcards"
 
-        val DECKS_URI: Uri = Uri.parse("content://$AUTHORITY/decks/")
-        val SCHEDULE_URI: Uri = Uri.parse("content://$AUTHORITY/schedule/")
-        val SELECTED_DECK_URI: Uri = Uri.parse("content://$AUTHORITY/selected_deck")
-        val NOTES_URI: Uri = Uri.parse("content://$AUTHORITY/notes")
+        val DECKS_URI: Uri get() = Uri.parse("content://$AUTHORITY/decks/")
+        val SCHEDULE_URI: Uri get() = Uri.parse("content://$AUTHORITY/schedule/")
+        val SELECTED_DECK_URI: Uri get() = Uri.parse("content://$AUTHORITY/selected_deck")
+        val NOTES_URI: Uri get() = Uri.parse("content://$AUTHORITY/notes")
 
         private const val COL_DECK_NAME = "deck_name"
         private const val COL_DECK_ID = "deck_id"
@@ -701,8 +645,62 @@ class AnkiDroidHelper(private val context: Context) {
         private const val COL_BUTTON_COUNT = "button_count"
         private const val COL_NEXT_REVIEW_TIMES = "next_review_times"
         private const val COL_FLDS = "flds"
+        private const val COL_MID = "mid"
         private const val COL_EASE = "answer_ease"
         private const val COL_TIME_TAKEN = "time_taken"
         private const val COL_SUSPEND = "suspended"
+
+        fun parseCardContent(fields: String, fieldNames: List<String> = emptyList()): CardInfo {
+            val rawParts = fields.split("\u001f")
+            if (rawParts.isEmpty()) {
+                return CardInfo(noteId = 0L, cardOrd = 0, question = "", answer = "", deckName = "")
+            }
+
+            var detectedImage = ""
+            val imgRegex = Regex("<img[^>]+src=[\"']?([^\"'>\\s]+)[\"']?")
+            for (part in rawParts) {
+                val match = imgRegex.find(part)
+                if (match != null && detectedImage.isEmpty()) {
+                    detectedImage = match.groupValues[1]
+                    break
+                }
+            }
+
+            val parsed = JapaneseFieldParser.mapFieldsToJapaneseCard(
+                fieldNames = fieldNames,
+                fieldValues = rawParts
+            )
+
+            val kanji = parsed.kanji
+            val furigana = if (parsed.furigana.isNotBlank() && parsed.furigana != kanji) {
+                parsed.furigana
+            } else if (parsed.kana.isNotBlank() && parsed.kana != kanji) {
+                parsed.kana
+            } else {
+                ""
+            }
+
+            val meaning = parsed.meaning
+            val sentence = parsed.exampleSentence.ifBlank {
+                JapaneseFieldParser.cleanHtml(parsed.example)
+            }
+            val sentenceFurigana = parsed.exampleFurigana.ifBlank { parsed.example }
+            val sentenceMeaning = parsed.exampleTranslation
+
+            return CardInfo(
+                noteId = 0L,
+                cardOrd = 0,
+                question = kanji,
+                answer = meaning,
+                deckName = "",
+                kanji = kanji,
+                kanjiFurigana = furigana,
+                kanjiMeaning = meaning,
+                sentence = sentence,
+                sentenceFurigana = sentenceFurigana,
+                sentenceMeaning = sentenceMeaning,
+                imageFileName = detectedImage
+            )
+        }
     }
 }

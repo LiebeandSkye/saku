@@ -1,6 +1,7 @@
 package com.saku
 
 import com.saku.anki.AnkiDroidContract
+import com.saku.anki.AnkiDroidHelper
 import com.saku.data.CardInfo
 import com.saku.data.CardSessionManager
 import org.junit.Assert.assertEquals
@@ -184,6 +185,87 @@ class CardSessionAndAnkiSyncTest {
 
         // Should remain null (all caught up for this specific deck)
         assertEquals(null, nextCard)
+    }
+
+    @Test
+    fun testParseCardContentKaishi15kWithFieldNames() {
+        val fieldNames = listOf(
+            "Vocabulary-Kanji",
+            "Vocabulary-Kana",
+            "Vocabulary-English",
+            "Vocabulary-Audio",
+            "Sentence-Expression",
+            "Sentence-Kana",
+            "Sentence-English",
+            "Sentence-Audio"
+        )
+        val fieldValues = listOf(
+            "九",
+            "きゅう",
+            "nine",
+            "[sound:kaishi_vocab_001.mp3]",
+            "野球は九人で1チームです。",
+            "やきゅうはきゅうにんで1チームです。",
+            "In baseball there are nine people on one team.",
+            "[sound:kaishi_sent_001.mp3]"
+        )
+        val rawFields = fieldValues.joinToString("\u001f")
+
+        val card = AnkiDroidHelper.parseCardContent(rawFields, fieldNames)
+        assertEquals("九", card.kanji)
+        assertEquals("きゅう", card.kanjiFurigana)
+        assertEquals("nine", card.kanjiMeaning)
+        assertEquals("野球は九人で1チームです。", card.sentence)
+        assertEquals("In baseball there are nine people on one team.", card.sentenceMeaning)
+    }
+
+    @Test
+    fun testParseCardContentCore2kWithFieldNames() {
+        val fieldNames = listOf(
+            "Expression",
+            "Meaning",
+            "Reading",
+            "Audio",
+            "Sentence",
+            "Sentence Meaning"
+        )
+        val fieldValues = listOf(
+            "食べる",
+            "to eat",
+            "たべる",
+            "[sound:eat.mp3]",
+            "ご飯を食べる。",
+            "I eat rice."
+        )
+        val rawFields = fieldValues.joinToString("\u001f")
+
+        val card = AnkiDroidHelper.parseCardContent(rawFields, fieldNames)
+        assertEquals("食べる", card.kanji)
+        assertEquals("たべる", card.kanjiFurigana)
+        assertEquals("to eat", card.kanjiMeaning)
+        assertEquals("ご飯を食べる。", card.sentence)
+        assertEquals("I eat rice.", card.sentenceMeaning)
+    }
+
+    @Test
+    fun testParseCardContentBracketFuriganaWithoutFieldNames() {
+        val rawFields = "猫[ねこ]\u001fねこ\u001fcat\u001f猫[ねこ]が います。\u001fThere is a cat."
+        val card = AnkiDroidHelper.parseCardContent(rawFields, emptyList())
+
+        assertEquals("猫", card.kanji)
+        assertEquals("ねこ", card.kanjiFurigana)
+        assertEquals("cat", card.kanjiMeaning)
+        assertEquals("猫が います。", card.sentence)
+    }
+
+    @Test
+    fun testParseCardContentKanaOnlyWord() {
+        val rawFields = "ありがとう\u001fありがとう\u001fthank you"
+        val card = AnkiDroidHelper.parseCardContent(rawFields, emptyList())
+
+        assertEquals("ありがとう", card.kanji)
+        assertEquals("", card.kanjiFurigana) // No redundant furigana on kana-only words
+        assertEquals("thank you", card.kanjiMeaning)
     }
 }
 

@@ -4,7 +4,7 @@
 ### Minimal Spaced Repetition Japanese Flashcard Widget for Android
 
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?style=flat&logo=android&logoColor=white)](https://android.com)
-[![Latest Release](https://img.shields.io/badge/Release-v2.8.0-FF69B4?style=flat&logo=github)](https://github.com/LiebeandSkye/saku/releases/tag/v2.8.0)
+[![Latest Release](https://img.shields.io/badge/Release-v2.9.0-FF69B4?style=flat&logo=github)](https://github.com/LiebeandSkye/saku/releases/tag/v2.9.0)
 [![APK Size](https://img.shields.io/badge/APK%20Size-~20%20MB-52C47C?style=flat&logo=android)](https://github.com/LiebeandSkye/saku/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%20%26%20Glance-4285F4?style=flat&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
@@ -48,12 +48,12 @@
 
 ---
 
-## ✨ What's New in v2.8.0
+## ✨ What's New in v2.9.0
 
-* **🗣️ Interactive AI Speaking Partner**: Real-time voice practice powered by on-device Speech Recognition and Gemini Flash AI conversational responses.
-* **🎙️ Fish Audio Streaming & Audio Cache**: High-speed conversational voice synthesis with streaming and in-memory cache playback.
-* **💬 Natural Conversation UI**: Dedicated speaking screen with interactive mic orb, conversation transcript history, audio replay, and JLPT-calibrated prompts.
-* **⚡ Audio & Speech Engine Enhancements**: Robust audio focus management, system TTS fallback support, and audio permissions handling.
+* **💬 Speaking History & Session Persistence**: Full persistence and review for conversational speech practice sessions with message timestamps and replay.
+* **🎙️ Speech Recognition Sensitivity & Silence Calibration**: Refined speech detection with configurable auto-stop thresholds and partial result feedback.
+* **⚡ Visual Speech Indicator & Real-Time Audio Metering**: Enhanced voice activity indicator and responsive conversational UI.
+* **🔄 Seamless Background Speech State Synchronization**: Robust state recovery when switching between conversation sessions and background activities.
 
 ---
 
@@ -61,7 +61,7 @@
 
 ### Option 1: Official Showcase Website & Direct APK
 * Visit the dedicated [**Saku Web Portal**](website/) (or run `npm run dev` in `website/`) to preview features and download the APK directly.
-* Download **`Saku.apk`** (~20 MB) directly from the repository or from the [**GitHub Releases (v2.8.0)**](https://github.com/LiebeandSkye/saku/releases) page.
+* Download **`Saku.apk`** (~20 MB) directly from the repository or from the [**GitHub Releases (v2.9.0)**](https://github.com/LiebeandSkye/saku/releases) page.
 * Tap the downloaded file and select **Install** *(if prompted by Google Play Protect, tap "More details" $\rightarrow$ "Install anyway")*.
 
 ### Option 2: 5-Second First-Time Setup

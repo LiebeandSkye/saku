@@ -1,6 +1,8 @@
 package com.saku.ui
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -9,6 +11,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -16,6 +19,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
 import java.io.FileOutputStream
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.util.Date
 import kotlin.math.max
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -61,6 +67,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -91,6 +98,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -113,6 +121,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.draw.scale
@@ -381,6 +390,30 @@ class MainActivity : ComponentActivity() {
         ankiHelper = AnkiDroidHelper(this)
         prefs = PreferencesManager(this)
 
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val sw = StringWriter()
+                val pw = PrintWriter(sw)
+                throwable.printStackTrace(pw)
+                val stackTrace = sw.toString()
+
+                Log.e("SakuCrash", "FATAL UNCAUGHT EXCEPTION on thread [${thread.name}]", throwable)
+
+                val crashReport = "Time: ${Date()}\nThread: ${thread.name}\nException: ${throwable.javaClass.name}: ${throwable.message}\n\nStack Trace:\n$stackTrace"
+                prefs.lastCrashTrace = crashReport
+
+                try {
+                    val crashFile = File(filesDir, "latest_crash.txt")
+                    crashFile.writeText(crashReport)
+                } catch (_: Throwable) {}
+            } catch (t: Throwable) {
+                Log.e("SakuCrash", "Failed writing crash trace", t)
+            } finally {
+                defaultHandler?.uncaughtException(thread, throwable)
+            }
+        }
+
         backgroundTypeState = prefs.backgroundType
         customImageUriState = prefs.customImageUri
         savedImageUrisState = prefs.savedImageUris
@@ -401,6 +434,7 @@ class MainActivity : ComponentActivity() {
             var currentAppTheme by remember { mutableStateOf(AppTheme.fromId(prefs.appTheme)) }
             var currentReadingTheme by remember { mutableStateOf(ReadingTheme.fromId(prefs.readingScreenTheme)) }
             var showIntro by remember { mutableStateOf(true) }
+            var crashTraceToDisplay by remember { mutableStateOf(prefs.lastCrashTrace) }
 
             SakuTheme(theme = currentAppTheme) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -424,6 +458,80 @@ class MainActivity : ComponentActivity() {
                     ) {
                         SakuCosmicIntro(
                             onDismiss = { showIntro = false }
+                        )
+                    }
+
+                    if (crashTraceToDisplay != null) {
+                        AlertDialog(
+                            onDismissRequest = {
+                                prefs.lastCrashTrace = null
+                                crashTraceToDisplay = null
+                            },
+                            title = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = SakuColors.AccentRose,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Crash Diagnostics",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = SakuColors.TextPrimary
+                                    )
+                                }
+                            },
+                            text = {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Text(
+                                        text = "Saku encountered an unexpected crash previously. Details below:",
+                                        fontSize = 12.sp,
+                                        color = SakuColors.TextSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 240.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color.Black.copy(alpha = 0.85f)
+                                    ) {
+                                        Text(
+                                            text = crashTraceToDisplay ?: "",
+                                            color = Color(0xFFFF8888),
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(8.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(
+                                    onClick = {
+                                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("Saku Crash Log", crashTraceToDisplay ?: "")
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(this@MainActivity, "Crash log copied to clipboard", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Text("Copy Log", color = SakuColors.SagePrimary)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(
+                                    onClick = {
+                                        prefs.lastCrashTrace = null
+                                        crashTraceToDisplay = null
+                                    }
+                                ) {
+                                    Text("Dismiss", color = SakuColors.TextSecondary)
+                                }
+                            }
                         )
                     }
                 }

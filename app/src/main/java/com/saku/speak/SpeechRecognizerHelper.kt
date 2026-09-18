@@ -3,12 +3,16 @@ package com.saku.speak
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 
 class SpeechRecognizerHelper(
     context: Context,
@@ -25,57 +29,121 @@ class SpeechRecognizerHelper(
     private var isListening = false
     private var lastPartialText = ""
     private var isCancelled = false
+    private var pendingResultsRunnable: Runnable? = null
+    private var hasDeliveredFinal = false
 
     fun isAvailable(): Boolean {
         return try {
             SpeechRecognizer.isRecognitionAvailable(appContext)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             false
         }
     }
 
-    private fun ensureRecognizer(): SpeechRecognizer? {
-        if (speechRecognizer == null) {
-            if (!isAvailable()) {
-                onError("Speech recognition service is not available on this device.")
-                return null
+    private fun findBestRecognitionService(ctx: Context): ComponentName? {
+        val pm = ctx.packageManager
+        val serviceIntent = Intent(RecognitionService.SERVICE_INTERFACE)
+        val resolveInfos = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.queryIntentServices(serviceIntent, PackageManager.ResolveInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.queryIntentServices(serviceIntent, 0)
             }
+        } catch (t: Throwable) {
+            Log.e("SpeechHelper", "Error querying recognition services", t)
+            emptyList()
+        }
+
+        if (resolveInfos.isEmpty()) {
+            return null
+        }
+
+        val validServices = resolveInfos.mapNotNull { it.serviceInfo }
+
+        // 1. Google Speech Services (GoogleTTSRecognitionService, NOT GoogleTTSService)
+        val googleTtsRecognition = validServices.firstOrNull {
+            it.packageName == "com.google.android.tts" &&
+            it.name.contains("RecognitionService", ignoreCase = true)
+        }
+        if (googleTtsRecognition != null) {
+            return ComponentName(googleTtsRecognition.packageName, googleTtsRecognition.name)
+        }
+
+        // 2. Google App (QuickSearchBox) Recognition Service
+        val googleAppRecognition = validServices.firstOrNull {
+            it.packageName == "com.google.android.googlequicksearchbox" &&
+            it.name.contains("RecognitionService", ignoreCase = true)
+        }
+        if (googleAppRecognition != null) {
+            return ComponentName(googleAppRecognition.packageName, googleAppRecognition.name)
+        }
+
+        // 3. Any service not belonging to Android System Intelligence (com.google.android.as)
+        val oemService = validServices.firstOrNull {
+            !it.packageName.startsWith("com.google.android.as")
+        }
+        if (oemService != null) {
+            return ComponentName(oemService.packageName, oemService.name)
+        }
+
+        // 4. Fallback: first available service
+        val fallback = validServices.firstOrNull() ?: return null
+        return ComponentName(fallback.packageName, fallback.name)
+    }
+
+    private fun ensureRecognizer(): SpeechRecognizer? {
+        if (speechRecognizer != null) return speechRecognizer
+
+        if (!isAvailable()) {
+            onError("Speech recognition service is not available on this device.")
+            return null
+        }
+
+        val bestComponent = findBestRecognitionService(appContext)
+
+        // Strategy 1: Try with verified best ComponentName if available
+        if (bestComponent != null) {
             try {
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext, bestComponent).apply {
                     setRecognitionListener(createListener())
                 }
-            } catch (e: Exception) {
-                // Fallback attempt: explicitly target Google Speech Recognition Service
+                Log.d("SpeechHelper", "SpeechRecognizer initialized with: ${bestComponent.flattenToShortString()}")
+                return speechRecognizer
+            } catch (t: Throwable) {
+                Log.w("SpeechHelper", "Failed to create recognizer with component $bestComponent: ${t.message}")
                 try {
-                    val googleComponent = ComponentName(
-                        "com.google.android.googlequicksearchbox",
-                        "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
-                    )
-                    speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext, googleComponent).apply {
-                        setRecognitionListener(createListener())
-                    }
-                } catch (_: Exception) {
-                    try {
-                        val ttsComponent = ComponentName(
-                            "com.google.android.tts",
-                            "com.google.android.apps.speech.tts.googletts.service.GoogleTTSRecognitionService"
-                        )
-                        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext, ttsComponent).apply {
-                            setRecognitionListener(createListener())
-                        }
-                    } catch (_: Exception) {
-                        onError("Failed to initialize speech recognizer: ${e.localizedMessage ?: "Unknown error"}")
-                        return null
-                    }
-                }
+                    speechRecognizer?.destroy()
+                } catch (_: Throwable) {}
+                speechRecognizer = null
             }
         }
-        return speechRecognizer
+
+        // Strategy 2: Default SpeechRecognizer (system default service)
+        try {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
+                setRecognitionListener(createListener())
+            }
+            Log.d("SpeechHelper", "SpeechRecognizer initialized with system default")
+            return speechRecognizer
+        } catch (t: Throwable) {
+            Log.e("SpeechHelper", "Failed to create default SpeechRecognizer: ${t.message}")
+            try {
+                speechRecognizer?.destroy()
+            } catch (_: Throwable) {}
+            speechRecognizer = null
+        }
+
+        onError("Speech recognition engine could not be initialized.")
+        return null
     }
 
     fun startListening(languageCode: String = "ja-JP") {
         mainHandler.post {
+            pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
+            pendingResultsRunnable = null
             isCancelled = false
+            hasDeliveredFinal = false
             lastPartialText = ""
 
             if (!isAvailable()) {
@@ -95,16 +163,25 @@ class SpeechRecognizerHelper(
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
+                // Low latency silence detection: triggers end of speech quickly once user stops speaking
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 400L)
             }
 
             try {
                 recognizer.startListening(intent)
                 isListening = true
                 onStateChange(true)
-            } catch (e: Exception) {
+            } catch (t: Throwable) {
+                Log.e("SpeechHelper", "Exception during startListening", t)
                 isListening = false
                 onStateChange(false)
-                onError("Failed to start listening: ${e.localizedMessage ?: "Service error"}")
+                try {
+                    speechRecognizer?.destroy()
+                } catch (_: Throwable) {}
+                speechRecognizer = null
+                onError("Failed to start listening: ${t.localizedMessage ?: "Service error"}")
             }
         }
     }
@@ -113,18 +190,38 @@ class SpeechRecognizerHelper(
         mainHandler.post {
             try {
                 speechRecognizer?.stopListening()
-            } catch (ignored: Exception) {
+            } catch (_: Throwable) {
+            }
+            // Fast-response fallback: if user stopped speaking / released mic and we already have partial speech,
+            // don't leave them waiting if the recognition engine takes long to return onResults.
+            if (lastPartialText.isNotBlank() && !hasDeliveredFinal) {
+                pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
+                val runnable = Runnable {
+                    if (lastPartialText.isNotBlank() && !hasDeliveredFinal) {
+                        hasDeliveredFinal = true
+                        val text = lastPartialText.trim()
+                        lastPartialText = ""
+                        isListening = false
+                        onStateChange(false)
+                        onFinalResult(text)
+                    }
+                }
+                pendingResultsRunnable = runnable
+                mainHandler.postDelayed(runnable, 350)
             }
         }
     }
 
     fun cancel() {
         mainHandler.post {
+            pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
+            pendingResultsRunnable = null
             isCancelled = true
+            hasDeliveredFinal = true
             lastPartialText = ""
             try {
                 speechRecognizer?.cancel()
-            } catch (ignored: Exception) {
+            } catch (_: Throwable) {
             }
             isListening = false
             onStateChange(false)
@@ -134,11 +231,13 @@ class SpeechRecognizerHelper(
 
     fun destroy() {
         mainHandler.post {
+            pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
+            pendingResultsRunnable = null
             try {
                 speechRecognizer?.destroy()
                 speechRecognizer = null
                 isListening = false
-            } catch (ignored: Exception) {
+            } catch (_: Throwable) {
             }
         }
     }
@@ -164,14 +263,31 @@ class SpeechRecognizerHelper(
             override fun onEndOfSpeech() {
                 isListening = false
                 onStateChange(false)
+                // Hands-free voice activity: speech input ceased.
+                // Fast-track delivery if recognition engine delays sending onResults:
+                if (lastPartialText.isNotBlank() && !hasDeliveredFinal) {
+                    pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
+                    val runnable = Runnable {
+                        if (lastPartialText.isNotBlank() && !hasDeliveredFinal) {
+                            hasDeliveredFinal = true
+                            val text = lastPartialText.trim()
+                            lastPartialText = ""
+                            onFinalResult(text)
+                        }
+                    }
+                    pendingResultsRunnable = runnable
+                    mainHandler.postDelayed(runnable, 400)
+                }
             }
 
             override fun onError(error: Int) {
+                pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
+                pendingResultsRunnable = null
                 isListening = false
                 onStateChange(false)
                 onRmsChanged(0f)
 
-                if (isCancelled) {
+                if (isCancelled || hasDeliveredFinal) {
                     lastPartialText = ""
                     return
                 }
@@ -182,7 +298,7 @@ class SpeechRecognizerHelper(
                     mainHandler.postDelayed({
                         try {
                             speechRecognizer?.destroy()
-                        } catch (_: Exception) {}
+                        } catch (_: Throwable) {}
                         speechRecognizer = null
                     }, 350)
                 }
@@ -191,6 +307,7 @@ class SpeechRecognizerHelper(
                 if (lastPartialText.isNotBlank()) {
                     val finalCandidate = lastPartialText.trim()
                     lastPartialText = ""
+                    hasDeliveredFinal = true
                     onFinalResult(finalCandidate)
                     return
                 }
@@ -215,14 +332,17 @@ class SpeechRecognizerHelper(
             }
 
             override fun onResults(results: Bundle?) {
+                pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
+                pendingResultsRunnable = null
                 isListening = false
                 onStateChange(false)
                 onRmsChanged(0f)
 
-                if (isCancelled) {
+                if (isCancelled || hasDeliveredFinal) {
                     lastPartialText = ""
                     return
                 }
+                hasDeliveredFinal = true
 
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val recognizedText = matches?.firstOrNull()?.trim() ?: lastPartialText.trim()

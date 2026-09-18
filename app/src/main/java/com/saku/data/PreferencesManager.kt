@@ -245,6 +245,7 @@ class PreferencesManager(
         private const val KEY_CUSTOM_STORY_THEME = "custom_story_theme"
         private const val KEY_CUSTOM_STORY_TOPIC = "custom_story_topic"
         private const val KEY_CUSTOM_THEME_MODE_ACTIVE = "custom_theme_mode_active"
+        private const val KEY_LAST_CRASH_TRACE = "last_crash_trace"
     }
 
     var recentJishoSearches: List<String>
@@ -297,6 +298,10 @@ class PreferencesManager(
     var isCustomThemeModeActive: Boolean
         get() = prefs.getBoolean(KEY_CUSTOM_THEME_MODE_ACTIVE, false)
         set(value) = prefs.edit().putBoolean(KEY_CUSTOM_THEME_MODE_ACTIVE, value).apply()
+
+    var lastCrashTrace: String?
+        get() = prefs.getString(KEY_LAST_CRASH_TRACE, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_LAST_CRASH_TRACE, value).apply()
 }
 
 data class GeminiModelOption(

@@ -1,5 +1,8 @@
 package com.saku.ui
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -8,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -17,8 +21,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -34,6 +40,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -54,16 +61,28 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.AddComment
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
@@ -78,6 +97,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -86,6 +106,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -99,6 +120,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.saku.data.PreferencesManager
+import com.saku.data.SavedSpeakSession
+import com.saku.data.SpeakHistoryManager
 import com.saku.reading.FishAudioService
 import com.saku.speak.ChatMessage
 import com.saku.speak.GeminiConversationService
@@ -106,7 +129,12 @@ import com.saku.speak.SpeakConversationManager
 import com.saku.speak.SpeechRecognizerHelper
 import com.saku.util.JapaneseTtsHelper
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpeakScreen(
     padding: PaddingValues,
@@ -124,6 +152,37 @@ fun SpeakScreen(
     var isThinking by remember { mutableStateOf(false) }
     var isSpeaking by remember { mutableStateOf(false) }
     var audioRmsDb by remember { mutableFloatStateOf(0f) }
+
+    // Speaking History and collapsible header state
+    val historyManager = remember { SpeakHistoryManager(context) }
+    var savedSessions by remember { mutableStateOf(historyManager.getSessions()) }
+    var isHeaderExpanded by remember { mutableStateOf(true) }
+    val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showHistorySheet by remember { mutableStateOf(false) }
+    val expandedHistoryCards = remember { mutableStateMapOf<String, Boolean>() }
+
+    val persistCurrentSession: () -> Unit = {
+        val msgs = messages.toList()
+        if (msgs.isNotEmpty()) {
+            val sessionId = SpeakConversationManager.currentSessionId ?: UUID.randomUUID().toString().also {
+                SpeakConversationManager.currentSessionId = it
+            }
+            val existing = savedSessions.firstOrNull { it.id == sessionId }
+            val title = existing?.title ?: SavedSpeakSession.generateTitle(msgs)
+            val isPinned = existing?.isPinned ?: false
+            val createdAt = existing?.createdAt ?: System.currentTimeMillis()
+            val session = SavedSpeakSession(
+                id = sessionId,
+                title = title,
+                messages = msgs,
+                createdAt = createdAt,
+                updatedAt = System.currentTimeMillis(),
+                isPinned = isPinned
+            )
+            historyManager.saveSession(session)
+            savedSessions = historyManager.getSessions()
+        }
+    }
 
     // Input mode: Voice (mic) vs Typing (keyboard)
     var isKeyboardMode by remember { mutableStateOf(false) }
@@ -179,8 +238,9 @@ fun SpeakScreen(
         }
     }
 
-    // Forward reference for speech handler
+    // Forward reference for speech handler and system speech fallback
     var handleFinalSpeechRef by remember { mutableStateOf<((String) -> Unit)?>(null) }
+    var launchSystemVoiceRef by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // SpeechRecognizer helper
     val speechHelper = remember {
@@ -210,6 +270,13 @@ fun SpeakScreen(
                     !errorMsg.contains("timeout", ignoreCase = true)
                 ) {
                     Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                    // Fallback to system voice recognition if recognition engine failed
+                    if (errorMsg.contains("client", ignoreCase = true) ||
+                        errorMsg.contains("unavailable", ignoreCase = true) ||
+                        errorMsg.contains("engine", ignoreCase = true)
+                    ) {
+                        launchSystemVoiceRef?.invoke()
+                    }
                 }
             }
         )
@@ -278,6 +345,7 @@ fun SpeakScreen(
         if (trimmed.isNotBlank() && !isThinking) {
             val userMsg = ChatMessage(text = trimmed, isUser = true)
             messages.add(userMsg)
+            persistCurrentSession()
             liveTranscript = ""
             isThinking = true
 
@@ -296,6 +364,7 @@ fun SpeakScreen(
                     onSuccess = { reply ->
                         val aiMsg = ChatMessage(text = reply, isUser = false)
                         messages.add(aiMsg)
+                        persistCurrentSession()
                         playAiVoice(reply)
                     },
                     onFailure = { error ->
@@ -305,6 +374,7 @@ fun SpeakScreen(
                             isUser = false
                         )
                         messages.add(errorMsg)
+                        persistCurrentSession()
                     }
                 )
             }
@@ -357,49 +427,104 @@ fun SpeakScreen(
         )
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasAudioPermission = granted
-        if (granted) {
-            if (!speechHelper.isAvailable()) {
-                Toast.makeText(context, "Voice recognition service is not available on this device. Switched to typing mode.", Toast.LENGTH_LONG).show()
-                isKeyboardMode = true
-            } else {
-                speechHelper.startListening()
+    // State trigger to safely invoke permissionLauncher from composition lifecycle instead of pointerInput
+    var requestAudioPermissionTrigger by remember { mutableStateOf(false) }
+
+    // Fallback system speech dialog launcher (when headless SpeechRecognizer is unavailable or errors)
+    val systemVoiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spokenList = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val spoken = spokenList?.firstOrNull()?.trim()
+            if (!spoken.isNullOrBlank()) {
+                handleFinalSpeechRef?.invoke(spoken)
             }
-        } else {
-            Toast.makeText(context, "Microphone permission is required to speak", Toast.LENGTH_SHORT).show()
         }
     }
 
-    // Button action callers
-    val startSpeakingAction: () -> Unit = {
-        // Stop any ongoing playback before listening to prevent acoustic feedback loop
-        fishAudioService.stopAudio()
-        systemTtsHelper.stop()
-        isSpeaking = false
-
-        if (!hasAudioPermission) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        } else if (!speechHelper.isAvailable()) {
-            Toast.makeText(context, "Voice recognition is not available on this device. Switched to typing mode.", Toast.LENGTH_LONG).show()
+    val launchSystemSpeechDialog: () -> Unit = {
+        try {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ja-JP")
+                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "ja-JP")
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "日本語で話してください (Speak Japanese)")
+            }
+            systemVoiceLauncher.launch(intent)
+        } catch (t: Throwable) {
+            Toast.makeText(context, "Voice recognition service unavailable. Switched to typing mode.", Toast.LENGTH_SHORT).show()
             isKeyboardMode = true
             coroutineScope.launch {
                 kotlinx.coroutines.delay(120)
                 try {
                     focusRequester.requestFocus()
                     keyboardController?.show()
-                } catch (_: Exception) {}
+                } catch (_: Throwable) {}
+            }
+        }
+    }
+    launchSystemVoiceRef = launchSystemSpeechDialog
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasAudioPermission = granted
+        if (granted) {
+            if (!speechHelper.isAvailable()) {
+                launchSystemSpeechDialog()
+            } else {
+                try {
+                    speechHelper.startListening()
+                } catch (_: Throwable) {
+                    launchSystemSpeechDialog()
+                }
             }
         } else {
-            liveTranscript = ""
-            speechHelper.startListening()
+            Toast.makeText(context, "Microphone permission is required to speak", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(requestAudioPermissionTrigger) {
+        if (requestAudioPermissionTrigger) {
+            requestAudioPermissionTrigger = false
+            if (!hasAudioPermission) {
+                try {
+                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                } catch (t: Throwable) {
+                    Toast.makeText(context, "Permission request error: ${t.localizedMessage}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    // Button action callers
+    val startSpeakingAction: () -> Unit = {
+        try {
+            // Stop any ongoing playback before listening to prevent acoustic feedback loop
+            fishAudioService.stopAudio()
+            systemTtsHelper.stop()
+            isSpeaking = false
+
+            if (!hasAudioPermission) {
+                requestAudioPermissionTrigger = true
+            } else if (!speechHelper.isAvailable()) {
+                launchSystemSpeechDialog()
+            } else {
+                liveTranscript = ""
+                speechHelper.startListening()
+            }
+        } catch (t: Throwable) {
+            Toast.makeText(context, "Speech start error: ${t.localizedMessage}", Toast.LENGTH_SHORT).show()
+            launchSystemSpeechDialog()
         }
     }
 
     val stopSpeakingAction = {
-        speechHelper.stopListening()
+        try {
+            speechHelper.stopListening()
+        } catch (_: Throwable) {}
     }
 
     val toggleInputMode: () -> Unit = {
@@ -436,6 +561,8 @@ fun SpeakScreen(
         }
     }
 
+    val isLight = SakuColors.currentTheme == AppTheme.LIGHT
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -447,146 +574,210 @@ fun SpeakScreen(
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Header bar: minimal title and clear button
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Collapsible Header Container
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "話す • SPEAK",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = SakuColors.TextSecondary,
-                    letterSpacing = 1.2.sp
-                )
-
-                if (messages.isNotEmpty()) {
-                    IconButton(
-                        onClick = {
-                            SpeakConversationManager.clear()
-                            liveTranscript = ""
-                            fishAudioService.stopAudio()
-                            systemTtsHelper.stop()
-                            isSpeaking = false
-                            FishAudioService.clearSpeakAudio(context)
-                        },
-                        modifier = Modifier.size(32.dp)
+                AnimatedVisibility(
+                    visible = isHeaderExpanded,
+                    enter = expandVertically(animationSpec = tween(280, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(250)),
+                    exit = shrinkVertically(animationSpec = tween(280, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(200))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.DeleteSweep,
-                            contentDescription = "Clear conversation",
-                            tint = SakuColors.TextSecondary.copy(alpha = 0.6f),
-                            modifier = Modifier.size(18.dp)
-                        )
+                        // Header bar: minimal title, history button, and clear button
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "話す • SPEAK",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SakuColors.TextSecondary,
+                                letterSpacing = 1.2.sp
+                            )
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                // History button placed near delete icon
+                                IconButton(
+                                    onClick = {
+                                        savedSessions = historyManager.getSessions()
+                                        showHistorySheet = true
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.History,
+                                        contentDescription = "Speaking History",
+                                        tint = if (savedSessions.isNotEmpty()) SakuColors.SagePrimary else SakuColors.TextSecondary.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                if (messages.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = {
+                                            SpeakConversationManager.clear()
+                                            liveTranscript = ""
+                                            fishAudioService.stopAudio()
+                                            systemTtsHelper.stop()
+                                            isSpeaking = false
+                                            FishAudioService.clearSpeakAudio(context)
+                                            Toast.makeText(context, "New chat started", Toast.LENGTH_SHORT).show()
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.AddComment,
+                                            contentDescription = "Start new chat",
+                                            tint = SakuColors.SagePrimary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Reading-style minimal configuration pills for Gemini Model and Fish Audio Voice
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // 1. Model / Key Pill
+                            Surface(
+                                onClick = {
+                                    if (geminiApiKey.isBlank()) {
+                                        showApiKeyDialog = true
+                                    } else {
+                                        showModelDialog = true
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.20f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = SakuColors.SagePrimary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (geminiApiKey.isBlank()) "Setup Key" else PreferencesManager.getModelDisplayName(currentModel),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = if (geminiApiKey.isBlank()) SakuColors.AccentRose else SakuColors.TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Filled.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = SakuColors.TextSecondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            // 2. Fish Audio Voice Pill
+                            Surface(
+                                onClick = { showFishAudioDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.20f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.GraphicEq,
+                                            contentDescription = null,
+                                            tint = if (fishAudioApiKey.isNotBlank()) SakuColors.VibrantMatcha else SakuColors.TextSecondary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        val voiceLabel = fishAudioVoiceName?.takeIf { it.isNotBlank() }
+                                            ?: if (fishAudioVoiceId.isNotBlank()) "Voice: ${fishAudioVoiceId.take(8)}..." else "Voice Setup"
+                                        Text(
+                                            text = if (fishAudioApiKey.isNotBlank()) voiceLabel else "Voice Setup",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = SakuColors.TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.Filled.ArrowDropDown,
+                                        contentDescription = null,
+                                        tint = SakuColors.TextSecondary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            // Reading-style minimal configuration pills for Gemini Model and Fish Audio Voice
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                val isLight = SakuColors.currentTheme == AppTheme.LIGHT
-
-                // 1. Model / Key Pill
-                Surface(
-                    onClick = {
-                        if (geminiApiKey.isBlank()) {
-                            showApiKeyDialog = true
-                        } else {
-                            showModelDialog = true
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.20f)),
-                    modifier = Modifier.weight(1f)
+                // Dropup / dropdown toggle button attached directly below the header container
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = if (isHeaderExpanded) 2.dp else 6.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Surface(
+                        onClick = { isHeaderExpanded = !isHeaderExpanded },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.15f)),
+                        modifier = Modifier.height(22.dp)
                     ) {
                         Row(
+                            modifier = Modifier.padding(horizontal = 18.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f, fill = false)
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                Icons.Filled.AutoAwesome,
-                                contentDescription = null,
-                                tint = SakuColors.SagePrimary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (geminiApiKey.isBlank()) "Setup Key" else PreferencesManager.getModelDisplayName(currentModel),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (geminiApiKey.isBlank()) SakuColors.AccentRose else SakuColors.TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                imageVector = if (isHeaderExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                contentDescription = if (isHeaderExpanded) "Collapse header" else "Expand header",
+                                tint = SakuColors.TextSecondary.copy(alpha = 0.75f),
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        Icon(
-                            Icons.Filled.ArrowDropDown,
-                            contentDescription = null,
-                            tint = SakuColors.TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-
-                // 2. Fish Audio Voice Pill
-                Surface(
-                    onClick = { showFishAudioDialog = true },
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isLight) SakuColors.Surface.copy(alpha = 0.90f) else Color.White.copy(alpha = 0.12f),
-                    border = BorderStroke(1.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.20f)),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f, fill = false)
-                        ) {
-                            Icon(
-                                Icons.Filled.GraphicEq,
-                                contentDescription = null,
-                                tint = if (fishAudioApiKey.isNotBlank()) SakuColors.VibrantMatcha else SakuColors.TextSecondary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            val voiceLabel = fishAudioVoiceName?.takeIf { it.isNotBlank() }
-                                ?: if (fishAudioVoiceId.isNotBlank()) "Voice: ${fishAudioVoiceId.take(8)}..." else "Voice Setup"
-                            Text(
-                                text = if (fishAudioApiKey.isNotBlank()) voiceLabel else "Voice Setup",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = SakuColors.TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Icon(
-                            Icons.Filled.ArrowDropDown,
-                            contentDescription = null,
-                            tint = SakuColors.TextSecondary,
-                            modifier = Modifier.size(16.dp)
-                        )
                     }
                 }
             }
@@ -864,6 +1055,294 @@ fun SpeakScreen(
                 onNavigateToJisho = onNavigateToJisho
             )
         }
+
+        // Modal Bottom Sheet: Speaking History
+        if (showHistorySheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showHistorySheet = false },
+                sheetState = historySheetState,
+                containerColor = SakuColors.Surface,
+                contentColor = SakuColors.TextPrimary
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    // Header row: Title + Clear All button
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Speaking History (${savedSessions.size})",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SakuColors.TextPrimary
+                        )
+                        if (savedSessions.isNotEmpty()) {
+                            TextButton(
+                                onClick = {
+                                    historyManager.clearAll()
+                                    savedSessions = emptyList()
+                                    if (SpeakConversationManager.currentSessionId != null) {
+                                        SpeakConversationManager.clear()
+                                    }
+                                }
+                            ) {
+                                Text(
+                                    text = "Clear All",
+                                    color = SakuColors.AccentRose,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (savedSessions.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 40.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No saved conversations yet",
+                                color = SakuColors.TextTertiary,
+                                fontSize = 14.sp
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(savedSessions, key = { it.id }) { item ->
+                                val isExpanded = expandedHistoryCards[item.id] == true
+                                val rotationAngle by animateFloatAsState(
+                                    targetValue = if (isExpanded) 180f else 0f,
+                                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                                    label = "speak_card_chevron_rotation"
+                                )
+
+                                Card(
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(containerColor = SakuColors.SurfaceElevated),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (item.isPinned) SakuColors.SagePrimary.copy(alpha = 0.7f) else SakuColors.Border
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .animateContentSize(
+                                            animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+                                        )
+                                        .clickable {
+                                            SpeakConversationManager.messages.clear()
+                                            SpeakConversationManager.messages.addAll(item.messages)
+                                            SpeakConversationManager.currentSessionId = item.id
+                                            fishAudioService.stopAudio()
+                                            systemTtsHelper.stop()
+                                            isSpeaking = false
+                                            coroutineScope.launch {
+                                                historySheetState.hide()
+                                                showHistorySheet = false
+                                            }
+                                        }
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(14.dp)
+                                    ) {
+                                        // Top Header Row: Badges on left, Action buttons pill on right
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                if (item.isPinned) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = SakuColors.SagePrimary.copy(alpha = 0.25f),
+                                                        border = BorderStroke(1.dp, SakuColors.SagePrimary.copy(alpha = 0.8f))
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Filled.PushPin,
+                                                                contentDescription = null,
+                                                                tint = SakuColors.SagePrimary,
+                                                                modifier = Modifier.size(10.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(3.dp))
+                                                            Text(
+                                                                text = "PINNED",
+                                                                fontSize = 9.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = SakuColors.SagePrimary,
+                                                                maxLines = 1
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = SakuColors.SageContainer
+                                                ) {
+                                                    Text(
+                                                        text = "${item.messages.size} msgs",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = SakuColors.SagePrimary,
+                                                        maxLines = 1,
+                                                        softWrap = false,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+
+                                            // Action Buttons pill: [Pin] [Expand Dropdown] [Delete]
+                                            Surface(
+                                                shape = RoundedCornerShape(20.dp),
+                                                color = if (isLight) SakuColors.Surface else Color.Black.copy(alpha = 0.45f),
+                                                border = BorderStroke(0.5.dp, if (isLight) SakuColors.BorderHighlight else Color.White.copy(alpha = 0.15f))
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                ) {
+                                                    // Pin Button
+                                                    IconButton(
+                                                        onClick = {
+                                                            historyManager.togglePin(item.id)
+                                                            savedSessions = historyManager.getSessions()
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (item.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                                                            contentDescription = if (item.isPinned) "Unpin Conversation" else "Pin Conversation",
+                                                            tint = if (item.isPinned) SakuColors.SagePrimary else SakuColors.TextSecondary,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+
+                                                    // Dropdown Chevron Button
+                                                    IconButton(
+                                                        onClick = {
+                                                            expandedHistoryCards[item.id] = !isExpanded
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.KeyboardArrowDown,
+                                                            contentDescription = if (isExpanded) "Collapse Card" else "Expand Card",
+                                                            tint = if (isExpanded) SakuColors.SagePrimary else SakuColors.TextSecondary,
+                                                            modifier = Modifier
+                                                                .size(18.dp)
+                                                                .rotate(rotationAngle)
+                                                        )
+                                                    }
+
+                                                    // Delete Button
+                                                    IconButton(
+                                                        onClick = {
+                                                            historyManager.deleteSession(item.id)
+                                                            savedSessions = historyManager.getSessions()
+                                                            if (SpeakConversationManager.currentSessionId == item.id) {
+                                                                SpeakConversationManager.clear()
+                                                            }
+                                                        },
+                                                        modifier = Modifier.size(28.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.DeleteOutline,
+                                                            contentDescription = "Delete Conversation",
+                                                            tint = SakuColors.AccentRose,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        // Conversation Title
+                                        Text(
+                                            text = item.title,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 15.sp,
+                                            color = SakuColors.TextPrimary,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        // Preview Snippet when expanded
+                                        if (isExpanded && item.messages.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 4.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                item.messages.takeLast(4).forEach { msg ->
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = if (msg.isUser) Arrangement.End else Arrangement.Start
+                                                    ) {
+                                                        Surface(
+                                                            shape = RoundedCornerShape(8.dp),
+                                                            color = if (msg.isUser) SakuColors.SageContainer else (if (isLight) SakuColors.Surface else Color.White.copy(alpha = 0.06f)),
+                                                            modifier = Modifier.widthIn(max = 280.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = (if (msg.isUser) "You: " else "Saku: ") + msg.text,
+                                                                fontSize = 12.sp,
+                                                                color = if (msg.isUser) SakuColors.SagePrimary else SakuColors.TextSecondary,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        // Timestamp
+                                        Text(
+                                            text = SimpleDateFormat("MMM d, yyyy • HH:mm", Locale.getDefault()).format(Date(item.updatedAt)),
+                                            fontSize = 11.sp,
+                                            color = SakuColors.TextSecondary.copy(alpha = 0.65f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1029,33 +1508,41 @@ private fun BigCircleMicButton(
                                 isPressedState = true
                                 try {
                                     tryAwaitRelease()
+                                } catch (_: Throwable) {
                                 } finally {
                                     isPressedState = false
                                 }
-                                currentOnKeyboardSubmit()
+                                try {
+                                    currentOnKeyboardSubmit()
+                                } catch (_: Throwable) {}
                             } else {
                                 val startTime = System.currentTimeMillis()
                                 val wasListeningBefore = currentIsListening
                                 isPressedState = true
 
-                                if (!wasListeningBefore) {
-                                    currentOnStart()
-                                }
+                                try {
+                                    if (!wasListeningBefore) {
+                                        currentOnStart()
+                                    }
+                                } catch (_: Throwable) {}
 
                                 try {
                                     tryAwaitRelease()
+                                } catch (_: Throwable) {
                                 } finally {
                                     isPressedState = false
                                 }
 
                                 val duration = System.currentTimeMillis() - startTime
-                                if (duration >= 350L) {
-                                    // Long press / Hold gesture: releasing stops listening and sends!
-                                    currentOnStop()
-                                } else if (wasListeningBefore) {
-                                    // Second tap stops and sends!
-                                    currentOnStop()
-                                }
+                                try {
+                                    if (duration >= 350L) {
+                                        // Long press / Hold gesture: releasing stops listening and sends!
+                                        currentOnStop()
+                                    } else if (wasListeningBefore) {
+                                        // Second tap stops and sends!
+                                        currentOnStop()
+                                    }
+                                } catch (_: Throwable) {}
                             }
                         }
                     )

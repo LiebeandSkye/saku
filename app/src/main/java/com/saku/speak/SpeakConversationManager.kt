@@ -7,8 +7,10 @@ import androidx.compose.runtime.mutableStateListOf
  */
 object SpeakConversationManager {
     val messages = mutableStateListOf<ChatMessage>()
+    var currentSessionId: String? = null
 
     fun clear() {
         messages.clear()
+        currentSessionId = null
     }
 }

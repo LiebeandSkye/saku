@@ -81,6 +81,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Opacity
@@ -489,7 +490,7 @@ class MainActivity : ComponentActivity() {
         onReadingThemeChanged: (ReadingTheme) -> Unit
     ) {
         var isRefreshing by remember { mutableStateOf(false) }
-        val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
+        val pagerState = rememberPagerState(initialPage = 0, pageCount = { 4 })
         var jishoTargetQuery by remember { mutableStateOf("") }
         var openHistoryTrigger by remember { mutableIntStateOf(0) }
         var isDockVisible by remember { mutableStateOf(true) }
@@ -752,13 +753,18 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         )
-                        else -> JishoScreen(
+                        2 -> JishoScreen(
                             padding = padding,
                             prefs = prefs,
                             initialQuery = jishoTargetQuery,
                             onInitialQueryConsumed = {
                                 jishoTargetQuery = ""
                             }
+                        )
+                        else -> SpeakScreen(
+                            padding = padding,
+                            prefs = prefs,
+                            isActive = pagerState.currentPage == 3
                         )
                     }
                 }
@@ -808,13 +814,14 @@ class MainActivity : ComponentActivity() {
         val tabs = listOf(
             Pair("Cards", Icons.Filled.Style),
             Pair("Reading", Icons.Filled.AutoStories),
-            Pair("Jisho", Icons.Filled.Search)
+            Pair("Jisho", Icons.Filled.Search),
+            Pair("Speak", Icons.Filled.GraphicEq)
         )
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
         ) {
             val isLight = SakuColors.currentTheme == AppTheme.LIGHT
@@ -904,12 +911,12 @@ class MainActivity : ComponentActivity() {
                                         } else {
                                             SakuColors.TextSecondary
                                         },
-                                        modifier = Modifier.size(19.dp)
+                                        modifier = Modifier.size(18.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Spacer(modifier = Modifier.width(5.dp))
                                     Text(
                                         text = label,
-                                        fontSize = 13.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
                                         color = if (isSelected) {
                                             if (isLight) SakuColors.SagePrimary else Color.White

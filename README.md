@@ -4,7 +4,7 @@
 ### Minimal Spaced Repetition Japanese Flashcard Widget for Android
 
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84?style=flat&logo=android&logoColor=white)](https://android.com)
-[![Latest Release](https://img.shields.io/badge/Release-v2.7.0-FF69B4?style=flat&logo=github)](https://github.com/LiebeandSkye/saku/releases/tag/v2.7.0)
+[![Latest Release](https://img.shields.io/badge/Release-v2.8.0-FF69B4?style=flat&logo=github)](https://github.com/LiebeandSkye/saku/releases/tag/v2.8.0)
 [![APK Size](https://img.shields.io/badge/APK%20Size-~20%20MB-52C47C?style=flat&logo=android)](https://github.com/LiebeandSkye/saku/releases)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose%20%26%20Glance-4285F4?style=flat&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
@@ -35,8 +35,9 @@
 * **🧠 Preserves Your Algorithm (FSRS & SM-2)**: Reviews made on the widget are submitted directly into AnkiDroid. Your intervals, stability, retention factors, and AnkiWeb cloud sync stay 100% accurate and intact.
 * **📱 Lock Screen & Always-On Display (AOD)**: Optimized for **OxygenOS (OnePlus)**, Samsung OneUI, Google Pixel, and modern Android devices. Pinned high-contrast card right under the lock screen clock without needing to unlock your phone.
 * **⚡ Interactive Home Screen Widget**: Built with **Jetpack Glance** (Compose for AppWidgets). Flip cards, advance cards, or submit ratings (*Again*, *Hard*, *Good*, *Easy*) directly from your home screen.
+* **🗣️ AI Japanese Speaking Partner**: Interactive voice conversation screen powered by Gemini Flash and Fish Audio / Android TTS with real-time speech recognition and JLPT-level guidance.
 * **📖 AI Reading Generator (Gemini Flash)**: Generates customized Japanese graded reading passages tailored directly from your due or studied Anki vocabulary, with instant vocabulary tapping, furigana toggle, English translation, and reading history.
-* **🗣️ Natural Japanese Voice Synthesis (Fish Audio & System TTS)**: High-fidelity neural voice playback for reading stories and vocabulary words powered by Fish Audio, alongside reliable on-device Android Text-to-Speech fallback.
+* **🎙️ Natural Japanese Voice Synthesis (Fish Audio & System TTS)**: High-fidelity neural voice playback for reading stories, conversations, and vocabulary words powered by Fish Audio, alongside reliable on-device Android Text-to-Speech fallback.
 * **📚 Offline Jisho Dictionary & Quick Translation**: Tap-to-define lookup for Kanji and vocabulary, JLPT levels, definitions, readings, and a slide-up translation sheet with custom text selection toolbar.
 * **✨ Liquid Glass Aesthetic & Interactive Effects**: Modern glassmorphic theme styling, custom wallpaper backgrounds, multi-theme support (Dark, Dim, Light, OLED), and ambient shooting stars effects.
 * **🔋 Ultra Lightweight & Offline Capable**:
@@ -47,12 +48,12 @@
 
 ---
 
-## ✨ What's New in v2.7.0
+## ✨ What's New in v2.8.0
 
-* **🎨 Curated Reading Screen Themes**: Introduced 5 handcrafted reading color schemes (Parchment, Matcha, Pearl, Twilight, and Obsidian) with tactile theme switcher, low eye-strain palettes, and consistent styling across story cards, JLPT badges, target chips, and quizzes.
-* **📖 Jisho Reading Flow Integration**: Directly launch AI graded stories from Jisho dictionary search results and history items.
-* **⚡ Story Theme & Topic Refinements**: Enhanced preset selection with custom topic preservation and smooth theme switching.
-* **📱 UI & Website Polish**: Updated screenshots, responsive layout refinements, and enhanced contrast.
+* **🗣️ Interactive AI Speaking Partner**: Real-time voice practice powered by on-device Speech Recognition and Gemini Flash AI conversational responses.
+* **🎙️ Fish Audio Streaming & Audio Cache**: High-speed conversational voice synthesis with streaming and in-memory cache playback.
+* **💬 Natural Conversation UI**: Dedicated speaking screen with interactive mic orb, conversation transcript history, audio replay, and JLPT-calibrated prompts.
+* **⚡ Audio & Speech Engine Enhancements**: Robust audio focus management, system TTS fallback support, and audio permissions handling.
 
 ---
 
@@ -60,7 +61,7 @@
 
 ### Option 1: Official Showcase Website & Direct APK
 * Visit the dedicated [**Saku Web Portal**](website/) (or run `npm run dev` in `website/`) to preview features and download the APK directly.
-* Download **`Saku.apk`** (~20 MB) directly from the repository or from the [**GitHub Releases (v2.7.0)**](https://github.com/LiebeandSkye/saku/releases) page.
+* Download **`Saku.apk`** (~20 MB) directly from the repository or from the [**GitHub Releases (v2.8.0)**](https://github.com/LiebeandSkye/saku/releases) page.
 * Tap the downloaded file and select **Install** *(if prompted by Google Play Protect, tap "More details" $\rightarrow$ "Install anyway")*.
 
 ### Option 2: 5-Second First-Time Setup

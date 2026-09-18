@@ -1,12 +1,16 @@
 package com.saku.util
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 
 class JapaneseTtsHelper(context: Context) {
     private var tts: TextToSpeech? = null
     private var isInitialized = false
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     init {
         try {
@@ -23,10 +27,43 @@ class JapaneseTtsHelper(context: Context) {
         }
     }
 
-    fun speak(text: String) {
-        if (!isInitialized || text.isBlank()) return
+    fun speak(
+        text: String,
+        onStart: (() -> Unit)? = null,
+        onDone: (() -> Unit)? = null
+    ) {
+        if (!isInitialized || text.isBlank()) {
+            mainHandler.post { onDone?.invoke() }
+            return
+        }
         try {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "SakuTTS_${System.currentTimeMillis()}")
+            val utteranceId = "SakuTTS_${System.currentTimeMillis()}"
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String?) {
+                    if (id == utteranceId) {
+                        mainHandler.post { onStart?.invoke() }
+                    }
+                }
+                override fun onDone(id: String?) {
+                    if (id == utteranceId) {
+                        mainHandler.post { onDone?.invoke() }
+                    }
+                }
+                override fun onError(id: String?) {
+                    if (id == utteranceId) {
+                        mainHandler.post { onDone?.invoke() }
+                    }
+                }
+            })
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        } catch (ignored: Exception) {
+            mainHandler.post { onDone?.invoke() }
+        }
+    }
+
+    fun stop() {
+        try {
+            tts?.stop()
         } catch (ignored: Exception) {}
     }
 

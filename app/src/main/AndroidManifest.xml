@@ -8,6 +8,9 @@
     <!-- Gemini AI API Internet Access -->
     <uses-permission android:name="android.permission.INTERNET" />
     
+    <!-- Audio Recording for Voice Conversation (SpeechRecognizer) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    
     <!-- Notification & Lock Screen Permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -24,6 +27,9 @@
         <provider android:authorities="com.ichi2.anki.a.flashcards" />
         <provider android:authorities="com.ichi2.anki.b.flashcards" />
         <provider android:authorities="com.ichi2.anki.debug.flashcards" />
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
     </queries>
 
     <application

@@ -43,17 +43,20 @@ class GeminiConversationService {
 
         val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=${apiKey.trim()}"
 
-        // System prompt instructing the model to act as an expressive, human-like Japanese conversation partner
-        // giving emotional nuance, natural pauses (〜, …), and exclamation so Fish Audio generates expressive speech
+        // System prompt: natural, grounded, everyday conversational Japanese.
+        // Avoid theatrical anime tropes, exaggerated prolonged vowels (〜), and multiple exclamation marks,
+        // while keeping the tone friendly, warm, and natural.
+        // Keep responses very short and snappy (15 to 35 characters, 1 short sentence) so audio generation is fast.
         val systemInstruction = JSONObject().apply {
             put("parts", JSONArray().apply {
                 put(JSONObject().apply {
-                    put("text", "You are a warm, lively, and expressive Japanese conversational partner named Saku. " +
-                            "Speak completely like a real, emotive human in casual spoken Japanese conversation so voice synthesis sounds expressive, vibrant, and alive. " +
-                            "React naturally with genuine emotion, empathy, and conversational nuance (use natural Japanese interjections and reactions like 「えっ、本当？」「へえ〜！」「うんうん、わかる！」「すごいね！」「あ、なるほど〜」). " +
-                            "Use expressive punctuation (such as ！, ？, 〜, …) to give the voice realistic inflection, rhythm, and feeling. " +
-                            "Keep each response concise and conversational (1 to 2 short sentences, roughly 20 to 50 characters). " +
-                            "Never sound robotic, academic, overly formal, or textbook-like. " +
+                    put("text", "You are a friendly Japanese conversational partner named Saku. " +
+                            "Speak in natural, everyday conversational Japanese (standard polite-casual blend: です・ます with warm conversational flow). " +
+                            "Sound like a real, helpful person in daily life in Japan—not exaggerated, not theatrical, and not an anime caricature. " +
+                            "Be pleasantly expressive and warm without overacting: react naturally with simple, realistic responses (e.g. 「そうなんですね！」「それは面白いですね」「わかります」). " +
+                            "Never use drawn-out punctuation like 『〜』, multiple exclamation marks 『！！』, or excessive ellipses 『…』, as these cause voice synthesis to sound theatrical or strained. " +
+                            "Keep your response very short and brisk: strictly 1 short sentence (15 to 35 characters). " +
+                            "Being concise ensures fast, real-time conversational exchange. " +
                             "Never output markdown, bullet points, romaji, or translations.")
                 })
             })
@@ -91,7 +94,7 @@ class GeminiConversationService {
 
         val generationConfig = JSONObject().apply {
             put("temperature", 0.7)
-            put("maxOutputTokens", 150)
+            put("maxOutputTokens", 65)
         }
 
         val requestBodyJson = JSONObject().apply {

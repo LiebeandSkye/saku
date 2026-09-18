@@ -764,7 +764,13 @@ class MainActivity : ComponentActivity() {
                         else -> SpeakScreen(
                             padding = padding,
                             prefs = prefs,
-                            isActive = pagerState.currentPage == 3
+                            isActive = pagerState.currentPage == 3,
+                            onNavigateToJisho = { word ->
+                                jishoTargetQuery = word
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(2)
+                                }
+                            }
                         )
                     }
                 }

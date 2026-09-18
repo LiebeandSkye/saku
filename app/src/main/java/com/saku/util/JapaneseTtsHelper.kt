@@ -18,6 +18,7 @@ class JapaneseTtsHelper(context: Context) {
                 if (status == TextToSpeech.SUCCESS) {
                     val result = tts?.setLanguage(Locale.JAPANESE)
                     if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                        tts?.setSpeechRate(1.15f)
                         isInitialized = true
                     }
                 }

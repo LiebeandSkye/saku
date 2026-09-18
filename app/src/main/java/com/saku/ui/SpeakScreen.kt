@@ -49,6 +49,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -110,7 +111,8 @@ import kotlinx.coroutines.launch
 fun SpeakScreen(
     padding: PaddingValues,
     prefs: PreferencesManager,
-    isActive: Boolean = true
+    isActive: Boolean = true,
+    onNavigateToJisho: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -128,6 +130,10 @@ fun SpeakScreen(
     var typedText by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Text selection translation state
+    var showTranslationSheet by remember { mutableStateOf(false) }
+    var translateTargetText by remember { mutableStateOf("") }
 
     // Configuration states matching ReadingScreen
     var showModelDialog by remember { mutableStateOf(false) }
@@ -179,7 +185,7 @@ fun SpeakScreen(
     // SpeechRecognizer helper
     val speechHelper = remember {
         SpeechRecognizerHelper(
-            context = context,
+            context = context.applicationContext,
             onPartialResult = { partial ->
                 liveTranscript = partial
             },
@@ -195,10 +201,16 @@ fun SpeakScreen(
                     audioRmsDb = 0f
                 }
             },
-            onError = { _ ->
+            onError = { errorMsg ->
                 isListening = false
                 audioRmsDb = 0f
                 liveTranscript = ""
+                if (errorMsg.isNotBlank() && 
+                    !errorMsg.contains("No speech detected", ignoreCase = true) && 
+                    !errorMsg.contains("timeout", ignoreCase = true)
+                ) {
+                    Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
+                }
             }
         )
     }
@@ -350,14 +362,19 @@ fun SpeakScreen(
     ) { granted ->
         hasAudioPermission = granted
         if (granted) {
-            speechHelper.startListening()
+            if (!speechHelper.isAvailable()) {
+                Toast.makeText(context, "Voice recognition service is not available on this device. Switched to typing mode.", Toast.LENGTH_LONG).show()
+                isKeyboardMode = true
+            } else {
+                speechHelper.startListening()
+            }
         } else {
             Toast.makeText(context, "Microphone permission is required to speak", Toast.LENGTH_SHORT).show()
         }
     }
 
     // Button action callers
-    val startSpeakingAction = {
+    val startSpeakingAction: () -> Unit = {
         // Stop any ongoing playback before listening to prevent acoustic feedback loop
         fishAudioService.stopAudio()
         systemTtsHelper.stop()
@@ -365,6 +382,16 @@ fun SpeakScreen(
 
         if (!hasAudioPermission) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        } else if (!speechHelper.isAvailable()) {
+            Toast.makeText(context, "Voice recognition is not available on this device. Switched to typing mode.", Toast.LENGTH_LONG).show()
+            isKeyboardMode = true
+            coroutineScope.launch {
+                kotlinx.coroutines.delay(120)
+                try {
+                    focusRequester.requestFocus()
+                    keyboardController?.show()
+                } catch (_: Exception) {}
+            }
         } else {
             liveTranscript = ""
             speechHelper.startListening()
@@ -596,41 +623,50 @@ fun SpeakScreen(
                         )
                     }
                 } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(messages, key = { it.id }) { msg ->
-                            ConversationTextItem(
-                                message = msg,
-                                onReplayVoice = {
-                                    playAiVoice(msg.text)
-                                }
-                            )
+                    CustomSelectionContainer(
+                        onTranslate = { selectedText ->
+                            translateTargetText = selectedText
+                            showTranslationSheet = true
                         }
+                    ) {
+                        SelectionContainer {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(messages, key = { it.id }) { msg ->
+                                    ConversationTextItem(
+                                        message = msg,
+                                        onReplayVoice = {
+                                            playAiVoice(msg.text)
+                                        }
+                                    )
+                                }
 
-                        if (isThinking) {
-                            item {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 6.dp),
-                                    horizontalArrangement = Arrangement.Start,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 2.dp,
-                                        color = SakuColors.SagePrimary
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "考え中...",
-                                        fontSize = 13.sp,
-                                        color = SakuColors.TextSecondary.copy(alpha = 0.7f)
-                                    )
+                                if (isThinking) {
+                                    item {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.Start,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(14.dp),
+                                                strokeWidth = 2.dp,
+                                                color = SakuColors.SagePrimary
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(
+                                                text = "考え中...",
+                                                fontSize = 13.sp,
+                                                color = SakuColors.TextSecondary.copy(alpha = 0.7f)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -814,6 +850,18 @@ fun SpeakScreen(
                     Toast.makeText(context, "Fish Audio configuration saved!", Toast.LENGTH_SHORT).show()
                 },
                 onDismiss = { showFishAudioDialog = false }
+            )
+        }
+
+        // Modal Bottom Sheet: Selection Translation
+        if (showTranslationSheet && translateTargetText.isNotBlank()) {
+            TranslationBottomSheet(
+                sourceText = translateTargetText,
+                onDismiss = {
+                    showTranslationSheet = false
+                    translateTargetText = ""
+                },
+                onNavigateToJisho = onNavigateToJisho
             )
         }
     }

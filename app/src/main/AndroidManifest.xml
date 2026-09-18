@@ -27,6 +27,8 @@
         <provider android:authorities="com.ichi2.anki.a.flashcards" />
         <provider android:authorities="com.ichi2.anki.b.flashcards" />
         <provider android:authorities="com.ichi2.anki.debug.flashcards" />
+        <package android:name="com.google.android.googlequicksearchbox" />
+        <package android:name="com.google.android.tts" />
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>

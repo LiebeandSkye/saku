@@ -178,7 +178,7 @@ class FishAudioService(context: Context) {
         }
 
         val cleanModel = model.ifBlank { PreferencesManager.DEFAULT_FISH_AUDIO_MODEL }
-        val speechFile = getSpeakAudioFile(context, "$cleanVoiceId-$cleanModel-$text")
+        val speechFile = getSpeakAudioFile(context, "$cleanVoiceId-$cleanModel-v115-$text")
         if (speechFile.exists() && speechFile.length() > 0) {
             return@withContext Result.success(speechFile)
         }
@@ -186,6 +186,9 @@ class FishAudioService(context: Context) {
             put("text", text)
             put("reference_id", cleanVoiceId)
             put("format", "mp3")
+            put("prosody", JSONObject().apply {
+                put("speed", 1.15)
+            })
         }
 
         val requestBody = requestJson.toString().toRequestBody(jsonMediaType)

@@ -42,7 +42,12 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 }
             }
             ACTION_UNDO -> {
-                CardSessionManager.undoLastReview(context)
+                val pendingResult = goAsync()
+                try {
+                    CardSessionManager.undoLastReview(context)
+                } finally {
+                    pendingResult.finish()
+                }
             }
             ACTION_SNOOZE -> {
                 val prefs = PreferencesManager(context)
@@ -62,7 +67,6 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 val prefs = PreferencesManager(context)
                 prefs.snoozeUntil = 0L
                 cancelAutoUnsnooze(context)
-                LockScreenCardService.updateNotification(context)
             }
         }
     }

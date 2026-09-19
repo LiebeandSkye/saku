@@ -277,16 +277,17 @@ object JapaneseFieldParser {
             val reading = seg.reading
 
             if (reading.isNotEmpty()) {
-                val textLen = text.length
-
-                // Format spaced furigana over kanji
                 val spacedReading = reading.toCharArray().joinToString(" ")
-                furiganaSb.append(spacedReading).append(" ")
-                sentenceSb.append(text).append(" ".repeat(maxOf(1, spacedReading.length - textLen)))
-            } else {
+                val targetLength = maxOf(text.length, spacedReading.length) + 1
+
+                furiganaSb.append(spacedReading)
+                furiganaSb.append(" ".repeat(targetLength - spacedReading.length))
+
                 sentenceSb.append(text)
-                // Append spaces of equal length on furigana line
+                sentenceSb.append(" ".repeat(targetLength - text.length))
+            } else {
                 furiganaSb.append(" ".repeat(text.length))
+                sentenceSb.append(text)
             }
         }
 
@@ -450,10 +451,20 @@ object JapaneseFieldParser {
             }
         }
 
-        val finalKanji = cleanHtml(extractedKanji).ifEmpty { fallbackParsedKanji.ifEmpty { "日" } }
-        val finalKana = cleanHtml(inferredKana).ifEmpty { fallbackParsedKana.ifEmpty { "ひ" } }
+        val finalKanji = cleanHtml(extractedKanji).ifEmpty {
+            fallbackParsedKanji.ifEmpty {
+                cleanHtml(fallbackQuestion).ifEmpty { cleanValues.firstOrNull() ?: "" }
+            }
+        }
+        val finalKana = cleanHtml(inferredKana).ifEmpty {
+            fallbackParsedKana.ifEmpty { finalKanji }
+        }
 
-        val finalMeaning = cleanHtml(inferredMeaning).ifEmpty { fallbackParsedMeaning.ifEmpty { "sun, day" } }
+        val finalMeaning = cleanHtml(inferredMeaning).ifEmpty {
+            fallbackParsedMeaning.ifEmpty {
+                cleanHtml(fallbackAnswer).ifEmpty { cleanValues.getOrNull(1) ?: "" }
+            }
+        }
         val finalExample = cleanHtml(inferredExample).ifEmpty { fallbackParsedExample }
         val finalExampleTrans = cleanHtml(rawExampleTranslation)
         val (cleanExampleSentence, _) = extractKanjiAndKana(finalExample)

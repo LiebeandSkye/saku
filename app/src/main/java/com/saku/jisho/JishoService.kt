@@ -50,15 +50,15 @@ class JishoService(
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                return@withContext Result.failure(
-                    IOException("Jisho API error: HTTP ${response.code} ${response.message}")
-                )
+            val bodyString = client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        IOException("Jisho API error: HTTP ${response.code} ${response.message}")
+                    )
+                }
+                response.body?.string()
+                    ?: return@withContext Result.failure(IOException("Empty response from Jisho"))
             }
-
-            val bodyString = response.body?.string()
-                ?: return@withContext Result.failure(IOException("Empty response from Jisho"))
 
             val jsonObject = JSONObject(bodyString)
             val dataArray = jsonObject.optJSONArray("data") ?: JSONArray()

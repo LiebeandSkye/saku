@@ -148,7 +148,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -548,8 +550,13 @@ class MainActivity : ComponentActivity() {
         isAnkiInstalledState = ankiHelper.isAnkiDroidInstalled()
         hasPermissionState = ankiHelper.hasApiPermission()
         if (hasPermissionState) {
-            decksState = ankiHelper.getDeckList()
-            CardSessionManager.getOrFetchCard(this, forceRefresh = true)
+            lifecycleScope.launch(Dispatchers.IO) {
+                val decks = ankiHelper.getDeckList()
+                withContext(Dispatchers.Main) {
+                    decksState = decks
+                }
+            }
+            CardSessionManager.refresh(this)
         }
         backgroundTypeState = prefs.backgroundType
         customImageUriState = prefs.customImageUri
@@ -826,7 +833,7 @@ class MainActivity : ComponentActivity() {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    beyondViewportPageCount = 1
+                    beyondViewportPageCount = 3
                 ) { page ->
                     when (page) {
                         0 -> {
@@ -1129,17 +1136,16 @@ class MainActivity : ComponentActivity() {
         var currentCenteredDeckId by remember { mutableStateOf(selectedDecksList.firstOrNull()?.id ?: -1L) }
 
         LaunchedEffect(selectedDecksList) {
-            withContext(Dispatchers.IO) {
-                val validDeckIds = selectedDecksList.map { it.id }.toSet()
-                withContext(Dispatchers.Main) {
-                    val toRemove = deckCardsCache.keys.filter { it !in validDeckIds }
-                    toRemove.forEach {
-                        deckCardsCache.remove(it)
-                        revealedDeckMap.remove(it)
-                    }
-                }
-                for (deck in selectedDecksList) {
-                    if (deck.id > 0 && !deckCardsCache.containsKey(deck.id)) {
+            val validDeckIds = selectedDecksList.map { it.id }.toSet()
+            val toRemove = deckCardsCache.keys.filter { it !in validDeckIds }
+            toRemove.forEach {
+                deckCardsCache.remove(it)
+                revealedDeckMap.remove(it)
+            }
+            val missingDecks = selectedDecksList.filter { it.id > 0 && !deckCardsCache.containsKey(it.id) }
+            if (missingDecks.isNotEmpty()) {
+                withContext(Dispatchers.IO) {
+                    for (deck in missingDecks) {
                         val card = ankiHelper.getNextDueCard(setOf(deck.id))
                         withContext(Dispatchers.Main) {
                             deckCardsCache[deck.id] = card

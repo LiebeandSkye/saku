@@ -1,8 +1,5 @@
 package com.saku.ui
 
-import android.app.Activity
-import android.content.Intent
-import android.speech.RecognizerIntent
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -42,6 +39,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -111,6 +110,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -168,7 +168,11 @@ fun SpeakScreen(
                 SpeakConversationManager.currentSessionId = it
             }
             val existing = savedSessions.firstOrNull { it.id == sessionId }
-            val title = existing?.title ?: SavedSpeakSession.generateTitle(msgs)
+            val title = if (existing != null && existing.title != "会話 (Conversation)") {
+                existing.title
+            } else {
+                SavedSpeakSession.generateTitle(msgs)
+            }
             val isPinned = existing?.isPinned ?: false
             val createdAt = existing?.createdAt ?: System.currentTimeMillis()
             val session = SavedSpeakSession(
@@ -231,16 +235,33 @@ fun SpeakScreen(
     // Scroll state for conversation list
     val listState = rememberLazyListState()
 
-    // Auto-scroll when new messages arrive
-    LaunchedEffect(messages.size, liveTranscript, isThinking) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.size - 1)
+    // Observe software keyboard insets to auto-scroll when keyboard opens
+    val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+
+    // Auto-scroll when talking (listening / speech transcript / thinking / replies) or typing (keyboard mode / text / IME)
+    LaunchedEffect(
+        messages.size,
+        isThinking,
+        isListening,
+        liveTranscript,
+        typedText,
+        isKeyboardMode,
+        imeBottom
+    ) {
+        val totalCount = messages.size + (if (isThinking) 1 else 0)
+        if (totalCount > 0) {
+            if (imeBottom > 0) {
+                // Brief pause for soft keyboard expansion animation
+                kotlinx.coroutines.delay(60)
+            }
+            try {
+                listState.animateScrollToItem(totalCount - 1)
+            } catch (_: Throwable) {}
         }
     }
 
-    // Forward reference for speech handler and system speech fallback
+    // Forward reference for speech handler
     var handleFinalSpeechRef by remember { mutableStateOf<((String) -> Unit)?>(null) }
-    var launchSystemVoiceRef by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     // SpeechRecognizer helper
     val speechHelper = remember {
@@ -270,12 +291,10 @@ fun SpeakScreen(
                     !errorMsg.contains("timeout", ignoreCase = true)
                 ) {
                     Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
-                    // Fallback to system voice recognition if recognition engine failed
-                    if (errorMsg.contains("client", ignoreCase = true) ||
-                        errorMsg.contains("unavailable", ignoreCase = true) ||
+                    if (errorMsg.contains("unavailable", ignoreCase = true) ||
                         errorMsg.contains("engine", ignoreCase = true)
                     ) {
-                        launchSystemVoiceRef?.invoke()
+                        isKeyboardMode = true
                     }
                 }
             }
@@ -430,42 +449,17 @@ fun SpeakScreen(
     // State trigger to safely invoke permissionLauncher from composition lifecycle instead of pointerInput
     var requestAudioPermissionTrigger by remember { mutableStateOf(false) }
 
-    // Fallback system speech dialog launcher (when headless SpeechRecognizer is unavailable or errors)
-    val systemVoiceLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val spokenList = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val spoken = spokenList?.firstOrNull()?.trim()
-            if (!spoken.isNullOrBlank()) {
-                handleFinalSpeechRef?.invoke(spoken)
-            }
+    val switchToTypingMode: () -> Unit = {
+        Toast.makeText(context, "Voice recognition service unavailable. Switched to typing mode.", Toast.LENGTH_SHORT).show()
+        isKeyboardMode = true
+        coroutineScope.launch {
+            kotlinx.coroutines.delay(120)
+            try {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            } catch (_: Throwable) {}
         }
     }
-
-    val launchSystemSpeechDialog: () -> Unit = {
-        try {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ja-JP")
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ja-JP")
-                putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "ja-JP")
-                putExtra(RecognizerIntent.EXTRA_PROMPT, "日本語で話してください (Speak Japanese)")
-            }
-            systemVoiceLauncher.launch(intent)
-        } catch (t: Throwable) {
-            Toast.makeText(context, "Voice recognition service unavailable. Switched to typing mode.", Toast.LENGTH_SHORT).show()
-            isKeyboardMode = true
-            coroutineScope.launch {
-                kotlinx.coroutines.delay(120)
-                try {
-                    focusRequester.requestFocus()
-                    keyboardController?.show()
-                } catch (_: Throwable) {}
-            }
-        }
-    }
-    launchSystemVoiceRef = launchSystemSpeechDialog
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -473,12 +467,12 @@ fun SpeakScreen(
         hasAudioPermission = granted
         if (granted) {
             if (!speechHelper.isAvailable()) {
-                launchSystemSpeechDialog()
+                switchToTypingMode()
             } else {
                 try {
                     speechHelper.startListening()
                 } catch (_: Throwable) {
-                    launchSystemSpeechDialog()
+                    switchToTypingMode()
                 }
             }
         } else {
@@ -510,14 +504,14 @@ fun SpeakScreen(
             if (!hasAudioPermission) {
                 requestAudioPermissionTrigger = true
             } else if (!speechHelper.isAvailable()) {
-                launchSystemSpeechDialog()
+                switchToTypingMode()
             } else {
                 liveTranscript = ""
                 speechHelper.startListening()
             }
         } catch (t: Throwable) {
             Toast.makeText(context, "Speech start error: ${t.localizedMessage}", Toast.LENGTH_SHORT).show()
-            launchSystemSpeechDialog()
+            switchToTypingMode()
         }
     }
 
@@ -561,6 +555,31 @@ fun SpeakScreen(
         }
     }
 
+    // Start fresh conversation after persisting current active messages to history
+    val startNewChat: () -> Unit = {
+        if (messages.isNotEmpty()) {
+            persistCurrentSession()
+        }
+        speechHelper.cancel()
+        liveTranscript = ""
+        isListening = false
+        audioRmsDb = 0f
+
+        fishAudioService.stopAudio()
+        systemTtsHelper.stop()
+        isSpeaking = false
+        isThinking = false
+
+        typedText = ""
+        keyboardController?.hide()
+
+        SpeakConversationManager.clear()
+        FishAudioService.clearSpeakAudio(context)
+        savedSessions = historyManager.getSessions()
+
+        Toast.makeText(context, "Saved to history • New chat started", Toast.LENGTH_SHORT).show()
+    }
+
     val isLight = SakuColors.currentTheme == AppTheme.LIGHT
 
     Box(
@@ -586,7 +605,7 @@ fun SpeakScreen(
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        // Header bar: minimal title, history button, and clear button
+                        // Header bar: minimal title, history button, and new chat button
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -606,7 +625,7 @@ fun SpeakScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
-                                // History button placed near delete icon
+                                // History button to view and resume previous sessions
                                 IconButton(
                                     onClick = {
                                         savedSessions = historyManager.getSessions()
@@ -624,20 +643,12 @@ fun SpeakScreen(
 
                                 if (messages.isNotEmpty()) {
                                     IconButton(
-                                        onClick = {
-                                            SpeakConversationManager.clear()
-                                            liveTranscript = ""
-                                            fishAudioService.stopAudio()
-                                            systemTtsHelper.stop()
-                                            isSpeaking = false
-                                            FishAudioService.clearSpeakAudio(context)
-                                            Toast.makeText(context, "New chat started", Toast.LENGTH_SHORT).show()
-                                        },
+                                        onClick = { startNewChat() },
                                         modifier = Modifier.size(32.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Filled.AddComment,
-                                            contentDescription = "Start new chat",
+                                            contentDescription = "New chat (save current to history)",
                                             tint = SakuColors.SagePrimary,
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -824,7 +835,7 @@ fun SpeakScreen(
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(vertical = 12.dp),
+                                contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp),
                                 verticalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 items(messages, key = { it.id }) { msg ->
@@ -837,7 +848,7 @@ fun SpeakScreen(
                                 }
 
                                 if (isThinking) {
-                                    item {
+                                    item(key = "speak_thinking_indicator") {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1145,12 +1156,18 @@ fun SpeakScreen(
                                             animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
                                         )
                                         .clickable {
+                                            if (messages.isNotEmpty() && SpeakConversationManager.currentSessionId != item.id) {
+                                                persistCurrentSession()
+                                            }
                                             SpeakConversationManager.messages.clear()
                                             SpeakConversationManager.messages.addAll(item.messages)
                                             SpeakConversationManager.currentSessionId = item.id
+                                            liveTranscript = ""
+                                            typedText = ""
                                             fishAudioService.stopAudio()
                                             systemTtsHelper.stop()
                                             isSpeaking = false
+                                            isThinking = false
                                             coroutineScope.launch {
                                                 historySheetState.hide()
                                                 showHistorySheet = false

@@ -61,16 +61,7 @@ class SpeechRecognizerHelper(
 
         val validServices = resolveInfos.mapNotNull { it.serviceInfo }
 
-        // 1. Google Speech Services (GoogleTTSRecognitionService, NOT GoogleTTSService)
-        val googleTtsRecognition = validServices.firstOrNull {
-            it.packageName == "com.google.android.tts" &&
-            it.name.contains("RecognitionService", ignoreCase = true)
-        }
-        if (googleTtsRecognition != null) {
-            return ComponentName(googleTtsRecognition.packageName, googleTtsRecognition.name)
-        }
-
-        // 2. Google App (QuickSearchBox) Recognition Service
+        // 1. Google App (QuickSearchBox) Recognition Service
         val googleAppRecognition = validServices.firstOrNull {
             it.packageName == "com.google.android.googlequicksearchbox" &&
             it.name.contains("RecognitionService", ignoreCase = true)
@@ -79,17 +70,16 @@ class SpeechRecognizerHelper(
             return ComponentName(googleAppRecognition.packageName, googleAppRecognition.name)
         }
 
-        // 3. Any service not belonging to Android System Intelligence (com.google.android.as)
+        // 2. OEM or other third-party recognition services (exclude tts and android system intelligence)
         val oemService = validServices.firstOrNull {
-            !it.packageName.startsWith("com.google.android.as")
+            !it.packageName.startsWith("com.google.android.as") &&
+            !it.packageName.startsWith("com.google.android.tts")
         }
         if (oemService != null) {
             return ComponentName(oemService.packageName, oemService.name)
         }
 
-        // 4. Fallback: first available service
-        val fallback = validServices.firstOrNull() ?: return null
-        return ComponentName(fallback.packageName, fallback.name)
+        return null
     }
 
     private fun ensureRecognizer(): SpeechRecognizer? {
@@ -100,26 +90,7 @@ class SpeechRecognizerHelper(
             return null
         }
 
-        val bestComponent = findBestRecognitionService(appContext)
-
-        // Strategy 1: Try with verified best ComponentName if available
-        if (bestComponent != null) {
-            try {
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext, bestComponent).apply {
-                    setRecognitionListener(createListener())
-                }
-                Log.d("SpeechHelper", "SpeechRecognizer initialized with: ${bestComponent.flattenToShortString()}")
-                return speechRecognizer
-            } catch (t: Throwable) {
-                Log.w("SpeechHelper", "Failed to create recognizer with component $bestComponent: ${t.message}")
-                try {
-                    speechRecognizer?.destroy()
-                } catch (_: Throwable) {}
-                speechRecognizer = null
-            }
-        }
-
-        // Strategy 2: Default SpeechRecognizer (system default service)
+        // Strategy 1: Default SpeechRecognizer (uses Android system configured recognition service)
         try {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext).apply {
                 setRecognitionListener(createListener())
@@ -127,11 +98,29 @@ class SpeechRecognizerHelper(
             Log.d("SpeechHelper", "SpeechRecognizer initialized with system default")
             return speechRecognizer
         } catch (t: Throwable) {
-            Log.e("SpeechHelper", "Failed to create default SpeechRecognizer: ${t.message}")
+            Log.w("SpeechHelper", "Failed to create default SpeechRecognizer: ${t.message}")
             try {
                 speechRecognizer?.destroy()
             } catch (_: Throwable) {}
             speechRecognizer = null
+        }
+
+        // Strategy 2: Fallback to verified dedicated service (Google Search / OEM) if default failed
+        val bestComponent = findBestRecognitionService(appContext)
+        if (bestComponent != null) {
+            try {
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(appContext, bestComponent).apply {
+                    setRecognitionListener(createListener())
+                }
+                Log.d("SpeechHelper", "SpeechRecognizer initialized with component: ${bestComponent.flattenToShortString()}")
+                return speechRecognizer
+            } catch (t: Throwable) {
+                Log.e("SpeechHelper", "Failed to create recognizer with component $bestComponent: ${t.message}")
+                try {
+                    speechRecognizer?.destroy()
+                } catch (_: Throwable) {}
+                speechRecognizer = null
+            }
         }
 
         onError("Speech recognition engine could not be initialized.")
@@ -163,10 +152,10 @@ class SpeechRecognizerHelper(
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
-                // Low latency silence detection: triggers end of speech quickly once user stops speaking
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 400L)
+                // Japanese conversational pause tolerance: 2000ms
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
             }
 
             try {
@@ -192,8 +181,7 @@ class SpeechRecognizerHelper(
                 speechRecognizer?.stopListening()
             } catch (_: Throwable) {
             }
-            // Fast-response fallback: if user stopped speaking / released mic and we already have partial speech,
-            // don't leave them waiting if the recognition engine takes long to return onResults.
+            // Fallback watchdog: only fire if engine stalls for >2.5s and partial speech was captured
             if (lastPartialText.isNotBlank() && !hasDeliveredFinal) {
                 pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
                 val runnable = Runnable {
@@ -207,7 +195,7 @@ class SpeechRecognizerHelper(
                     }
                 }
                 pendingResultsRunnable = runnable
-                mainHandler.postDelayed(runnable, 350)
+                mainHandler.postDelayed(runnable, 2500)
             }
         }
     }
@@ -261,10 +249,8 @@ class SpeechRecognizerHelper(
             }
 
             override fun onEndOfSpeech() {
-                isListening = false
-                onStateChange(false)
-                // Hands-free voice activity: speech input ceased.
-                // Fast-track delivery if recognition engine delays sending onResults:
+                // Voice activity ceased: engine is now computing results.
+                // Keep isListening = true so UI doesn't drop back to idle and user doesn't collide by pressing again.
                 if (lastPartialText.isNotBlank() && !hasDeliveredFinal) {
                     pendingResultsRunnable?.let { mainHandler.removeCallbacks(it) }
                     val runnable = Runnable {
@@ -272,11 +258,13 @@ class SpeechRecognizerHelper(
                             hasDeliveredFinal = true
                             val text = lastPartialText.trim()
                             lastPartialText = ""
+                            isListening = false
+                            onStateChange(false)
                             onFinalResult(text)
                         }
                     }
                     pendingResultsRunnable = runnable
-                    mainHandler.postDelayed(runnable, 400)
+                    mainHandler.postDelayed(runnable, 3500)
                 }
             }
 

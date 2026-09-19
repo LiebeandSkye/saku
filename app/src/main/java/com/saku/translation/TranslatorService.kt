@@ -39,15 +39,15 @@ class TranslatorService(
                 .get()
                 .build()
 
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                return@withContext Result.failure(
-                    IOException("Translation request failed: HTTP ${response.code}")
-                )
+            val body = client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext Result.failure(
+                        IOException("Translation request failed: HTTP ${response.code}")
+                    )
+                }
+                response.body?.string()
+                    ?: return@withContext Result.failure(IOException("Empty translation response"))
             }
-
-            val body = response.body?.string()
-                ?: return@withContext Result.failure(IOException("Empty translation response"))
 
             val rootArray = JSONArray(body)
             val outerArray = rootArray.optJSONArray(0)

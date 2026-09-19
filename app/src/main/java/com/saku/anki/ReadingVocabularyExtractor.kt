@@ -13,11 +13,35 @@ class ReadingVocabularyExtractor(private val context: Context) {
 
     companion object {
         private const val TAG = "ReadingVocabExtractor"
+
+        @Volatile
+        private var cachedSummary: ReadingVocabularySummary? = null
+        @Volatile
+        private var cachedDeckIds: Set<Long>? = null
+
+        fun getCachedSummary(selectedDeckIds: Set<Long>): ReadingVocabularySummary? {
+            return if (cachedDeckIds == selectedDeckIds) cachedSummary else null
+        }
+
+        fun invalidateCache() {
+            cachedSummary = null
+            cachedDeckIds = null
+        }
     }
 
     private val ankiClient = AnkiDroidClient(context)
 
-    suspend fun extractVocabulary(selectedDeckIds: Set<Long> = emptySet()): ReadingVocabularySummary = withContext(Dispatchers.IO) {
+    suspend fun extractVocabulary(
+        selectedDeckIds: Set<Long> = emptySet(),
+        forceRefresh: Boolean = false
+    ): ReadingVocabularySummary = withContext(Dispatchers.IO) {
+        if (!forceRefresh) {
+            val cached = getCachedSummary(selectedDeckIds)
+            if (cached != null) {
+                return@withContext cached
+            }
+        }
+
         if (!ankiClient.isPermissionGranted()) {
             return@withContext ReadingVocabularySummary()
         }
@@ -113,11 +137,14 @@ class ReadingVocabularyExtractor(private val context: Context) {
         val allWords = (studiedMap.values + suspendedMap.values).sortedBy { it.displayWord }
         Log.d(TAG, "Extracted ${studiedMap.size} studied words and ${suspendedMap.size} suspended cards (total: ${allWords.size})")
 
-        ReadingVocabularySummary(
+        val summary = ReadingVocabularySummary(
             studiedCount = studiedMap.size,
             suspendedCount = suspendedMap.size,
             words = allWords
         )
+        cachedSummary = summary
+        cachedDeckIds = selectedDeckIds
+        summary
     }
 
     private fun extractFromNotesQuery(
@@ -277,7 +304,7 @@ class ReadingVocabularyExtractor(private val context: Context) {
         return null
     }
 
-    private val modelFieldCache = mutableMapOf<Long, List<String>>()
+    private val modelFieldCache = java.util.concurrent.ConcurrentHashMap<Long, List<String>>()
 
     private fun getModelFieldNames(authority: String, modelId: Long): List<String> {
         if (modelId <= 0) return emptyList()

@@ -36,4 +36,34 @@ class RubyTextRendererTest {
         val tokens = RubyTextRenderer.parseRubyTokens("")
         assertTrue(tokens.isEmpty())
     }
+
+    @Test
+    fun testBuildRubyVocab_prefixesAndSuffixes() {
+        assertEquals("食[た]べる", RubyTextRenderer.buildRubyVocab("食べる", "たべる"))
+        assertEquals("泳[およ]ぐ", RubyTextRenderer.buildRubyVocab("泳ぐ", "およぐ"))
+        assertEquals("お 茶[ちゃ]", RubyTextRenderer.buildRubyVocab("お茶", "おちゃ"))
+        assertEquals("ご 飯[はん]", RubyTextRenderer.buildRubyVocab("ご飯", "ごはん"))
+        assertEquals("お 酒[さけ]", RubyTextRenderer.buildRubyVocab("お酒", "おさけ"))
+        assertEquals("思[おも]い 出[だ]す", RubyTextRenderer.buildRubyVocab("思い出す", "おもいだす"))
+    }
+
+    @Test
+    fun testParseRubyTokens_prefixDeduplication() {
+        // When input has honorific kana directly preceding kanji without space
+        val tokens = RubyTextRenderer.parseRubyTokens("お茶[おちゃ]")
+        assertEquals(2, tokens.size)
+        assertEquals("お", tokens[0].base)
+        assertEquals(null, tokens[0].ruby)
+        assertEquals("茶", tokens[1].base)
+        assertEquals("ちゃ", tokens[1].ruby)
+    }
+
+    @Test
+    fun testParseRubyTokens_htmlWithRpAndAttributes() {
+        val input = "<ruby class=\"furigana\">漢字<rp>(</rp><rt>かんじ</rt><rp>)</rp></ruby>"
+        val tokens = RubyTextRenderer.parseRubyTokens(input)
+        assertEquals(1, tokens.size)
+        assertEquals("漢字", tokens[0].base)
+        assertEquals("かんじ", tokens[0].ruby)
+    }
 }

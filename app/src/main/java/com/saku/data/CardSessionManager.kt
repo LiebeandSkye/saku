@@ -103,6 +103,8 @@ object CardSessionManager {
         val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
 
         val oldStats = currentStats
+        val priorCard = previousCard
+        val priorStats = previousStats
         previousCard = card
         previousStats = oldStats
         currentStats = when (ease) {
@@ -145,8 +147,17 @@ object CardSessionManager {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                isGradingInProgress.set(false)
-                mainHandler.post { onComplete?.invoke(null) }
+                mainHandler.post {
+                    try {
+                        currentStats = oldStats
+                        previousCard = priorCard
+                        previousStats = priorStats
+                        notifyAllSurfaces(context)
+                        onComplete?.invoke(null)
+                    } finally {
+                        isGradingInProgress.set(false)
+                    }
+                }
             }
         }.start()
     }
@@ -172,8 +183,11 @@ object CardSessionManager {
         val prefs = PreferencesManager(context)
         val selectedDecks = prefs.getSelectedDeckIdsAsLongs()
 
+        val oldStats = currentStats
+        val priorCard = previousCard
+        val priorStats = previousStats
         previousCard = card
-        previousStats = currentStats
+        previousStats = oldStats
         val effectiveDeckId = targetDeckId?.takeIf { it > 0 } ?: card.deckId.takeIf { it > 0 }
         Thread {
             try {
@@ -200,8 +214,17 @@ object CardSessionManager {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                isGradingInProgress.set(false)
-                mainHandler.post { onComplete?.invoke(null) }
+                mainHandler.post {
+                    try {
+                        currentStats = oldStats
+                        previousCard = priorCard
+                        previousStats = priorStats
+                        notifyAllSurfaces(context)
+                        onComplete?.invoke(null)
+                    } finally {
+                        isGradingInProgress.set(false)
+                    }
+                }
             }
         }.start()
     }
@@ -229,6 +252,7 @@ object CardSessionManager {
 
     fun refresh(context: Context, onComplete: (() -> Unit)? = null) {
         AnkiDroidHelper.invalidateDeckCache()
+        com.saku.anki.ReadingVocabularyExtractor.invalidateCache()
         Thread {
             try {
                 val ankiHelper = AnkiDroidHelper(context)
@@ -268,8 +292,8 @@ object CardSessionManager {
                     LockScreenCardService.updateNotification(context)
                 }
                 SakuWidgetProvider.updateAllWidgets(context)
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } catch (t: Throwable) {
+                t.printStackTrace()
             }
         }
     }

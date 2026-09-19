@@ -73,25 +73,10 @@ class AnkiDroidHelper(private val context: Context) {
     }
 
     fun hasApiPermission(): Boolean {
-        val granted = ContextCompat.checkSelfPermission(
+        return ContextCompat.checkSelfPermission(
             context,
             PERMISSION_READ_WRITE_DATABASE
         ) == PackageManager.PERMISSION_GRANTED
-        if (!granted) {
-            return false
-        }
-        return synchronized(ankiIpcLock) {
-            try {
-                val cursor = resolver.query(decksUri, null, null, null, null)
-                cursor?.use {
-                    true
-                } ?: false
-            } catch (e: SecurityException) {
-                false
-            } catch (e: Exception) {
-                false
-            }
-        }
     }
 
     fun getDeckList(forceRefresh: Boolean = false): List<DeckInfo> {
@@ -612,6 +597,7 @@ class AnkiDroidHelper(private val context: Context) {
 
         @Volatile
         private var cachedDeckList: List<DeckInfo>? = null
+        @Volatile
         private var cachedDeckListTimestamp: Long = 0L
         private const val DECK_CACHE_TTL_MS = 20_000L // 20-second cache to prevent IPC storms
 

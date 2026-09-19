@@ -75,19 +75,20 @@ object StoryGenerationManager {
                 latestStory = story
 
                 // Automatically save into reading history on background IO dispatcher
-                withContext(Dispatchers.IO) {
+                val storyWithImage = withContext(Dispatchers.IO) {
                     val historyManager = ReadingHistoryManager(appContext)
                     val imageUrl = NekosService.fetchImageUrl(story.title, story.theme, story.topic)
-                    val storyWithImage = if (!imageUrl.isNullOrBlank()) story.copy(imageUrl = imageUrl) else story
-                    latestStory = storyWithImage
-                    historyManager.saveStory(storyWithImage)
+                    val withImage = if (!imageUrl.isNullOrBlank()) story.copy(imageUrl = imageUrl) else story
+                    historyManager.saveStory(withImage)
+                    withImage
                 }
 
                 val prefs = PreferencesManager(appContext)
-                prefs.lastReadStoryId = story.id
+                prefs.lastReadStoryId = storyWithImage.id
 
-                status = GenerationStatus.Success(story)
-                onSuccess?.invoke(story)
+                latestStory = storyWithImage
+                status = GenerationStatus.Success(storyWithImage)
+                onSuccess?.invoke(storyWithImage)
             }.onFailure { error ->
                 val msg = error.message ?: "Failed to generate story"
                 status = GenerationStatus.Error(msg)

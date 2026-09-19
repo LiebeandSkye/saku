@@ -170,4 +170,30 @@ class SpeakHistoryTest {
         // Most recent should be retained
         assertEquals("session-60", sessions.first().id)
     }
+
+    @Test
+    fun testSaveActiveSessionOnNewChat() {
+        val chatMessages = listOf(
+            ChatMessage(text = "こんにちは！お元気ですか？", isUser = true),
+            ChatMessage(text = "こんにちは！元気ですよ。あなたは？", isUser = false)
+        )
+        val sessionId = "session-active-1"
+        val title = SavedSpeakSession.generateTitle(chatMessages)
+        val session = SavedSpeakSession(
+            id = sessionId,
+            title = title,
+            messages = chatMessages,
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+
+        // Save session as done in startNewChat
+        historyManager.saveSession(session)
+
+        val retrieved = historyManager.getSessions()
+        assertEquals(1, retrieved.size)
+        assertEquals("session-active-1", retrieved[0].id)
+        assertEquals("こんにちは！お元気ですか？", retrieved[0].title)
+        assertEquals(2, retrieved[0].messages.size)
+    }
 }

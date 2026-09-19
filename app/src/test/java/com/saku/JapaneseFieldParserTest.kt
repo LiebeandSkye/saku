@@ -1,5 +1,6 @@
 package com.saku
 
+import com.saku.anki.FuriganaSegment
 import com.saku.anki.JapaneseFieldParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -242,6 +243,40 @@ class JapaneseFieldParserTest {
 
         // Sokuon before 'で' (e.g. slang/onomatopoeia)
         assertEquals("dde", JapaneseFieldParser.kanaToRomaji("っで"))
+    }
+
+    @Test
+    fun testAlignFuriganaTwoLines_segmentAlignment() {
+        val segments = listOf(
+            FuriganaSegment("野球", "やきゅう", false),
+            FuriganaSegment("は", "", false),
+            FuriganaSegment("九人", "きゅうにん", true),
+            FuriganaSegment("で", "", false)
+        )
+        val (fLine, sLine) = JapaneseFieldParser.alignFuriganaTwoLines(segments)
+        // Furigana for "九人" ("き ゅ う に ん") must start at the exact same column index as "九人" in sLine
+        val fIdx = fLine.indexOf("き ゅ う に ん")
+        val sIdx = sLine.indexOf("九人")
+        assertEquals(sIdx, fIdx)
+    }
+
+    @Test
+    fun testMapFieldsToJapaneseCard_noHardcodedMockData() {
+        // Non-standard deck with custom field names
+        val fieldNames = listOf("Front", "Back")
+        val fieldValues = listOf("猫", "cat")
+
+        val result = JapaneseFieldParser.mapFieldsToJapaneseCard(
+            fieldNames = fieldNames,
+            fieldValues = fieldValues,
+            fallbackQuestion = "猫",
+            fallbackAnswer = "cat"
+        )
+        assertEquals("猫", result.kanji)
+        assertEquals("cat", result.meaning)
+        // Ensure no placeholder data was injected
+        assertTrue(!result.kanji.contains("日") || result.kanji == "猫")
+        assertTrue(result.meaning != "sun, day")
     }
 }
 

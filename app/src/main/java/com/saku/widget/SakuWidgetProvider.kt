@@ -118,7 +118,7 @@ class SakuWidgetProvider : AppWidgetProvider() {
                     else -> 0.75f
                 }
 
-                val maxDim = 480
+                val maxDim = 360
                 val rawW = (widthDp * density).toInt().coerceAtLeast(280)
                 val rawH = (heightDp * density).toInt().coerceAtLeast(280)
                 val (targetW, targetH) = if (rawW > maxDim || rawH > maxDim) {

@@ -72,9 +72,9 @@ fun StoryThemeConfigDialog(
     var selectedTab by remember { mutableIntStateOf(if (prefs.isCustomThemeModeActive) 1 else 0) }
 
     // Randomizer state
-    var disabledThemes by remember { mutableStateOf(prefs.disabledStoryThemes.toMutableSet()) }
-    var disabledTopics by remember { mutableStateOf(prefs.disabledStoryTopics.toMutableSet()) }
-    val expandedThemes = remember { mutableStateOf(mutableSetOf<String>()) }
+    var disabledThemes by remember { mutableStateOf(prefs.disabledStoryThemes.toSet()) }
+    var disabledTopics by remember { mutableStateOf(prefs.disabledStoryTopics.toSet()) }
+    var expandedThemes by remember { mutableStateOf(emptySet<String>()) }
 
     // Custom story state
     var isCustomActive by remember { mutableStateOf(prefs.isCustomThemeModeActive) }
@@ -209,54 +209,53 @@ fun StoryThemeConfigDialog(
                         RandomizerSettingsContent(
                             disabledThemes = disabledThemes,
                             disabledTopics = disabledTopics,
-                            expandedThemes = expandedThemes.value,
+                            expandedThemes = expandedThemes,
                             onToggleTheme = { themeKey ->
-                                val updated = disabledThemes.toMutableSet()
-                                if (themeKey in updated) {
-                                    updated.remove(themeKey)
+                                if (themeKey in disabledThemes) {
+                                    val updated = disabledThemes - themeKey
+                                    disabledThemes = updated
+                                    prefs.disabledStoryThemes = updated
+                                    onConfigurationChanged()
                                 } else {
                                     // Ensure at least one theme remains enabled
-                                    val enabledCount = StoryThemes.ALL_THEMES.count { it !in updated }
-                                    if (enabledCount <= 1) {
+                                    val enabledCount = StoryThemes.ALL_THEMES.count { it !in disabledThemes && it != themeKey }
+                                    if (enabledCount < 1) {
                                         Toast.makeText(context, "At least one theme must remain enabled", Toast.LENGTH_SHORT).show()
                                         return@RandomizerSettingsContent
                                     }
-                                    updated.add(themeKey)
+                                    val updated = disabledThemes + themeKey
+                                    disabledThemes = updated
+                                    prefs.disabledStoryThemes = updated
+                                    onConfigurationChanged()
                                 }
-                                disabledThemes = updated
-                                prefs.disabledStoryThemes = updated
-                                onConfigurationChanged()
                             },
                             onToggleTopic = { topic ->
-                                val updated = disabledTopics.toMutableSet()
-                                if (topic in updated) {
-                                    updated.remove(topic)
+                                val updated = if (topic in disabledTopics) {
+                                    disabledTopics - topic
                                 } else {
-                                    updated.add(topic)
+                                    disabledTopics + topic
                                 }
                                 disabledTopics = updated
                                 prefs.disabledStoryTopics = updated
                                 onConfigurationChanged()
                             },
                             onToggleExpand = { themeKey ->
-                                val updated = expandedThemes.value.toMutableSet()
-                                if (themeKey in updated) {
-                                    updated.remove(themeKey)
+                                expandedThemes = if (themeKey in expandedThemes) {
+                                    expandedThemes - themeKey
                                 } else {
-                                    updated.add(themeKey)
+                                    expandedThemes + themeKey
                                 }
-                                expandedThemes.value = updated
                             },
                             onEnableAll = {
-                                disabledThemes = mutableSetOf()
-                                disabledTopics = mutableSetOf()
+                                disabledThemes = emptySet()
+                                disabledTopics = emptySet()
                                 prefs.disabledStoryThemes = emptySet()
                                 prefs.disabledStoryTopics = emptySet()
                                 onConfigurationChanged()
                                 Toast.makeText(context, "All themes and topics enabled", Toast.LENGTH_SHORT).show()
                             },
                             onDisableOthers = { themeToKeep ->
-                                val updatedThemes = StoryThemes.ALL_THEMES.filter { it != themeToKeep }.toMutableSet()
+                                val updatedThemes = StoryThemes.ALL_THEMES.filter { it != themeToKeep }.toSet()
                                 disabledThemes = updatedThemes
                                 prefs.disabledStoryThemes = updatedThemes
                                 onConfigurationChanged()

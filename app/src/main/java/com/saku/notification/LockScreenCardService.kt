@@ -30,39 +30,56 @@ class LockScreenCardService : Service() {
         super.onCreate()
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         createNotificationChannel(this)
+        try {
+            startForegroundCompat(buildPlaceholderNotification(this))
+        } catch (t: Throwable) {
+            t.printStackTrace()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_UPDATE -> {
-                updateNotification(this)
-            }
-            ACTION_STOP -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                } else {
-                    notificationManager.cancel(NOTIFICATION_ID)
+        try {
+            when (intent?.action) {
+                ACTION_STOP -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    } else {
+                        notificationManager.cancel(NOTIFICATION_ID)
+                    }
+                    stopSelf()
+                    return START_NOT_STICKY
                 }
-                stopSelf()
-                return START_NOT_STICKY
+                ACTION_UPDATE -> {
+                    updateNotification(this)
+                }
+                else -> {
+                    updateNotification(this)
+                }
             }
-            else -> {
-                startForegroundCompat()
-            }
+        } catch (t: Throwable) {
+            t.printStackTrace()
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
-    private fun startForegroundCompat() {
-        val notification = buildNotification(this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+    private fun startForegroundCompat(notification: Notification? = null) {
+        val notif = notification ?: try {
+            buildNotification(this)
+        } catch (t: Throwable) {
+            buildPlaceholderNotification(this)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notif,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, notif)
+            }
+        } catch (t: Throwable) {
+            t.printStackTrace()
         }
     }
 
@@ -109,8 +126,8 @@ class LockScreenCardService : Service() {
                 } else {
                     context.startService(intent)
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } catch (t: Throwable) {
+                t.printStackTrace()
             }
         }
 
@@ -122,8 +139,16 @@ class LockScreenCardService : Service() {
                 val notification = buildNotification(context)
                 val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 nm.notify(NOTIFICATION_ID, notification)
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } catch (t: Throwable) {
+                t.printStackTrace()
+                // Defensive fallback: if custom RemoteViews or large bitmaps caused TransactionTooLargeException or OutOfMemoryError, fallback to a lightweight text-only notification!
+                try {
+                    val fallback = buildFallbackNotification(context, "Tap to review flashcards")
+                    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    nm.notify(NOTIFICATION_ID, fallback)
+                } catch (inner: Throwable) {
+                    inner.printStackTrace()
+                }
             }
         }
 
@@ -305,7 +330,7 @@ class LockScreenCardService : Service() {
             val sentenceMeaning = card?.sentenceMeaning ?: ""
 
             val imageBitmap = if (!card?.imageFileName.isNullOrBlank()) {
-                ankiHelper.getCardImageBitmap(card!!.imageFileName, maxDimension = 260)
+                ankiHelper.getCardImageBitmap(card!!.imageFileName, maxDimension = 160)
             } else {
                 null
             }
@@ -563,6 +588,43 @@ class LockScreenCardService : Service() {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setContentIntent(mainPending)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setSilent(true)
+                .build()
+        }
+
+        fun buildPlaceholderNotification(context: Context): Notification {
+            createNotificationChannel(context)
+            return NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Saku")
+                .setContentText("Loading flashcard...")
+                .setOngoing(true)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setSilent(true)
+                .build()
+        }
+
+        fun buildFallbackNotification(context: Context, message: String): Notification {
+            createNotificationChannel(context)
+            val mainIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val mainPending = PendingIntent.getActivity(
+                context,
+                203,
+                mainIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            return NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Saku Flashcards")
+                .setContentText(message)
+                .setOngoing(true)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setContentIntent(mainPending)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setSilent(true)
                 .build()
         }

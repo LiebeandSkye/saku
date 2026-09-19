@@ -126,17 +126,18 @@ class GeminiStoryService {
             .post(requestBody)
             .build()
 
-        val response = client.newCall(request).execute()
-        val responseBody = response.body?.string() ?: ""
-
-        if (!response.isSuccessful) {
-            val errorMsg = try {
-                val errorJson = JSONObject(responseBody)
-                errorJson.optJSONObject("error")?.optString("message") ?: "HTTP ${response.code}: ${response.message}"
-            } catch (e: Exception) {
-                "HTTP ${response.code}: ${response.message}"
+        val responseBody = client.newCall(request).execute().use { response ->
+            val body = response.body?.string() ?: ""
+            if (!response.isSuccessful) {
+                val errorMsg = try {
+                    val errorJson = JSONObject(body)
+                    errorJson.optJSONObject("error")?.optString("message") ?: "HTTP ${response.code}: ${response.message}"
+                } catch (e: Exception) {
+                    "HTTP ${response.code}: ${response.message}"
+                }
+                throw IOException(errorMsg)
             }
-            throw IOException(errorMsg)
+            body
         }
 
         val responseJson = JSONObject(responseBody)

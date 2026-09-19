@@ -187,7 +187,8 @@ fun ReadingScreen(
         }
     }
 
-    var vocabSummary by remember { mutableStateOf<ReadingVocabularySummary?>(null) }
+    val selectedDeckIdsLongs = remember(prefs.selectedDeckIds) { prefs.getSelectedDeckIdsAsLongs() }
+    var vocabSummary by remember { mutableStateOf<ReadingVocabularySummary?>(ReadingVocabularyExtractor.getCachedSummary(selectedDeckIdsLongs)) }
     var isLoadingVocab by remember { mutableStateOf(false) }
     var isVocabExpanded by remember { mutableStateOf(false) }
     var vocabFilterMode by remember { mutableStateOf("all") } // "all", "studied", "suspended"
@@ -285,12 +286,18 @@ fun ReadingScreen(
     }
 
     // Load vocabulary stats when screen opens, permission is granted, or selected decks change
-    fun loadVocabulary() {
+    fun loadVocabulary(forceRefresh: Boolean = false) {
         if (!hasAnkiPermission) return
+        val deckIds = prefs.getSelectedDeckIdsAsLongs()
+        val cached = if (!forceRefresh) ReadingVocabularyExtractor.getCachedSummary(deckIds) else null
+        if (cached != null) {
+            vocabSummary = cached
+            isLoadingVocab = false
+            return
+        }
         coroutineScope.launch {
             isLoadingVocab = true
-            val deckIds = prefs.getSelectedDeckIdsAsLongs()
-            vocabSummary = vocabExtractor.extractVocabulary(deckIds)
+            vocabSummary = vocabExtractor.extractVocabulary(deckIds, forceRefresh = forceRefresh)
             isLoadingVocab = false
         }
     }

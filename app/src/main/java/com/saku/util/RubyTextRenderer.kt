@@ -29,11 +29,18 @@ object RubyTextRenderer {
     }
 
     private fun normalizeRubyString(input: String): String {
-        var text = input.replace(Regex("<ruby>([^<]+)<rt>([^<]+)</rt></ruby>"), "$1[$2]")
+        // Support standard HTML ruby, ruby with <rp> parentheses, <rb> base tags, attributes, and case-insensitivity
+        val rubyRegex = Regex(
+            "<ruby[^>]*>(?:<rb>)?([^<]+?)(?:</rb>)?(?:\\s*<rp>[^<]*</rp>)*\\s*<rt[^>]*>([^<]+?)</rt>(?:\\s*<rp>[^<]*</rp>)*\\s*</ruby>",
+            RegexOption.IGNORE_CASE
+        )
+        var text = input.replace(rubyRegex, "$1[$2]")
         text = text.replace("&nbsp;", " ")
             .replace("&amp;", "&")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
+            .replace("&#39;", "'")
+            .replace("&quot;", "\"")
             .replace(Regex("<[^>]*>"), "")
         return text.trim()
     }
@@ -67,11 +74,12 @@ object RubyTextRenderer {
                 break
             }
 
-            val ruby = normalized.substring(bracketOpen + 1, bracketClose).trim()
+            val rubyRaw = normalized.substring(bracketOpen + 1, bracketClose).trim()
             val beforeBracket = normalized.substring(cursor, bracketOpen)
 
             val lastSpaceIdx = beforeBracket.lastIndexOf(' ')
             val baseStart: Int
+            var adjustedRuby = rubyRaw
             if (lastSpaceIdx != -1) {
                 val plainPart = beforeBracket.substring(0, lastSpaceIdx)
                 addPlainTokens(tokens, plainPart)
@@ -84,11 +92,24 @@ object RubyTextRenderer {
                 val plainPart = beforeBracket.substring(0, kIdx + 1)
                 addPlainTokens(tokens, plainPart)
                 baseStart = kIdx + 1
+
+                // If plainPart ends with kana that matches the start of ruby (e.g. お茶[おちゃ] without a space),
+                // strip the duplicate kana from ruby so it is not duplicated in rendering
+                if (plainPart.isNotEmpty()) {
+                    var pIdx = 0
+                    while (pIdx < plainPart.length && !isKanji(plainPart[plainPart.length - 1 - pIdx])) {
+                        pIdx++
+                    }
+                    val trailingKana = plainPart.takeLast(pIdx)
+                    if (trailingKana.isNotEmpty() && adjustedRuby.startsWith(trailingKana)) {
+                        adjustedRuby = adjustedRuby.substring(trailingKana.length)
+                    }
+                }
             }
 
             val base = beforeBracket.substring(baseStart).trim()
-            if (base.isNotEmpty() && ruby.isNotEmpty()) {
-                tokens.add(RubyToken(base = base, ruby = ruby, isTarget = false))
+            if (base.isNotEmpty() && adjustedRuby.isNotEmpty()) {
+                tokens.add(RubyToken(base = base, ruby = adjustedRuby, isTarget = false))
             } else if (base.isNotEmpty()) {
                 addPlainTokens(tokens, base)
             }
@@ -133,24 +154,84 @@ object RubyTextRenderer {
         if (cleanVocab == cleanFuri) return cleanVocab
         if (cleanVocab.all { !isKanji(it) }) return cleanVocab
 
+        // Strip common prefix kana (e.g. お茶 / おちゃ -> prefix "お", ご飯 / ごはん -> prefix "ご")
+        var commonPrefixLen = 0
+        while (commonPrefixLen < cleanVocab.length &&
+            commonPrefixLen < cleanFuri.length &&
+            cleanVocab[commonPrefixLen] == cleanFuri[commonPrefixLen]
+        ) {
+            commonPrefixLen++
+        }
+
+        val vocabAfterPrefix = cleanVocab.substring(commonPrefixLen)
+        val furiAfterPrefix = cleanFuri.substring(commonPrefixLen)
+
+        // Strip common suffix kana (e.g. 食べる / たべる -> suffix "る", 思い出す / おもいだす -> suffix "す")
         var commonSuffixLen = 0
-        while (commonSuffixLen < cleanVocab.length &&
-            commonSuffixLen < cleanFuri.length &&
-            cleanVocab[cleanVocab.length - 1 - commonSuffixLen] == cleanFuri[cleanFuri.length - 1 - commonSuffixLen]
+        while (commonSuffixLen < vocabAfterPrefix.length &&
+            commonSuffixLen < furiAfterPrefix.length &&
+            vocabAfterPrefix[vocabAfterPrefix.length - 1 - commonSuffixLen] == furiAfterPrefix[furiAfterPrefix.length - 1 - commonSuffixLen]
         ) {
             commonSuffixLen++
         }
 
-        if (commonSuffixLen > 0) {
-            val kanjiPart = cleanVocab.substring(0, cleanVocab.length - commonSuffixLen)
-            val kanaPart = cleanFuri.substring(0, cleanFuri.length - commonSuffixLen)
-            val suffix = cleanVocab.substring(cleanVocab.length - commonSuffixLen)
-            if (kanjiPart.isNotEmpty() && kanaPart.isNotEmpty()) {
-                return "$kanjiPart[$kanaPart]$suffix"
+        val prefix = cleanVocab.substring(0, commonPrefixLen)
+        val kanjiPart = vocabAfterPrefix.substring(0, vocabAfterPrefix.length - commonSuffixLen)
+        val kanaPart = furiAfterPrefix.substring(0, furiAfterPrefix.length - commonSuffixLen)
+        val suffix = vocabAfterPrefix.substring(vocabAfterPrefix.length - commonSuffixLen)
+
+        // Check if there is internal okurigana splitting (e.g. 思い出 / おもいだ -> 思[おも]い 出[だ])
+        if (kanjiPart.isNotEmpty() && kanaPart.isNotEmpty()) {
+            val internalKanaIdx = kanjiPart.indexOfFirst { !isKanji(it) }
+            if (internalKanaIdx != -1) {
+                val midKanaChar = kanjiPart[internalKanaIdx]
+                val midKanaInReading = kanaPart.indexOf(midKanaChar)
+                if (midKanaInReading != -1) {
+                    val kPart1 = kanjiPart.substring(0, internalKanaIdx)
+                    val rPart1 = kanaPart.substring(0, midKanaInReading)
+                    val kPart2 = kanjiPart.substring(internalKanaIdx + 1)
+                    val rPart2 = kanaPart.substring(midKanaInReading + 1)
+                    if (kPart1.isNotEmpty() && rPart1.isNotEmpty() && kPart2.isNotEmpty() && rPart2.isNotEmpty()) {
+                        val prefixPart = if (prefix.isNotEmpty()) "$prefix " else ""
+                        return "$prefixPart$kPart1[$rPart1]$midKanaChar $kPart2[$rPart2]$suffix"
+                    }
+                }
             }
+            val prefixPart = if (prefix.isNotEmpty()) "$prefix " else ""
+            return "$prefixPart$kanjiPart[$kanaPart]$suffix"
         }
 
         return "$cleanVocab[$cleanFuri]"
+    }
+
+    private fun splitPlainBase(text: String): List<String> {
+        if (text.isEmpty()) return emptyList()
+        val units = mutableListOf<String>()
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            if (Character.isWhitespace(c)) {
+                i++
+            } else if (c.code in 0x3000..0x9FFF || c.code in 0xFF00..0xFFEF || Character.isSurrogate(c)) {
+                if (Character.isHighSurrogate(c) && i + 1 < text.length && Character.isLowSurrogate(text[i + 1])) {
+                    units.add(text.substring(i, i + 2))
+                    i += 2
+                } else {
+                    units.add(c.toString())
+                    i++
+                }
+            } else {
+                val start = i
+                while (i < text.length && !Character.isWhitespace(text[i]) &&
+                    !(text[i].code in 0x3000..0x9FFF || text[i].code in 0xFF00..0xFFEF) &&
+                    !Character.isSurrogate(text[i])
+                ) {
+                    i++
+                }
+                units.add(text.substring(start, i))
+            }
+        }
+        return units
     }
 
     fun renderRubyBitmapPx(
@@ -205,7 +286,19 @@ object RubyTextRenderer {
         val lineSpacing = 5f
         val totalLineHeight = effectiveRubyHeight + rubyBaseGap + baseHeight + lineSpacing
 
-        val measuredTokens = tokens.map { token ->
+        val layoutTokens = mutableListOf<RubyToken>()
+        for (token in tokens) {
+            if (token.ruby.isNullOrBlank()) {
+                val units = splitPlainBase(token.base)
+                for (unit in units) {
+                    layoutTokens.add(RubyToken(base = unit, ruby = null, isTarget = token.isTarget))
+                }
+            } else {
+                layoutTokens.add(token)
+            }
+        }
+
+        val measuredTokens = layoutTokens.map { token ->
             val bPaint = if (token.isTarget) targetBasePaint else basePaint
             val rPaint = if (token.isTarget) targetRubyPaint else rubyPaint
             val wBase = bPaint.measureText(token.base)
@@ -217,7 +310,12 @@ object RubyTextRenderer {
         val effectiveMaxWidth = if (maxWidthPx > 0) {
             maxWidthPx
         } else {
-            (context.resources.displayMetrics.widthPixels * 0.85f).toInt()
+            val screenW = try {
+                context.resources.displayMetrics.widthPixels
+            } catch (t: Throwable) {
+                1080
+            }
+            min((screenW * 0.85f).toInt(), 600)
         }
 
         val lines = mutableListOf<MutableList<MeasuredToken>>()
@@ -227,8 +325,29 @@ object RubyTextRenderer {
         for (mToken in measuredTokens) {
             if (currentLineWidth + mToken.totalWidth > effectiveMaxWidth && currentLine.isNotEmpty()) {
                 lines.add(currentLine)
-                currentLine = mutableListOf(mToken)
-                currentLineWidth = mToken.totalWidth
+                currentLine = mutableListOf()
+                currentLineWidth = 0f
+            }
+            if (mToken.totalWidth > effectiveMaxWidth && mToken.token.ruby.isNullOrBlank() && mToken.token.base.length > 1) {
+                for (char in mToken.token.base) {
+                    val charStr = char.toString()
+                    val bPaint = if (mToken.token.isTarget) targetBasePaint else basePaint
+                    val wBase = bPaint.measureText(charStr)
+                    val charMToken = MeasuredToken(
+                        RubyToken(base = charStr, ruby = null, isTarget = mToken.token.isTarget),
+                        wBase = wBase,
+                        wRuby = 0f,
+                        totalWidth = wBase
+                    )
+                    if (currentLineWidth + charMToken.totalWidth > effectiveMaxWidth && currentLine.isNotEmpty()) {
+                        lines.add(currentLine)
+                        currentLine = mutableListOf(charMToken)
+                        currentLineWidth = charMToken.totalWidth
+                    } else {
+                        currentLine.add(charMToken)
+                        currentLineWidth += charMToken.totalWidth
+                    }
+                }
             } else {
                 currentLine.add(mToken)
                 currentLineWidth += mToken.totalWidth
@@ -243,13 +362,19 @@ object RubyTextRenderer {
         } ?: 0f
 
         val bitmapWidth = max(1, min(effectiveMaxWidth, maxLineWidth.toInt() + 16))
-        val bitmapHeight = max(1, (lines.size * totalLineHeight).toInt())
+        val rawHeight = (lines.size * totalLineHeight).toInt()
+        val bitmapHeight = max(1, min(rawHeight, 400))
 
-        val bitmap = Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        val bitmap = try {
+            Bitmap.createBitmap(bitmapWidth, bitmapHeight, Bitmap.Config.ARGB_8888)
+        } catch (t: Throwable) {
+            return null
+        }
         val canvas = Canvas(bitmap)
 
         var currentY = 0f
         for (line in lines) {
+            if (currentY + totalLineHeight > bitmapHeight + 10f) break
             val lineWidth = line.sumOf { it.totalWidth.toDouble() }.toFloat()
             var currentX = if (isCentered) {
                 max(0f, (bitmapWidth - lineWidth) / 2f)

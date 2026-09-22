@@ -1,5 +1,6 @@
 package com.saku.speak
 
+import android.util.Base64
 import com.saku.data.PreferencesManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -9,6 +10,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -142,6 +144,102 @@ class GeminiConversationService {
 
                 if (cleanText.isBlank()) {
                     Result.failure(IOException("Empty response text from Gemini"))
+                } else {
+                    Result.success(cleanText)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun transcribeAudioFile(
+        apiKey: String,
+        audioFile: File,
+        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL
+    ): Result<String> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Gemini API key is required. Please set it in Speak -> Setup Key."))
+        }
+        if (!audioFile.exists() || audioFile.length() < 256L) {
+            return@withContext Result.failure(IOException("No speech detected"))
+        }
+
+        val cleanModel = preferredModel.ifBlank { PreferencesManager.DEFAULT_GEMINI_MODEL }
+        val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=${apiKey.trim()}"
+
+        val audioBytes = try {
+            audioFile.readBytes()
+        } catch (e: Exception) {
+            return@withContext Result.failure(IOException("Failed to read recorded audio"))
+        }
+        val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
+
+        val contentsArray = JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "user")
+                put("parts", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("inline_data", JSONObject().apply {
+                            put("mime_type", "audio/mp4")
+                            put("data", base64Audio)
+                        })
+                    })
+                    put(JSONObject().apply {
+                        put(
+                            "text",
+                            "Listen to this spoken audio and transcribe it into natural Japanese text (kanji and kana). " +
+                                "If the user spoke English or another language, translate what they said into natural conversational Japanese. " +
+                                "Output ONLY the Japanese text with no quotes, no romaji, and no explanation. " +
+                                "If the audio contains only silence or background noise with no speech, output the exact word SILENCE."
+                        )
+                    })
+                })
+            })
+        }
+
+        val generationConfig = JSONObject().apply {
+            put("temperature", 0.1)
+            put("maxOutputTokens", 100)
+        }
+
+        val requestBodyJson = JSONObject().apply {
+            put("contents", contentsArray)
+            put("generationConfig", generationConfig)
+        }
+
+        val requestBody = requestBodyJson.toString().toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url(endpoint)
+            .post(requestBody)
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    val errorMsg = parseErrorMessage(bodyStr, response.code)
+                    return@withContext Result.failure(IOException(errorMsg))
+                }
+
+                val json = JSONObject(bodyStr)
+                val candidates = json.optJSONArray("candidates")
+                if (candidates == null || candidates.length() == 0) {
+                    return@withContext Result.failure(IOException("No speech detected"))
+                }
+
+                val firstCandidate = candidates.getJSONObject(0)
+                val content = firstCandidate.optJSONObject("content")
+                val parts = content?.optJSONArray("parts")
+                val rawText = parts?.optJSONObject(0)?.optString("text", "") ?: ""
+
+                val cleanText = rawText
+                    .replace(Regex("[\r\n]+"), " ")
+                    .replace(Regex("[*#_`\"「」『』]+"), "")
+                    .trim()
+
+                if (cleanText.isBlank() || cleanText.equals("SILENCE", ignoreCase = true)) {
+                    Result.failure(IOException("No speech detected"))
                 } else {
                     Result.success(cleanText)
                 }

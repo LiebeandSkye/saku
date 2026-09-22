@@ -129,6 +129,7 @@ import com.saku.speak.SpeakConversationManager
 import com.saku.speak.SpeechRecognizerHelper
 import com.saku.util.JapaneseTtsHelper
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -260,13 +261,24 @@ fun SpeakScreen(
         }
     }
 
-    // Forward reference for speech handler
+    // Forward references for speech and hardware audio handlers
     var handleFinalSpeechRef by remember { mutableStateOf<((String) -> Unit)?>(null) }
+    var handleRecordedAudioRef by remember { mutableStateOf<((File) -> Unit)?>(null) }
 
-    // SpeechRecognizer helper
+    // Runtime microphone permission state
+    var hasAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    // SpeechRecognizer helper initialized with Activity context and hardware MediaRecorder fallback
     val speechHelper = remember {
         SpeechRecognizerHelper(
-            context = context.applicationContext,
+            context = context,
             onPartialResult = { partial ->
                 liveTranscript = partial
             },
@@ -291,12 +303,10 @@ fun SpeakScreen(
                     !errorMsg.contains("timeout", ignoreCase = true)
                 ) {
                     Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
-                    if (errorMsg.contains("unavailable", ignoreCase = true) ||
-                        errorMsg.contains("engine", ignoreCase = true)
-                    ) {
-                        isKeyboardMode = true
-                    }
                 }
+            },
+            onAudioRecorded = { audioFile ->
+                handleRecordedAudioRef?.invoke(audioFile)
             }
         )
     }
@@ -401,6 +411,42 @@ fun SpeakScreen(
     }
     handleFinalSpeechRef = handleFinalSpeech
 
+    // Process hardware-recorded audio via Gemini multimodal transcription when system SpeechRecognizer is unavailable
+    val handleRecordedAudio: (File) -> Unit = { recordedFile ->
+        if (!isThinking) {
+            val apiKey = geminiApiKey
+            if (apiKey.isBlank()) {
+                liveTranscript = ""
+                showApiKeyDialog = true
+                Toast.makeText(context, "Please set your Gemini API key first to talk", Toast.LENGTH_SHORT).show()
+            } else {
+                liveTranscript = "音声を認識中..."
+                isThinking = true
+                coroutineScope.launch {
+                    val transcriptionResult = geminiService.transcribeAudioFile(
+                        apiKey = apiKey,
+                        audioFile = recordedFile,
+                        preferredModel = currentModel
+                    )
+                    isThinking = false
+                    liveTranscript = ""
+                    transcriptionResult.fold(
+                        onSuccess = { transcribedText ->
+                            handleFinalSpeech(transcribedText)
+                        },
+                        onFailure = { err ->
+                            val msg = err.localizedMessage ?: ""
+                            if (!msg.contains("No speech detected", ignoreCase = true)) {
+                                Toast.makeText(context, msg.ifBlank { "Could not recognize speech" }, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+    handleRecordedAudioRef = handleRecordedAudio
+
     // Pause/cancel recording and audio playback whenever the user navigates away from Speak tab
     LaunchedEffect(isActive) {
         if (!isActive) {
@@ -418,7 +464,12 @@ fun SpeakScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasAudioPermission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.RECORD_AUDIO
+                ) == PackageManager.PERMISSION_GRANTED
+            } else if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
                 speechHelper.cancel()
                 fishAudioService.stopAudio()
                 systemTtsHelper.stop()
@@ -434,16 +485,6 @@ fun SpeakScreen(
             fishAudioService.stopAudio()
             systemTtsHelper.shutdown()
         }
-    }
-
-    // Runtime microphone permission launcher
-    var hasAudioPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
-        )
     }
 
     // State trigger to safely invoke permissionLauncher from composition lifecycle instead of pointerInput

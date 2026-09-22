@@ -301,7 +301,9 @@ class PreferencesManager(
 
     var lastCrashTrace: String?
         get() = prefs.getString(KEY_LAST_CRASH_TRACE, null)?.takeIf { it.isNotBlank() }
-        set(value) = prefs.edit().putString(KEY_LAST_CRASH_TRACE, value).apply()
+        set(value) {
+            prefs.edit().putString(KEY_LAST_CRASH_TRACE, value).commit()
+        }
 }
 
 data class GeminiModelOption(

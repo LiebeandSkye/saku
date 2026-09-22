@@ -394,12 +394,39 @@ class MainActivity : ComponentActivity() {
 
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            try {
-                val sw = StringWriter()
-                val pw = PrintWriter(sw)
-                throwable.printStackTrace(pw)
-                val stackTrace = sw.toString()
+            val sw = StringWriter()
+            val pw = PrintWriter(sw)
+            throwable.printStackTrace(pw)
+            val stackTrace = sw.toString()
 
+            val isSpeechRelated = stackTrace.contains("android.speech", ignoreCase = true) ||
+                stackTrace.contains("com.saku.speak", ignoreCase = true) ||
+                stackTrace.contains("RecognitionService", ignoreCase = true)
+
+            if (isSpeechRelated && thread == android.os.Looper.getMainLooper().thread) {
+                Log.e("SakuCrash", "Recovered from main-thread SpeechRecognizer exception without exiting app", throwable)
+                while (true) {
+                    try {
+                        android.os.Looper.loop()
+                    } catch (nextThrowable: Throwable) {
+                        val nextSw = StringWriter()
+                        nextThrowable.printStackTrace(PrintWriter(nextSw))
+                        val nextTrace = nextSw.toString()
+                        if (nextTrace.contains("android.speech", ignoreCase = true) ||
+                            nextTrace.contains("com.saku.speak", ignoreCase = true) ||
+                            nextTrace.contains("RecognitionService", ignoreCase = true)
+                        ) {
+                            Log.e("SakuCrash", "Recovered from subsequent speech exception", nextThrowable)
+                            continue
+                        }
+                        defaultHandler?.uncaughtException(thread, nextThrowable)
+                        break
+                    }
+                }
+                return@setDefaultUncaughtExceptionHandler
+            }
+
+            try {
                 Log.e("SakuCrash", "FATAL UNCAUGHT EXCEPTION on thread [${thread.name}]", throwable)
 
                 val crashReport = "Time: ${Date()}\nThread: ${thread.name}\nException: ${throwable.javaClass.name}: ${throwable.message}\n\nStack Trace:\n$stackTrace"

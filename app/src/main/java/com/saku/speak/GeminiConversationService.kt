@@ -35,7 +35,8 @@ class GeminiConversationService {
     suspend fun sendConversationTurn(
         apiKey: String,
         messages: List<ChatMessage>,
-        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL
+        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL,
+        customSystemInstruction: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
             return@withContext Result.failure(IllegalArgumentException("Gemini API key is required. Please set it in Cards -> Settings."))
@@ -45,35 +46,43 @@ class GeminiConversationService {
 
         val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=${apiKey.trim()}"
 
-        // System prompt: natural, grounded, everyday conversational Japanese with few-shot examples.
-        // Avoid theatrical tropes, exaggerated prolonged vowels (〜), and multiple exclamation marks.
-        // Keep responses very short and snappy (15 to 35 characters, 1 short sentence) so audio generation is fast.
+        val hasCustomPrompt = !customSystemInstruction.isNullOrBlank()
+        val systemPromptText = if (hasCustomPrompt) {
+            customSystemInstruction!!.trim() + "\n\n" +
+                "Voice Output Note: Your response will be spoken aloud directly to the user via text-to-speech. " +
+                "Respond naturally in the exact persona, style, tone, language, and length specified by the system instruction above, " +
+                "and output plain spoken text without markdown symbols (*, #, _)."
+        } else {
+            // Default system prompt: natural, grounded, everyday conversational Japanese with few-shot examples.
+            "You are a friendly Japanese conversational partner named Saku.\n\n" +
+                "Role & Persona:\n" +
+                "- Speak in natural, everyday conversational Japanese (standard polite-casual blend: です・ます with warm conversational flow).\n" +
+                "- Sound like a real, helpful Japanese friend in daily life—not exaggerated, not theatrical, not an anime caricature.\n" +
+                "- Use natural conversational interjections (相槌: 「そうなんですね！」「それは楽しみですね」「分かります」).\n\n" +
+                "Constraints:\n" +
+                "- Strictly 1 short, brisk sentence (15 to 35 characters). Fast responses ensure seamless real-time voice synthesis.\n" +
+                "- Never use drawn-out punctuation like 『〜』, multiple exclamation marks 『！！』, or excessive ellipses 『…』.\n" +
+                "- Never output markdown, bullet points, romaji, kanji furigana brackets, or translations.\n\n" +
+                "Few-Shot Examples:\n" +
+                "User: 今日は仕事がとても忙しかったです。\n" +
+                "Saku: お疲れ様でした！今夜はゆっくり休んでくださいね。\n\n" +
+                "User: 明日は友達と京都へ行きます。\n" +
+                "Saku: いいですね！美味しいものをたくさん食べてきてください。\n\n" +
+                "User: 日本語の勉強を始めたばかりです。\n" +
+                "Saku: 素晴らしいですね！一緒に楽しく練習していきましょう。"
+        }
+
         val systemInstruction = JSONObject().apply {
             put("parts", JSONArray().apply {
                 put(JSONObject().apply {
-                    put("text", "You are a friendly Japanese conversational partner named Saku.\n\n" +
-                            "Role & Persona:\n" +
-                            "- Speak in natural, everyday conversational Japanese (standard polite-casual blend: です・ます with warm conversational flow).\n" +
-                            "- Sound like a real, helpful Japanese friend in daily life—not exaggerated, not theatrical, not an anime caricature.\n" +
-                            "- Use natural conversational interjections (相槌: 「そうなんですね！」「それは楽しみですね」「分かります」).\n\n" +
-                            "Constraints:\n" +
-                            "- Strictly 1 short, brisk sentence (15 to 35 characters). Fast responses ensure seamless real-time voice synthesis.\n" +
-                            "- Never use drawn-out punctuation like 『〜』, multiple exclamation marks 『！！』, or excessive ellipses 『…』.\n" +
-                            "- Never output markdown, bullet points, romaji, kanji furigana brackets, or translations.\n\n" +
-                            "Few-Shot Examples:\n" +
-                            "User: 今日は仕事がとても忙しかったです。\n" +
-                            "Saku: お疲れ様でした！今夜はゆっくり休んでくださいね。\n\n" +
-                            "User: 明日は友達と京都へ行きます。\n" +
-                            "Saku: いいですね！美味しいものをたくさん食べてきてください。\n\n" +
-                            "User: 日本語の勉強を始めたばかりです。\n" +
-                            "Saku: 素晴らしいですね！一緒に楽しく練習していきましょう。")
+                    put("text", systemPromptText)
                 })
             })
         }
 
-        // Convert the last 10 messages into Gemini's multi-turn contents format.
+        // Convert the last 14 messages into Gemini's multi-turn contents format.
         // Gemini strictly requires the first turn to be from "user" and turns to alternate.
-        val recentMessages = messages.takeLast(10).dropWhile { !it.isUser }
+        val recentMessages = messages.takeLast(14).dropWhile { !it.isUser }
         if (recentMessages.isEmpty()) {
             return@withContext Result.failure(IllegalArgumentException("No user message to send"))
         }
@@ -102,8 +111,8 @@ class GeminiConversationService {
         }
 
         val generationConfig = JSONObject().apply {
-            put("temperature", 0.7)
-            put("maxOutputTokens", 65)
+            put("temperature", if (hasCustomPrompt) 0.8 else 0.7)
+            put("maxOutputTokens", if (hasCustomPrompt) 1024 else 65)
         }
 
         val requestBodyJson = JSONObject().apply {

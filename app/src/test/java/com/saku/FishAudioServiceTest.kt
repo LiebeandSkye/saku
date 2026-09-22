@@ -101,4 +101,22 @@ class FishAudioServiceTest {
         prefsManager.fishAudioModel = "s2.1-pro"
         assertEquals("s2.1-pro", prefsManager.fishAudioModel)
     }
+
+    @Test
+    fun testSegmentStoryIntoPhrasesPreservesTextAndMonotonicFractions() {
+        val sampleStory = "日曜日の朝、私は近くの静かなカフェに行って、温かいコーヒーを飲みました。\nそして、友達と一緒に新しい本を読みました。"
+        val phrases = com.saku.ui.segmentStoryIntoPhrases(sampleStory)
+
+        assertTrue("Expected multiple phrases", phrases.size >= 3)
+        assertEquals(sampleStory, phrases.joinToString("") { it.text })
+        assertEquals(0f, phrases.first().startFraction, 0.0001f)
+        assertEquals(1f, phrases.last().endFraction, 0.0001f)
+
+        for (i in phrases.indices) {
+            assertTrue(phrases[i].startFraction < phrases[i].endFraction)
+            if (i > 0) {
+                assertEquals(phrases[i - 1].endFraction, phrases[i].startFraction, 0.0001f)
+            }
+        }
+    }
 }

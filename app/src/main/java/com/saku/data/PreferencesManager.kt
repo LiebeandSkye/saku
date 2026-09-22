@@ -132,6 +132,10 @@ class PreferencesManager(
         get() = prefs.getBoolean(KEY_SHOOTING_STARS_ENABLED, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOOTING_STARS_ENABLED, value).apply()
 
+    var speakSystemInstruction: String?
+        get() = prefs.getString(KEY_SPEAK_SYSTEM_INSTRUCTION, null)?.takeIf { it.isNotBlank() }
+        set(value) = prefs.edit().putString(KEY_SPEAK_SYSTEM_INSTRUCTION, value?.trim()).apply()
+
     val isSnoozed: Boolean
         get() = System.currentTimeMillis() < snoozeUntil
 
@@ -246,6 +250,7 @@ class PreferencesManager(
         private const val KEY_CUSTOM_STORY_TOPIC = "custom_story_topic"
         private const val KEY_CUSTOM_THEME_MODE_ACTIVE = "custom_theme_mode_active"
         private const val KEY_LAST_CRASH_TRACE = "last_crash_trace"
+        private const val KEY_SPEAK_SYSTEM_INSTRUCTION = "speak_system_instruction"
     }
 
     var recentJishoSearches: List<String>

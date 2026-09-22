@@ -136,6 +136,9 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -1281,7 +1284,7 @@ fun ReadingScreen(
                                         currentlyPlayingStoryId = story.id
 
                                         coroutineScope.launch {
-                                            val narrationText = "${story.title}。\n\n${story.content}"
+                                            val narrationText = story.content
                                             val result = audioService.synthesizeStoryAudio(
                                                 apiKey = fishAudioApiKey,
                                                 voiceId = fishAudioVoiceId,
@@ -1355,6 +1358,74 @@ fun ReadingScreen(
                         }
                     }
 
+                    val isCurrentStoryPlaying = isNarrating && currentlyPlayingStoryId == story.id
+                    val storyPhrases = remember(story.content) {
+                        segmentStoryIntoPhrases(story.content)
+                    }
+                    val phraseWeights = remember(story.id, storyPhrases.size) {
+                        FloatArray(storyPhrases.size)
+                    }
+                    var narrationBlend by remember(story.id) { mutableFloatStateOf(0f) }
+                    var narrationAnimTick by remember(story.id) { mutableIntStateOf(0) }
+
+                    LaunchedEffect(isCurrentStoryPlaying, story.id, storyPhrases) {
+                        if (isCurrentStoryPlaying && storyPhrases.isNotEmpty()) {
+                            phraseWeights.fill(0f)
+                            phraseWeights[0] = 1f
+                            var lastNanos = 0L
+                            while (isActive && isCurrentStoryPlaying) {
+                                withFrameNanos { now ->
+                                    val dt = if (lastNanos == 0L) 0.016f else ((now - lastNanos) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
+                                    lastNanos = now
+
+                                    narrationBlend = (narrationBlend + dt * 4.5f).coerceAtMost(1f)
+
+                                    val posMs = audioService.getCurrentPosition()
+                                    val durMs = audioService.getDuration()
+                                    val activeIdx = if (durMs > 0) {
+                                        val effectivePos = (posMs - 50).coerceAtLeast(0).toFloat()
+                                        val effectiveDur = (durMs - 160).coerceAtLeast(1).toFloat()
+                                        val frac = (effectivePos / effectiveDur).coerceIn(0f, 0.9999f)
+                                        val found = storyPhrases.indexOfFirst { frac >= it.startFraction && frac < it.endFraction }
+                                        if (found != -1) found else storyPhrases.lastIndex
+                                    } else {
+                                        0
+                                    }
+
+                                    for (i in phraseWeights.indices) {
+                                        val target = if (i == activeIdx) 1f else 0f
+                                        val cur = phraseWeights[i]
+                                        phraseWeights[i] = if (cur < target) {
+                                            (cur + dt * 4.5f).coerceAtMost(target)
+                                        } else if (cur > target) {
+                                            (cur - dt * 4.5f).coerceAtLeast(target)
+                                        } else {
+                                            cur
+                                        }
+                                    }
+                                    narrationAnimTick++
+                                }
+                            }
+                        } else if (narrationBlend > 0f) {
+                            var lastNanos = 0L
+                            while (isActive && narrationBlend > 0.001f) {
+                                withFrameNanos { now ->
+                                    val dt = if (lastNanos == 0L) 0.016f else ((now - lastNanos) / 1_000_000_000f).coerceIn(0.001f, 0.05f)
+                                    lastNanos = now
+
+                                    narrationBlend = (narrationBlend - dt * 5.0f).coerceAtLeast(0f)
+                                    for (i in phraseWeights.indices) {
+                                        phraseWeights[i] = (phraseWeights[i] - dt * 5.0f).coerceAtLeast(0f)
+                                    }
+                                    narrationAnimTick++
+                                }
+                            }
+                            narrationBlend = 0f
+                            phraseWeights.fill(0f)
+                            narrationAnimTick++
+                        }
+                    }
+
                     CustomSelectionContainer(
                         onTranslate = { selectedText ->
                             translateTargetText = selectedText
@@ -1365,7 +1436,7 @@ fun ReadingScreen(
                             Column {
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Story Title in Japanese
+                                // Story Title in Japanese (unaffected by narration grey-out)
                                 Text(
                                     text = story.title,
                                     fontSize = 22.sp,
@@ -1376,8 +1447,30 @@ fun ReadingScreen(
 
                                 Spacer(modifier = Modifier.height(16.dp))
 
-                                // Pure Japanese Story Content with In-Text Highlights
-                                if (highlightWords && vocabSummary != null && vocabSummary!!.words.isNotEmpty()) {
+                                // Pure Japanese Story Content with Smooth Phrase Narration Highlight or Vocabulary Highlights
+                                if (narrationBlend > 0.001f && storyPhrases.isNotEmpty()) {
+                                    val narratedAnnotatedContent = remember(
+                                        story.content,
+                                        storyPhrases,
+                                        readingTheme,
+                                        narrationAnimTick
+                                    ) {
+                                        buildNarratedStoryText(
+                                            content = story.content,
+                                            phrases = storyPhrases,
+                                            phraseWeights = phraseWeights,
+                                            narrationBlend = narrationBlend,
+                                            readingTheme = readingTheme
+                                        )
+                                    }
+                                    Text(
+                                        text = narratedAnnotatedContent,
+                                        fontSize = 17.sp,
+                                        color = readingTheme.textPrimaryColor,
+                                        lineHeight = 34.sp,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                } else if (highlightWords && vocabSummary != null && vocabSummary!!.words.isNotEmpty()) {
                                     val annotatedContent = remember(story.content, vocabSummary?.words, highlightWords, readingTheme) {
                                         buildHighlightedStoryText(
                                             content = story.content,
@@ -2133,6 +2226,187 @@ fun ReadingScreen(
                 customStoryTopic = prefs.customStoryTopic
             }
         )
+    }
+}
+
+data class StoryPhrase(
+    val startIndex: Int,
+    val endIndex: Int,
+    val text: String,
+    val startFraction: Float,
+    val endFraction: Float
+)
+
+/**
+ * Splits a Japanese story body into natural spoken phrases/clauses and computes normalized
+ * acoustic time intervals [startFraction, endFraction] for each phrase.
+ */
+internal fun segmentStoryIntoPhrases(content: String): List<StoryPhrase> {
+    if (content.isEmpty()) return emptyList()
+
+    val hardDelimiters = setOf('。', '！', '？', '!', '?', '\n')
+    val softDelimiters = setOf('、', '，', ',', '…', '・')
+    val closingBrackets = setOf('」', '』', '）', ')', '】', '”', '"')
+    val splitParticles = setOf('は', 'が', 'を', 'に', 'で', 'と', 'も', 'へ', 'て')
+
+    fun isKanjiOrKatakanaOrQuote(c: Char): Boolean {
+        return (c in '\u4E00'..'\u9FFF') || (c in '\u30A0'..'\u30FF') || c == '「' || c == '『'
+    }
+
+    fun countSpokenChars(s: String): Int {
+        return s.count { c ->
+            !c.isWhitespace() && c !in hardDelimiters && c !in softDelimiters && c !in closingBrackets && c != '「' && c != '『'
+        }
+    }
+
+    val rawRanges = mutableListOf<IntRange>()
+    var chunkStart = 0
+    var i = 0
+    val len = content.length
+
+    while (i < len) {
+        val c = content[i]
+        val isHard = c in hardDelimiters
+        val isSoft = c in softDelimiters
+
+        var shouldSplit = false
+        var splitEnd = i + 1
+
+        if (isHard || isSoft) {
+            while (splitEnd < len && (content[splitEnd] in closingBrackets || content[splitEnd] in hardDelimiters || content[splitEnd] in softDelimiters)) {
+                splitEnd++
+            }
+            val currentSpoken = countSpokenChars(content.substring(chunkStart, splitEnd))
+            if (isHard) {
+                if (currentSpoken > 0) {
+                    shouldSplit = true
+                }
+            } else {
+                // Soft delimiter: avoid splitting tiny 1-3 char prefixes unless near end
+                if (currentSpoken >= 4) {
+                    shouldSplit = true
+                }
+            }
+        } else if (c in splitParticles && i + 1 < len && isKanjiOrKatakanaOrQuote(content[i + 1])) {
+            val currentSpoken = countSpokenChars(content.substring(chunkStart, i + 1))
+            if (currentSpoken >= 11) {
+                // Check distance to next punctuation delimiter
+                var nextDelimIdx = i + 1
+                while (nextDelimIdx < len && content[nextDelimIdx] !in hardDelimiters && content[nextDelimIdx] !in softDelimiters) {
+                    nextDelimIdx++
+                }
+                val remainingToPunct = countSpokenChars(content.substring(i + 1, nextDelimIdx))
+                if (remainingToPunct >= 6) {
+                    shouldSplit = true
+                    splitEnd = i + 1
+                }
+            }
+        }
+
+        if (shouldSplit) {
+            rawRanges.add(chunkStart until splitEnd)
+            chunkStart = splitEnd
+            i = splitEnd
+        } else {
+            i++
+        }
+    }
+
+    if (chunkStart < len) {
+        val trailing = content.substring(chunkStart, len)
+        if (countSpokenChars(trailing) > 0 || rawRanges.isEmpty()) {
+            rawRanges.add(chunkStart until len)
+        } else if (rawRanges.isNotEmpty()) {
+            val last = rawRanges.removeAt(rawRanges.lastIndex)
+            rawRanges.add(last.first until len)
+        }
+    }
+
+    val smallKana = setOf('ゃ', 'ゅ', 'ょ', 'っ', 'ャ', 'ュ', 'ョ', 'ッ', 'ぁ', 'ぃ', 'ぅ', 'ぇ', 'ぉ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ')
+    val weights = FloatArray(rawRanges.size)
+    var totalWeight = 0f
+
+    for (idx in rawRanges.indices) {
+        val range = rawRanges[idx]
+        val text = content.substring(range.first, range.last + 1)
+        var w = 0f
+        for (ch in text) {
+            w += when {
+                ch in '\u4E00'..'\u9FFF' -> 1.8f
+                ch in smallKana -> 0.6f
+                ch in '\u3040'..'\u30FF' -> 1.0f
+                ch.isLetterOrDigit() -> 1.4f
+                ch in softDelimiters -> 2.6f
+                ch == '\n' -> 1.8f
+                ch in hardDelimiters -> 4.8f
+                else -> 0.1f
+            }
+        }
+        val safeWeight = w.coerceAtLeast(1.0f)
+        weights[idx] = safeWeight
+        totalWeight += safeWeight
+    }
+
+    if (totalWeight <= 0f) totalWeight = 1f
+
+    var cumulative = 0f
+    return rawRanges.mapIndexed { idx, range ->
+        val startFrac = cumulative / totalWeight
+        cumulative += weights[idx]
+        val endFrac = if (idx == rawRanges.lastIndex) 1.0f else (cumulative / totalWeight)
+        StoryPhrase(
+            startIndex = range.first,
+            endIndex = range.last + 1,
+            text = content.substring(range.first, range.last + 1),
+            startFraction = startFrac,
+            endFraction = endFrac
+        )
+    }
+}
+
+/**
+ * Builds an AnnotatedString during audio narration where all non-spoken phrases in the story body
+ * are rendered in a subtle grey and the currently spoken phrase smoothly animates to the user's
+ * active theme text color with a slightly larger font size and bold weight (no background highlight).
+ */
+private fun buildNarratedStoryText(
+    content: String,
+    phrases: List<StoryPhrase>,
+    phraseWeights: FloatArray,
+    narrationBlend: Float,
+    readingTheme: ReadingTheme
+): AnnotatedString {
+    val clampedBlend = narrationBlend.coerceIn(0f, 1f)
+    val easedBlend = clampedBlend * clampedBlend * (3f - 2f * clampedBlend)
+    val normalTextColor = readingTheme.textPrimaryColor
+    val subtleGreyColor = lerp(
+        readingTheme.containerColor,
+        readingTheme.textPrimaryColor,
+        if (readingTheme.isDark) 0.35f else 0.33f
+    )
+
+    return buildAnnotatedString {
+        append(content)
+        for (i in phrases.indices) {
+            val phrase = phrases[i]
+            val rawW = if (i < phraseWeights.size) phraseWeights[i].coerceIn(0f, 1f) else 0f
+            val easedPhraseWeight = rawW * rawW * (3f - 2f * rawW)
+
+            val targetNarratedColor = lerp(subtleGreyColor, normalTextColor, easedPhraseWeight)
+            val finalColor = lerp(normalTextColor, targetNarratedColor, easedBlend)
+            val extraSizeSp = 2.8f * easedPhraseWeight * easedBlend
+            val weightValue = (400 + (300f * easedPhraseWeight * easedBlend).toInt()).coerceIn(400, 700)
+
+            addStyle(
+                style = SpanStyle(
+                    color = finalColor,
+                    fontSize = (17f + extraSizeSp).sp,
+                    fontWeight = FontWeight(weightValue)
+                ),
+                start = phrase.startIndex.coerceIn(0, content.length),
+                end = phrase.endIndex.coerceIn(0, content.length)
+            )
+        }
     }
 }
 

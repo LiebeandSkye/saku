@@ -56,11 +56,15 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.AddComment
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
@@ -69,8 +73,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -78,6 +86,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -203,6 +214,7 @@ fun SpeakScreen(
     var showModelDialog by remember { mutableStateOf(false) }
     var showApiKeyDialog by remember { mutableStateOf(false) }
     var showFishAudioDialog by remember { mutableStateOf(false) }
+    var showSpeakSettingsDialog by remember { mutableStateOf(false) }
 
     var currentModel by remember { mutableStateOf(prefs.geminiModel) }
     var geminiApiKey by remember { mutableStateOf(prefs.geminiApiKey ?: "") }
@@ -210,6 +222,7 @@ fun SpeakScreen(
     var fishAudioVoiceId by remember { mutableStateOf(prefs.fishAudioVoiceId) }
     var fishAudioVoiceName by remember { mutableStateOf(prefs.fishAudioVoiceName) }
     var fishAudioModel by remember { mutableStateOf(prefs.fishAudioModel) }
+    var speakSystemInstruction by remember { mutableStateOf(prefs.speakSystemInstruction ?: "") }
 
     // Keep state synchronized whenever preferences are updated externally
     LaunchedEffect(
@@ -218,7 +231,8 @@ fun SpeakScreen(
         prefs.fishAudioApiKey,
         prefs.fishAudioVoiceId,
         prefs.fishAudioVoiceName,
-        prefs.fishAudioModel
+        prefs.fishAudioModel,
+        prefs.speakSystemInstruction
     ) {
         currentModel = prefs.geminiModel
         geminiApiKey = prefs.geminiApiKey ?: ""
@@ -226,6 +240,7 @@ fun SpeakScreen(
         fishAudioVoiceId = prefs.fishAudioVoiceId
         fishAudioVoiceName = prefs.fishAudioVoiceName
         fishAudioModel = prefs.fishAudioModel
+        speakSystemInstruction = prefs.speakSystemInstruction ?: ""
     }
 
     // Helpers & services
@@ -385,7 +400,8 @@ fun SpeakScreen(
                 val result = geminiService.sendConversationTurn(
                     apiKey = apiKey,
                     messages = messages.toList(),
-                    preferredModel = model
+                    preferredModel = model,
+                    customSystemInstruction = speakSystemInstruction
                 )
 
                 isThinking = false
@@ -682,18 +698,30 @@ fun SpeakScreen(
                                     )
                                 }
 
-                                if (messages.isNotEmpty()) {
-                                    IconButton(
-                                        onClick = { startNewChat() },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Filled.AddComment,
-                                            contentDescription = "New chat (save current to history)",
-                                            tint = SakuColors.SagePrimary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
+                                // Start new chat button
+                                IconButton(
+                                    onClick = { startNewChat() },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.AddComment,
+                                        contentDescription = "New chat (save current to history)",
+                                        tint = if (messages.isNotEmpty()) SakuColors.SagePrimary else SakuColors.TextSecondary.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                // Speak AI Settings button (System Instruction prompt exclusively for Speak tab)
+                                IconButton(
+                                    onClick = { showSpeakSettingsDialog = true },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Settings,
+                                        contentDescription = "Speak AI Settings (System Instruction)",
+                                        tint = if (speakSystemInstruction.isNotBlank()) SakuColors.SagePrimary else SakuColors.TextSecondary.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }
@@ -1093,6 +1121,26 @@ fun SpeakScreen(
                     Toast.makeText(context, "Fish Audio configuration saved!", Toast.LENGTH_SHORT).show()
                 },
                 onDismiss = { showFishAudioDialog = false }
+            )
+        }
+
+        // Speak AI Settings Dialog (System Instruction exclusively for Speak Tab)
+        if (showSpeakSettingsDialog) {
+            SpeakSystemInstructionDialog(
+                currentInstruction = speakSystemInstruction,
+                onSave = { newInstruction ->
+                    val cleaned = newInstruction.trim()
+                    speakSystemInstruction = cleaned
+                    prefs.speakSystemInstruction = cleaned.ifBlank { null }
+                    showSpeakSettingsDialog = false
+                    val msg = if (cleaned.isNotBlank()) {
+                        "Speak AI system instruction saved!"
+                    } else {
+                        "Reset to default Saku persona"
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                },
+                onDismiss = { showSpeakSettingsDialog = false }
             )
         }
 
@@ -1669,3 +1717,212 @@ private fun BigCircleMicButton(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SpeakSystemInstructionDialog(
+    currentInstruction: String,
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+    var instructionInput by remember(currentInstruction) { mutableStateOf(currentInstruction) }
+
+    val wordCount = remember(instructionInput) {
+        val trimmed = instructionInput.trim()
+        if (trimmed.isEmpty()) 0 else trimmed.split(Regex("\\s+")).size
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = SakuColors.Surface,
+        contentColor = SakuColors.TextPrimary,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = SakuColors.BorderHighlight) }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .navigationBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Speak AI Settings",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SakuColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "System instruction exclusively for this Speak tab",
+                        fontSize = 12.5.sp,
+                        color = SakuColors.TextSecondary
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            sheetState.hide()
+                            onDismiss()
+                        }
+                    },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Close",
+                        tint = SakuColors.TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // Status / Info Banner
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = if (instructionInput.isNotBlank()) {
+                    SakuColors.SageContainer.copy(alpha = 0.45f)
+                } else {
+                    SakuColors.SurfaceElevated
+                },
+                border = BorderStroke(
+                    1.dp,
+                    if (instructionInput.isNotBlank()) {
+                        SakuColors.SagePrimary.copy(alpha = 0.5f)
+                    } else {
+                        SakuColors.BorderSubtle
+                    }
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (instructionInput.isNotBlank()) {
+                            "Custom System Instruction Active"
+                        } else {
+                            "Default Saku Persona Active"
+                        },
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (instructionInput.isNotBlank()) SakuColors.SagePrimary else SakuColors.TextSecondary
+                    )
+                    Text(
+                        text = if (wordCount > 0) "$wordCount words • No limit" else "No word limit",
+                        fontSize = 11.sp,
+                        color = SakuColors.TextSecondary.copy(alpha = 0.75f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Unlimited multi-line System Instruction prompt input
+            OutlinedTextField(
+                value = instructionInput,
+                onValueChange = { instructionInput = it },
+                label = { Text("System Instruction Prompt", fontSize = 12.sp) },
+                placeholder = {
+                    Text(
+                        text = "Write as many words as you want to control how the AI acts, speaks, and guides the conversation...\n\n" +
+                            "Examples:\n" +
+                            "• Act as a friendly cafe barista in Tokyo taking my order and asking follow-up questions.\n" +
+                            "• Speak in casual Kansai-ben like a close friend and tell lively stories.\n" +
+                            "• Roleplay a strict job interviewer asking me questions one by one.",
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = SakuColors.TextTertiary
+                    )
+                },
+                minLines = 6,
+                maxLines = 12,
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = SakuColors.SagePrimary,
+                    unfocusedBorderColor = SakuColors.BorderHighlight,
+                    focusedLabelColor = SakuColors.SagePrimary,
+                    unfocusedLabelColor = SakuColors.TextSecondary,
+                    cursorColor = SakuColors.SagePrimary,
+                    focusedTextColor = SakuColors.TextPrimary,
+                    unfocusedTextColor = SakuColors.TextPrimary,
+                    focusedContainerColor = SakuColors.SurfaceElevated,
+                    unfocusedContainerColor = SakuColors.SurfaceElevated
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Action Buttons: Reset to Default + Save System Instruction
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (instructionInput.isNotBlank() || currentInstruction.isNotBlank()) {
+                    OutlinedButton(
+                        onClick = {
+                            instructionInput = ""
+                            coroutineScope.launch {
+                                sheetState.hide()
+                                onSave("")
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, SakuColors.BorderHighlight),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Reset Default",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = SakuColors.TextSecondary
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            sheetState.hide()
+                            onSave(instructionInput)
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SakuColors.SagePrimary,
+                        contentColor = SakuColors.OnSage
+                    ),
+                    modifier = Modifier.weight(1.4f)
+                ) {
+                    Text(
+                        text = "Save Instruction",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+        }
+    }
+}
+

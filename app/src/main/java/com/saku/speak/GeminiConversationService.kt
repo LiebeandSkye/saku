@@ -10,7 +10,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -22,30 +21,15 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis()
 )
 
-data class VoiceTurnResult(
-    val userTranscript: String,
-    val aiReply: String
-)
-
 class GeminiConversationService {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(25, TimeUnit.SECONDS)
-        .writeTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .writeTimeout(12, TimeUnit.SECONDS)
         .build()
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
-
-    private fun getCandidateModels(preferredModel: String): List<String> {
-        val primary = preferredModel.trim().ifBlank { PreferencesManager.DEFAULT_GEMINI_MODEL }
-        return listOf(
-            primary,
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-flash",
-            "gemini-2.0-flash"
-        ).distinct()
-    }
 
     private fun buildSystemInstruction(customSystemInstruction: String? = null): JSONObject {
         val hasCustomPrompt = !customSystemInstruction.isNullOrBlank()
@@ -82,6 +66,97 @@ class GeminiConversationService {
         }
     }
 
+    /**
+     * Ultra-low-latency in-memory WAV audio transcription using the exact model selected in Settings
+     * (default: gemini-3.5-flash-lite). Used both for rolling live partial transcripts above the mic
+     * while the user is speaking and for final speech recognition.
+     */
+    suspend fun transcribeAudioFast(
+        apiKey: String,
+        wavBytes: ByteArray,
+        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL
+    ): Result<String> = withContext(Dispatchers.IO) {
+        if (apiKey.isBlank()) {
+            return@withContext Result.failure(IllegalArgumentException("Gemini API key is required"))
+        }
+        if (wavBytes.size < 400) {
+            return@withContext Result.failure(IOException("No speech detected"))
+        }
+
+        val cleanModel = preferredModel.trim().ifBlank { PreferencesManager.DEFAULT_GEMINI_MODEL }
+        val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=${apiKey.trim()}"
+        val base64Audio = Base64.encodeToString(wavBytes, Base64.NO_WRAP)
+
+        val contentsArray = JSONArray().apply {
+            put(JSONObject().apply {
+                put("role", "user")
+                put("parts", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("inline_data", JSONObject().apply {
+                            put("mime_type", "audio/wav")
+                            put("data", base64Audio)
+                        })
+                    })
+                    put(JSONObject().apply {
+                        put(
+                            "text",
+                            "Transcribe this spoken audio into natural Japanese text (kanji and kana). " +
+                                "Output ONLY the exact transcribed Japanese text with no quotes, no romaji, and no explanation. " +
+                                "If there is no human speech, output ONLY the word SILENCE."
+                        )
+                    })
+                })
+            })
+        }
+
+        val requestBodyJson = JSONObject().apply {
+            put("contents", contentsArray)
+            put("generationConfig", JSONObject().apply {
+                put("temperature", 0.0)
+                put("maxOutputTokens", 60)
+            })
+        }
+
+        val request = Request.Builder()
+            .url(endpoint)
+            .post(requestBodyJson.toString().toRequestBody(jsonMediaType))
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    val errorMsg = parseErrorMessage(bodyStr, response.code)
+                    return@withContext Result.failure(IOException(errorMsg))
+                }
+
+                val json = JSONObject(bodyStr)
+                val candidates = json.optJSONArray("candidates")
+                if (candidates == null || candidates.length() == 0) {
+                    return@withContext Result.failure(IOException("No speech detected"))
+                }
+
+                val firstCandidate = candidates.getJSONObject(0)
+                val content = firstCandidate.optJSONObject("content")
+                val parts = content?.optJSONArray("parts")
+                val rawText = parts?.optJSONObject(0)?.optString("text", "") ?: ""
+
+                val cleanText = rawText
+                    .replace(Regex("[\r\n]+"), " ")
+                    .replace(Regex("[*#_`\"「」『』]+"), "")
+                    .trim()
+
+                if (cleanText.isBlank() || cleanText.equals("SILENCE", ignoreCase = true) || cleanText.equals("NONE", ignoreCase = true)) {
+                    Result.failure(IOException("No speech detected"))
+                } else {
+                    Result.success(cleanText)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun sendConversationTurn(
         apiKey: String,
         messages: List<ChatMessage>,
@@ -89,10 +164,13 @@ class GeminiConversationService {
         customSystemInstruction: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) {
-            return@withContext Result.failure(IllegalArgumentException("Gemini API key is required. Please tap 'Setup Key' at the top of the Speak screen."))
+            return@withContext Result.failure(IllegalArgumentException("Gemini API key is required. Please set it in Cards -> Settings."))
         }
 
+        val cleanModel = preferredModel.trim().ifBlank { PreferencesManager.DEFAULT_GEMINI_MODEL }
+        val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$cleanModel:generateContent?key=${apiKey.trim()}"
         val hasCustomPrompt = !customSystemInstruction.isNullOrBlank()
+
         val recentMessages = messages.takeLast(10).dropWhile { !it.isUser }
         if (recentMessages.isEmpty()) {
             return@withContext Result.failure(IllegalArgumentException("No user message to send"))
@@ -121,44 +199,35 @@ class GeminiConversationService {
             })
         }
 
+        val generationConfig = JSONObject().apply {
+            put("temperature", if (hasCustomPrompt) 0.8 else 0.7)
+            put("maxOutputTokens", if (hasCustomPrompt) 220 else 65)
+        }
+
         val requestBodyJson = JSONObject().apply {
             put("system_instruction", buildSystemInstruction(customSystemInstruction))
             put("contents", contentsArray)
-            put("generationConfig", JSONObject().apply {
-                put("temperature", if (hasCustomPrompt) 0.8 else 0.7)
-                put("maxOutputTokens", if (hasCustomPrompt) 220 else 65)
-            })
+            put("generationConfig", generationConfig)
         }
 
-        val payloadStr = requestBodyJson.toString()
-        var lastError: Exception = IOException("Failed to connect to Gemini")
+        val requestBody = requestBodyJson.toString().toRequestBody(jsonMediaType)
+        val request = Request.Builder()
+            .url(endpoint)
+            .post(requestBody)
+            .build()
 
-        for (model in getCandidateModels(preferredModel)) {
-            val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${apiKey.trim()}"
-            val request = Request.Builder()
-                .url(endpoint)
-                .post(payloadStr.toRequestBody(jsonMediaType))
-                .build()
-
-            try {
-                val (isSuccessful, code, bodyStr) = client.newCall(request).execute().use { resp ->
-                    Triple(resp.isSuccessful, resp.code, resp.body?.string() ?: "")
-                }
-
-                if (!isSuccessful) {
-                    val errorMsg = parseErrorMessage(bodyStr, code)
-                    lastError = IOException(errorMsg)
-                    if (bodyStr.contains("API_KEY_INVALID", ignoreCase = true) || code == 403) {
-                        return@withContext Result.failure(lastError)
-                    }
-                    continue
+        try {
+            client.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: ""
+                if (!response.isSuccessful) {
+                    val errorMsg = parseErrorMessage(bodyStr, response.code)
+                    return@withContext Result.failure(IOException(errorMsg))
                 }
 
                 val json = JSONObject(bodyStr)
                 val candidates = json.optJSONArray("candidates")
                 if (candidates == null || candidates.length() == 0) {
-                    lastError = IOException("No response received from Gemini")
-                    continue
+                    return@withContext Result.failure(IOException("No response received from Gemini"))
                 }
 
                 val firstCandidate = candidates.getJSONObject(0)
@@ -171,201 +240,15 @@ class GeminiConversationService {
                     .replace(Regex("[*#_`]+"), "")
                     .trim()
 
-                if (cleanText.isNotBlank()) {
-                    return@withContext Result.success(cleanText)
+                if (cleanText.isBlank()) {
+                    Result.failure(IOException("Empty response text from Gemini"))
+                } else {
+                    Result.success(cleanText)
                 }
-            } catch (e: Exception) {
-                lastError = e
             }
-        }
-
-        Result.failure(lastError)
-    }
-
-    /**
-     * Sends recorded voice audio (WAV/MP4) and conversation history in a single fast multimodal call.
-     * Returns both the user's transcribed Japanese speech and Saku's conversational Japanese reply.
-     */
-    suspend fun sendVoiceTurn(
-        apiKey: String,
-        audioFile: File,
-        priorMessages: List<ChatMessage>,
-        preferredModel: String = PreferencesManager.DEFAULT_GEMINI_MODEL,
-        customSystemInstruction: String? = null
-    ): Result<VoiceTurnResult> = withContext(Dispatchers.IO) {
-        if (apiKey.isBlank()) {
-            return@withContext Result.failure(IllegalArgumentException("Gemini API key is required. Please tap 'Setup Key' at the top of the Speak screen."))
-        }
-        if (!audioFile.exists() || audioFile.length() < 512L) {
-            return@withContext Result.failure(IOException("No speech detected"))
-        }
-
-        val audioBytes = try {
-            audioFile.readBytes()
         } catch (e: Exception) {
-            return@withContext Result.failure(IOException("Failed to read recorded audio"))
+            Result.failure(e)
         }
-        val base64Audio = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
-        val mimeType = if (audioFile.name.endsWith(".wav", ignoreCase = true)) "audio/wav" else "audio/mp4"
-        val hasCustomPrompt = !customSystemInstruction.isNullOrBlank()
-
-        // Include up to last 6 prior messages for conversational context
-        val recentMessages = priorMessages.takeLast(6).dropWhile { !it.isUser }
-        val sanitizedMessages = mutableListOf<ChatMessage>()
-        for (msg in recentMessages) {
-            if (sanitizedMessages.isNotEmpty() && sanitizedMessages.last().isUser == msg.isUser) {
-                val prev = sanitizedMessages.removeAt(sanitizedMessages.lastIndex)
-                sanitizedMessages.add(prev.copy(text = "${prev.text}\n${msg.text}"))
-            } else {
-                sanitizedMessages.add(msg)
-            }
-        }
-        if (sanitizedMessages.isNotEmpty() && sanitizedMessages.last().isUser) {
-            sanitizedMessages.removeAt(sanitizedMessages.lastIndex)
-        }
-
-        val contentsArray = JSONArray()
-        for (msg in sanitizedMessages) {
-            val role = if (msg.isUser) "user" else "model"
-            contentsArray.put(JSONObject().apply {
-                put("role", role)
-                put("parts", JSONArray().apply {
-                    put(JSONObject().apply {
-                        put("text", msg.text)
-                    })
-                })
-            })
-        }
-
-        // Append the new user voice turn
-        contentsArray.put(JSONObject().apply {
-            put("role", "user")
-            put("parts", JSONArray().apply {
-                put(JSONObject().apply {
-                    put("inline_data", JSONObject().apply {
-                        put("mime_type", mimeType)
-                        put("data", base64Audio)
-                    })
-                })
-                put(JSONObject().apply {
-                    put(
-                        "text",
-                        "Listen carefully to the user's spoken audio above.\n" +
-                            "1. Transcribe what the user said into natural Japanese text (kanji/kana). If they spoke English or another language, write what they said in natural Japanese.\n" +
-                            "2. Reply in character as Saku.\n" +
-                            "If the audio is completely silent or contains no human speech at all, output ONLY:\n" +
-                            "USER: SILENCE\n\n" +
-                            "Otherwise, output strictly in this exact 2-line format (no markdown, no romaji, no extra lines):\n" +
-                            "USER: <what the user said in Japanese>\n" +
-                            "SAKU: <Saku's Japanese reply>"
-                    )
-                })
-            })
-        })
-
-        val requestBodyJson = JSONObject().apply {
-            put("system_instruction", buildSystemInstruction(customSystemInstruction))
-            put("contents", contentsArray)
-            put("generationConfig", JSONObject().apply {
-                put("temperature", if (hasCustomPrompt) 0.75 else 0.5)
-                put("maxOutputTokens", if (hasCustomPrompt) 240 else 140)
-            })
-        }
-
-        val payloadStr = requestBodyJson.toString()
-        var lastError: Exception = IOException("Could not connect to Gemini")
-
-        for (model in getCandidateModels(preferredModel)) {
-            val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${apiKey.trim()}"
-            val request = Request.Builder()
-                .url(endpoint)
-                .post(payloadStr.toRequestBody(jsonMediaType))
-                .build()
-
-            try {
-                val (isSuccessful, code, bodyStr) = client.newCall(request).execute().use { resp ->
-                    Triple(resp.isSuccessful, resp.code, resp.body?.string() ?: "")
-                }
-
-                if (!isSuccessful) {
-                    val errorMsg = parseErrorMessage(bodyStr, code)
-                    lastError = IOException(errorMsg)
-                    if (bodyStr.contains("API_KEY_INVALID", ignoreCase = true) || code == 403) {
-                        return@withContext Result.failure(lastError)
-                    }
-                    continue
-                }
-
-                val json = JSONObject(bodyStr)
-                val candidates = json.optJSONArray("candidates")
-                if (candidates == null || candidates.length() == 0) {
-                    lastError = IOException("No response from Gemini")
-                    continue
-                }
-
-                val firstCandidate = candidates.getJSONObject(0)
-                val content = firstCandidate.optJSONObject("content")
-                val parts = content?.optJSONArray("parts")
-                val rawText = parts?.optJSONObject(0)?.optString("text", "")?.trim() ?: ""
-
-                if (rawText.isBlank()) {
-                    lastError = IOException("Empty response from Gemini")
-                    continue
-                }
-
-                val lines = rawText.lines().map { it.trim() }.filter { it.isNotBlank() }
-                var userTranscript = ""
-                var sakuReply = ""
-
-                for (line in lines) {
-                    when {
-                        line.startsWith("USER:", ignoreCase = true) || line.startsWith("ユーザー:") || line.startsWith("User：") -> {
-                            userTranscript = line.substringAfter(":").substringAfter("：").trim()
-                        }
-                        line.startsWith("SAKU:", ignoreCase = true) || line.startsWith("サク:") || line.startsWith("Saku：") -> {
-                            sakuReply = line.substringAfter(":").substringAfter("：").trim()
-                        }
-                    }
-                }
-
-                if (userTranscript.equals("SILENCE", ignoreCase = true) ||
-                    userTranscript.equals("NONE", ignoreCase = true) ||
-                    rawText.equals("SILENCE", ignoreCase = true)
-                ) {
-                    return@withContext Result.failure(IOException("No speech detected"))
-                }
-
-                if (userTranscript.isBlank() && sakuReply.isBlank()) {
-                    if (lines.size >= 2) {
-                        userTranscript = lines[0].replace(Regex("[*#_`\"「」『』]+"), "").trim()
-                        sakuReply = lines.last().replace(Regex("[*#_`\"「」『』]+"), "").trim()
-                    } else {
-                        userTranscript = "🎤 (音声入力)"
-                        sakuReply = lines[0].replace(Regex("[*#_`\"「」『』]+"), "").trim()
-                    }
-                } else if (sakuReply.isBlank() && userTranscript.isNotBlank()) {
-                    val updatedList = priorMessages + ChatMessage(text = userTranscript, isUser = true)
-                    val replyRes = sendConversationTurn(apiKey, updatedList, model, customSystemInstruction)
-                    sakuReply = replyRes.getOrElse { "そうなんですね！もう少し詳しく教えてください。" }
-                } else if (userTranscript.isBlank() && sakuReply.isNotBlank()) {
-                    userTranscript = "🎤 (音声入力)"
-                }
-
-                userTranscript = userTranscript.replace(Regex("[*#_`\"「」『』]+"), "").trim()
-                sakuReply = sakuReply.replace(Regex("[*#_`\"「」『』]+"), "").trim()
-
-                return@withContext Result.success(
-                    VoiceTurnResult(
-                        userTranscript = userTranscript,
-                        aiReply = sakuReply
-                    )
-                )
-            } catch (e: Exception) {
-                lastError = e
-            }
-        }
-
-        Result.failure(lastError)
     }
 
     private fun parseErrorMessage(body: String, code: Int): String {

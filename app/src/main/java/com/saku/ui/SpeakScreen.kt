@@ -276,9 +276,8 @@ fun SpeakScreen(
         }
     }
 
-    // Forward references for speech and hardware audio handlers
+    // Forward reference for speech handler
     var handleFinalSpeechRef by remember { mutableStateOf<((String) -> Unit)?>(null) }
-    var handleRecordedAudioRef by remember { mutableStateOf<((File) -> Unit)?>(null) }
 
     // Runtime microphone permission state
     var hasAudioPermission by remember {
@@ -290,7 +289,7 @@ fun SpeakScreen(
         )
     }
 
-    // SpeechRecognizer helper initialized with Activity context and hardware MediaRecorder fallback
+    // SpeechRecognizer helper with streaming live transcription above the mic using selected model
     val speechHelper = remember {
         SpeechRecognizerHelper(
             context = context,
@@ -312,7 +311,6 @@ fun SpeakScreen(
             onError = { errorMsg ->
                 isListening = false
                 audioRmsDb = 0f
-                liveTranscript = ""
                 if (errorMsg.isNotBlank() && 
                     !errorMsg.contains("No speech detected", ignoreCase = true) && 
                     !errorMsg.contains("timeout", ignoreCase = true)
@@ -320,18 +318,21 @@ fun SpeakScreen(
                     Toast.makeText(context, errorMsg, Toast.LENGTH_SHORT).show()
                 }
             },
-            onAudioRecorded = { audioFile ->
-                handleRecordedAudioRef?.invoke(audioFile)
+            transcribeAudioChunk = { wavBytes ->
+                geminiService.transcribeAudioFast(
+                    apiKey = prefs.geminiApiKey ?: "",
+                    wavBytes = wavBytes,
+                    preferredModel = prefs.geminiModel
+                )
             }
         )
     }
 
     // Play voice audio for text (Fish Audio with system TTS fallback)
     val playAiVoice: (String) -> Unit = { text ->
-        // Cancel any active speech recognition and live transcript before audio playback
-        // to prevent acoustic feedback loops where the speaker output is transcribed
+        // Cancel any active microphone capture before audio playback to prevent acoustic feedback loops,
+        // while keeping liveTranscript visible above the mic so the user can see what was transcribed.
         speechHelper.cancel()
-        liveTranscript = ""
         isListening = false
 
         coroutineScope.launch {
@@ -383,14 +384,15 @@ fun SpeakScreen(
         }
     }
 
-    // Process user input and query Gemini Flash-Lite
+    // Process user input and query the selected Gemini model (default: gemini-3.5-flash-lite)
     val handleFinalSpeech: (String) -> Unit = { spokenText ->
         val trimmed = spokenText.trim()
         if (trimmed.isNotBlank() && !isThinking) {
             val userMsg = ChatMessage(text = trimmed, isUser = true)
             messages.add(userMsg)
             persistCurrentSession()
-            liveTranscript = ""
+            // Keep the transcribed text displayed in the placeholder right above the microphone!
+            liveTranscript = trimmed
             isThinking = true
 
             coroutineScope.launch {
@@ -426,56 +428,6 @@ fun SpeakScreen(
         }
     }
     handleFinalSpeechRef = handleFinalSpeech
-
-    // Process hardware-recorded WAV audio via Gemini multimodal voice conversation
-    val handleRecordedAudio: (File) -> Unit = { recordedFile ->
-        if (!isThinking) {
-            val apiKey = geminiApiKey
-            if (apiKey.isBlank()) {
-                liveTranscript = ""
-                showApiKeyDialog = true
-                Toast.makeText(context, "Please enter your Gemini API key first (Setup Key)", Toast.LENGTH_SHORT).show()
-            } else {
-                liveTranscript = "音声を認識中..."
-                isThinking = true
-                coroutineScope.launch {
-                    val voiceResult = geminiService.sendVoiceTurn(
-                        apiKey = apiKey,
-                        audioFile = recordedFile,
-                        priorMessages = messages.toList(),
-                        preferredModel = currentModel,
-                        customSystemInstruction = speakSystemInstruction
-                    )
-                    isThinking = false
-                    liveTranscript = ""
-                    voiceResult.fold(
-                        onSuccess = { turn ->
-                            val userMsg = ChatMessage(text = turn.userTranscript, isUser = true)
-                            val aiMsg = ChatMessage(text = turn.aiReply, isUser = false)
-                            messages.add(userMsg)
-                            messages.add(aiMsg)
-                            persistCurrentSession()
-                            playAiVoice(turn.aiReply)
-                        },
-                        onFailure = { err ->
-                            val msg = err.localizedMessage ?: ""
-                            if (msg.contains("No speech detected", ignoreCase = true)) {
-                                Toast.makeText(context, "声が聞き取れませんでした。もう一度話してください。", Toast.LENGTH_SHORT).show()
-                            } else {
-                                val errorMsg = ChatMessage(
-                                    text = "エラー: ${msg.ifBlank { "Gemini API connection failed" }}",
-                                    isUser = false
-                                )
-                                messages.add(errorMsg)
-                                persistCurrentSession()
-                            }
-                        }
-                    )
-                }
-            }
-        }
-    }
-    handleRecordedAudioRef = handleRecordedAudio
 
     // Pause/cancel recording and audio playback whenever the user navigates away from Speak tab
     LaunchedEffect(isActive) {

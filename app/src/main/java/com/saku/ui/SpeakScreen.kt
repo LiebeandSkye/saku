@@ -427,33 +427,47 @@ fun SpeakScreen(
     }
     handleFinalSpeechRef = handleFinalSpeech
 
-    // Process hardware-recorded audio via Gemini multimodal transcription when system SpeechRecognizer is unavailable
+    // Process hardware-recorded WAV audio via Gemini multimodal voice conversation
     val handleRecordedAudio: (File) -> Unit = { recordedFile ->
         if (!isThinking) {
             val apiKey = geminiApiKey
             if (apiKey.isBlank()) {
                 liveTranscript = ""
                 showApiKeyDialog = true
-                Toast.makeText(context, "Please set your Gemini API key first to talk", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Please enter your Gemini API key first (Setup Key)", Toast.LENGTH_SHORT).show()
             } else {
                 liveTranscript = "音声を認識中..."
                 isThinking = true
                 coroutineScope.launch {
-                    val transcriptionResult = geminiService.transcribeAudioFile(
+                    val voiceResult = geminiService.sendVoiceTurn(
                         apiKey = apiKey,
                         audioFile = recordedFile,
-                        preferredModel = currentModel
+                        priorMessages = messages.toList(),
+                        preferredModel = currentModel,
+                        customSystemInstruction = speakSystemInstruction
                     )
                     isThinking = false
                     liveTranscript = ""
-                    transcriptionResult.fold(
-                        onSuccess = { transcribedText ->
-                            handleFinalSpeech(transcribedText)
+                    voiceResult.fold(
+                        onSuccess = { turn ->
+                            val userMsg = ChatMessage(text = turn.userTranscript, isUser = true)
+                            val aiMsg = ChatMessage(text = turn.aiReply, isUser = false)
+                            messages.add(userMsg)
+                            messages.add(aiMsg)
+                            persistCurrentSession()
+                            playAiVoice(turn.aiReply)
                         },
                         onFailure = { err ->
                             val msg = err.localizedMessage ?: ""
-                            if (!msg.contains("No speech detected", ignoreCase = true)) {
-                                Toast.makeText(context, msg.ifBlank { "Could not recognize speech" }, Toast.LENGTH_SHORT).show()
+                            if (msg.contains("No speech detected", ignoreCase = true)) {
+                                Toast.makeText(context, "声が聞き取れませんでした。もう一度話してください。", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val errorMsg = ChatMessage(
+                                    text = "エラー: ${msg.ifBlank { "Gemini API connection failed" }}",
+                                    isUser = false
+                                )
+                                messages.add(errorMsg)
+                                persistCurrentSession()
                             }
                         }
                     )

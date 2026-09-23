@@ -359,7 +359,7 @@ class FishAudioService(context: Context) {
 
         fun getAudioFile(context: Context, storyId: String): File {
             val safeId = storyId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-            return File(getAudioDir(context), "story_v2_${safeId}.mp3")
+            return File(getAudioDir(context), "story_${safeId}.mp3")
         }
 
         fun deleteAudioForStory(context: Context, storyId: String): Boolean {

@@ -118,5 +118,9 @@ class FishAudioServiceTest {
                 assertEquals(phrases[i - 1].endFraction, phrases[i].startFraction, 0.0001f)
             }
         }
+
+        val withTitlePhrases = com.saku.ui.segmentStoryIntoPhrases(sampleStory, title = "静かな日曜日の朝")
+        assertTrue("Expected positive title offset", withTitlePhrases.first().startFraction > 0.05f)
+        assertEquals(1f, withTitlePhrases.last().endFraction, 0.0001f)
     }
 }
